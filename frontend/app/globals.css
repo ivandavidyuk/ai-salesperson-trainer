@@ -1,8 +1,12 @@
-/* Базовые глобальные стили. Полноценный UI добавляется на этапе 2. */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* Подключение базовых слоёв Tailwind CSS. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Лёгкий сброс и базовый фон страницы. */
+html,
+body {
+  height: 100%;
 }
 
 body {
