@@ -1,0 +1,63 @@
+// Prisma-схема для голосового ИИ-тренажёра по продажам.
+// Описывает три таблицы: users, sessions, messages.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Статус сессии тренировки
+enum SessionStatus {
+  active
+  paused
+  completed
+}
+
+// Роль автора сообщения в диалоге
+enum MessageRole {
+  user
+  assistant
+}
+
+// Пользователь системы (менеджер по продажам)
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime  @default(now())
+
+  // Связь: один пользователь — много сессий
+  sessions     Session[]
+}
+
+// Сессия (один тренировочный разговор)
+model Session {
+  id        String        @id @default(uuid())
+  userId    String
+  status    SessionStatus @default(active)
+  startedAt DateTime      @default(now())
+  endedAt   DateTime?
+
+  // Связь с пользователем (внешний ключ)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Связь: одна сессия — много сообщений
+  messages  Message[]
+}
+
+// Сообщение внутри сессии (реплика менеджера или клиента-ИИ)
+model Message {
+  id        String      @id @default(uuid())
+  sessionId String
+  role      MessageRole
+  text      String
+  createdAt DateTime    @default(now())
+
+  // Связь с сессией (внешний ключ)
+  session   Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,17 @@
+# зависимости
+/node_modules
+
+# сборка Next.js
+/.next
+/out
+
+# переменные окружения
+.env
+.env.local
+
+# Prisma
+/prisma/migrations/dev.db
+
+# системные файлы
+.DS_Store
+*.log
