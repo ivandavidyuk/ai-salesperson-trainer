@@ -92,12 +92,20 @@ export default function SessionPage() {
       setSeconds(0);
       setScreenState("active");
 
-      // Устанавливаем WebSocket-соединение (обработка аудио — на этапе 3)
+      // Получаем одноразовый ws-токен (основной JWT в httpOnly cookie
+      // недоступен из JS), затем подключаемся к WebSocket с ним в query.
       try {
-        const ws = new WebSocket(wsUrl);
+        const tokenRes = await fetch("/api/auth/ws-token");
+        if (!tokenRes.ok) {
+          if (tokenRes.status === 401) router.push("/login");
+          throw new Error("Не удалось получить ws-токен");
+        }
+        const { wsToken } = (await tokenRes.json()) as { wsToken: string };
+
+        const url = `${wsUrl}?token=${encodeURIComponent(wsToken)}`;
+        const ws = new WebSocket(url);
         ws.onerror = () => {
-          // WS-сервер появится на этапе 3 — пока ошибки просто логируем
-          console.warn("WebSocket пока недоступен:", wsUrl);
+          console.warn("Ошибка WebSocket-соединения:", wsUrl);
         };
         wsRef.current = ws;
       } catch (err) {

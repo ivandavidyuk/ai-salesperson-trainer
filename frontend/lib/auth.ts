@@ -6,11 +6,15 @@
 // Функции, обращающиеся к Redis, можно использовать только в Node-рантайме
 // (то есть в route handlers, но НЕ в middleware).
 
+import { randomBytes } from "crypto";
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import { ensureRedisConnected, redis } from "@/lib/redis";
 
 // Имя httpOnly cookie, в которой хранится токен
 export const TOKEN_COOKIE = "token";
+
+// Время жизни одноразового ws-токена (в секундах)
+export const WS_TOKEN_TTL = 30;
 
 // Полезная нагрузка нашего токена
 export interface AuthTokenPayload extends JWTPayload {
@@ -146,4 +150,21 @@ export async function getAuthUser(
   }
 
   return payload;
+}
+
+// Формирует ключ Redis для одноразового ws-токена
+function redisWsTokenKey(wsToken: string): string {
+  return `ws_token:${wsToken}`;
+}
+
+// Создаёт одноразовый короткоживущий ws-токен, привязанный к userId.
+// Используется для авторизации WebSocket-соединения: основной JWT лежит
+// в httpOnly cookie и недоступен из JS, поэтому для WS выдаём отдельный
+// одноразовый токен, который передаётся в query-параметре.
+// Хранится в Redis как { ws_token: userId } с TTL = WS_TOKEN_TTL секунд.
+export async function createWsToken(userId: string): Promise<string> {
+  await ensureRedisConnected();
+  const wsToken = randomBytes(32).toString("base64url");
+  await redis.set(redisWsTokenKey(wsToken), userId, { EX: WS_TOKEN_TTL });
+  return wsToken;
 }
