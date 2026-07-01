@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 # Адрес gRPC-эндпоинта Yandex SpeechKit
 STT_ENDPOINT = "stt.api.cloud.yandex.net:443"
 
+# Пауза (мс), после которой фраза считается законченной (EOU).
+# Меньше значение — быстрее ответ, но выше риск обрезать речь на паузах.
+EOU_MAX_PAUSE_MS = 1000
+
 # Пытаемся импортировать gRPC-стабы. Если не вышло — STT недоступен.
 try:
     import grpc
@@ -67,7 +71,15 @@ class YandexSTT:
                     language_code=["ru-RU"],
                 ),
                 audio_processing_type=stt_pb2.RecognitionModelOptions.REAL_TIME,
-            )
+            ),
+            # Классификатор конца фразы: фиксируем паузу ~1 с, после которой
+            # SpeechKit выдаёт финал (быстрее реакция ИИ на реплику).
+            eou_classifier=stt_pb2.EouClassifierOptions(
+                default_classifier=stt_pb2.DefaultEouClassifier(
+                    type=stt_pb2.DefaultEouClassifier.DEFAULT,
+                    max_pause_between_words_hint_ms=EOU_MAX_PAUSE_MS,
+                )
+            ),
         )
         yield stt_pb2.StreamingRequest(session_options=recognize_options)
 

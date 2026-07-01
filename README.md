@@ -12,7 +12,9 @@ ai-salesperson-trainer/
 ```
 
 Готовы все три части: REST API и интерфейс (`frontend/`) и WebSocket-сервер
-с голосовым пайплайном STT → LLM → TTS (`backend/`).
+с голосовым пайплайном STT → LLM → TTS (`backend/`). Браузер захватывает
+микрофон (PCM 16 кГц) и проигрывает голосовой ответ ИИ — полный голосовой
+диалог работает от начала до конца.
 
 Для полноценной работы нужны **три процесса**: базы (Docker), Next.js
 (`frontend`) и FastAPI WS-сервер (`backend`).
@@ -168,6 +170,29 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 
 ---
 
+## Переменные окружения (`backend/.env`)
+
+| Переменная | Назначение | Значение по умолчанию |
+|---|---|---|
+| `YANDEX_API_KEY` | API-ключ Yandex Cloud (STT / LLM / TTS) | — |
+| `YANDEX_FOLDER_ID` | идентификатор каталога Yandex Cloud | — |
+| `YANDEX_GPT_MODEL` | имя модели YandexGPT (не URI) | `yandexgpt-lite` |
+| `DATABASE_URL` | строка подключения к PostgreSQL (должна совпадать с `frontend/.env`) | — |
+| `REDIS_URL` | строка подключения к Redis (та же, что в `frontend/.env`) | — |
+| `JWT_SECRET` | секрет для проверки JWT (тот же, что в `frontend/.env`) | — |
+
+> `YANDEX_GPT_MODEL` задаётся именем модели (например `yandexgpt-lite`),
+> URI вида `gpt://<folder>/<model>/latest` собирается автоматически.
+
+### Голосовой пайплайн (детали)
+
+- **STT** (Yandex SpeechKit v3, gRPC): PCM 16 кГц mono, распознавание ru-RU.
+  Конец фразы (пауза) — `EOU_MAX_PAUSE_MS = 1000` мс в `services/stt.py`.
+- **LLM** (YandexGPT REST): роль клиента «Тамара Михайловна» (промпт в `services/llm.py`).
+- **TTS** (Yandex SpeechKit v3, gRPC): голос **marina**, амплуа **neutral**, OGG/opus.
+
+---
+
 ## API (этап 1)
 
 | Метод | Маршрут | Описание |
@@ -216,5 +241,7 @@ docker compose down -v
 - **Этап 1** — бэкенд: авторизация, сессии, транскрипт (`frontend/`) — **готово**
 - **Этап 2** — интерфейс: `/login`, `/session`, `/transcript/[id]` (`frontend/`) — **готово**
 - **Этап 3** — FastAPI WebSocket-сервер и голосовой пайплайн (`backend/`) — **готово**
+- **Голосовой ввод/вывод в браузере** — захват микрофона и воспроизведение
+  ответа ИИ (`frontend/app/lib/voiceClient.ts`, `frontend/public/pcm-recorder-worklet.js`) — **готово**
 
 Подробные описания — в папке `development-stages/`.

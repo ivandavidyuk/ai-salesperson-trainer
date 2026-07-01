@@ -10,6 +10,7 @@
 import asyncio
 import base64
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -111,18 +112,23 @@ async def session_ws(ws: WebSocket, session_id: str):
     # 3. Колбэк, запускающий цепочку LLM -> TTS при финальном STT-результате
     async def handle_user_text(text: str) -> None:
         try:
+            t_start = time.perf_counter()
             # Распознанная реплика менеджера
             await safe_send(ws, {"type": "transcript_user", "text": text})
             await store.append_message(session_id, "user", text)
 
             # LLM: ответ клиента
             history = await store.get_messages(session_id)
+            t_llm = time.perf_counter()
             reply = await llm.generate_reply(history)
+            llm_ms = (time.perf_counter() - t_llm) * 1000
             await safe_send(ws, {"type": "transcript_ai", "text": reply})
             await store.append_message(session_id, "assistant", reply)
 
             # TTS: озвучка ответа, отправляем чанками
+            t_tts = time.perf_counter()
             audio = await tts.synthesize(reply)
+            tts_ms = (time.perf_counter() - t_tts) * 1000
             for chunk in tts.chunk_audio(audio):
                 await safe_send(
                     ws,
@@ -133,6 +139,15 @@ async def session_ws(ws: WebSocket, session_id: str):
                 )
             # Маркер конца аудио: клиент собирает OGG целиком и проигрывает
             await safe_send(ws, {"type": "audio_end"})
+            total_ms = (time.perf_counter() - t_start) * 1000
+            # Разбивка задержки по этапам: видно, что именно тормозит
+            logger.info(
+                "ТАЙМИНГ сессия %s: LLM=%.0f мс, TTS=%.0f мс, всего(после STT)=%.0f мс",
+                session_id,
+                llm_ms,
+                tts_ms,
+                total_ms,
+            )
         except Exception as exc:  # noqa: BLE001
             # Любой сбой шага не роняет сервер — сообщаем клиенту
             logger.error("Ошибка пайплайна (сессия %s): %s", session_id, exc)
