@@ -1,0 +1,85 @@
+# Продакшен-стек ИИ-тренажёра для одной VM (Yandex Compute Cloud).
+# Всё за реверс-прокси Caddy с автоматическим HTTPS/WSS (Let's Encrypt).
+#
+# Запуск:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Требуются файлы окружения (см. *.env.production.example):
+#   ./.env               — переменные для compose (DOMAIN, ACME_EMAIL, POSTGRES_*)
+#   ./frontend/.env      — переменные Next.js
+#   ./backend/.env       — переменные FastAPI
+
+services:
+  # PostgreSQL — данные пользователей, сессий, сообщений
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_trainer}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_trainer}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Redis — whitelist JWT-токенов, одноразовые ws-токены, состояние сессий
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # FastAPI WebSocket-сервер (STT → LLM → TTS)
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Next.js: REST API + интерфейс. При старте применяет миграции Prisma.
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    env_file: ./frontend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Caddy: единая точка входа, авто-HTTPS, проксирование / и /ws
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  postgres-data:
+  redis-data:
+  caddy-data:
+  caddy-config:
