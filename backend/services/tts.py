@@ -1,48 +1,66 @@
-"""TTS — синтез речи через Yandex SpeechKit (REST API).
+"""TTS — синтез речи через Yandex SpeechKit (API v3, gRPC).
 
-Принимает текст, синтезирует его голосом alena (нейтральная эмоция),
+Принимает текст, синтезирует его голосом marina (амплуа neutral),
 возвращает аудио в формате OGG (opus) и нарезает его на чанки.
 """
 
 import logging
 from typing import AsyncIterator, Iterator
 
-import httpx
+import grpc
+from yandex.cloud.ai.tts.v3 import tts_pb2, tts_service_pb2_grpc
 
 from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# REST-эндпоинт синтеза речи
-TTS_URL = "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize"
+# gRPC-эндпоинт синтеза речи (v3)
+TTS_ENDPOINT = "tts.api.cloud.yandex.net:443"
+
+# Голос и амплуа
+TTS_VOICE = "marina"
+TTS_ROLE = "neutral"
 
 # Размер аудио-чанка для отправки клиенту (в байтах)
 CHUNK_SIZE = 16 * 1024
 
 
 async def synthesize(text: str) -> bytes:
-    """Синтезирует речь и возвращает аудио целиком (OGG/opus)."""
+    """Синтезирует речь и возвращает аудио целиком (OGG/opus) через v3 gRPC."""
     settings = get_settings()
     if not settings.yandex_api_key:
         raise RuntimeError("Не задан YANDEX_API_KEY для TTS")
 
-    data = {
-        "text": text,
-        "voice": "alena",
-        "emotion": "neutral",
-        "speed": "1.0",
-        "format": "oggopus",
-        "lang": "ru-RU",
-        "folderId": settings.yandex_folder_id,
-    }
-    headers = {"Authorization": f"Api-Key {settings.yandex_api_key}"}
+    request = tts_pb2.UtteranceSynthesisRequest(
+        text=text,
+        # Голос marina + амплуа neutral (каждая подсказка — отдельный Hints)
+        hints=[
+            tts_pb2.Hints(voice=TTS_VOICE),
+            tts_pb2.Hints(role=TTS_ROLE),
+        ],
+        output_audio_spec=tts_pb2.AudioFormatOptions(
+            container_audio=tts_pb2.ContainerAudio(
+                container_audio_type=tts_pb2.ContainerAudio.OGG_OPUS
+            )
+        ),
+        loudness_normalization_type=tts_pb2.UtteranceSynthesisRequest.LUFS,
+    )
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(TTS_URL, data=data, headers=headers)
-        response.raise_for_status()
-        audio = response.content
+    metadata = [("authorization", f"Api-Key {settings.yandex_api_key}")]
+    if settings.yandex_folder_id:
+        metadata.append(("x-folder-id", settings.yandex_folder_id))
 
-    logger.info("TTS синтезировал %d байт аудио", len(audio))
+    async with grpc.aio.secure_channel(
+        TTS_ENDPOINT, grpc.ssl_channel_credentials()
+    ) as channel:
+        stub = tts_service_pb2_grpc.SynthesizerStub(channel)
+        responses = stub.UtteranceSynthesis(request, metadata=metadata)
+        chunks: list[bytes] = []
+        async for response in responses:
+            chunks.append(response.audio_chunk.data)
+
+    audio = b"".join(chunks)
+    logger.info("TTS синтезировал %d байт аудио (голос %s)", len(audio), TTS_VOICE)
     return audio
 
 

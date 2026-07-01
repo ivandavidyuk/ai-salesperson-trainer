@@ -105,15 +105,12 @@ class YandexSTT:
             )
             async for response in responses:
                 event = response.WhichOneof("Event")
-                # final / final_refinement содержат финальный текст
-                if event in ("final", "final_refinement"):
-                    container = (
-                        response.final
-                        if event == "final"
-                        else response.final_refinement.normalized_text
-                    )
+                # На одну фразу SpeechKit присылает и `final`, и следом
+                # `final_refinement` (уточнённый текст). Обрабатываем только
+                # `final`, иначе реплика уйдёт в LLM/TTS дважды и ИИ повторится.
+                if event == "final":
                     text = " ".join(
-                        alt.text for alt in container.alternatives
+                        alt.text for alt in response.final.alternatives
                     ).strip()
                     if text:
                         logger.info("STT финальный результат: %s", text)

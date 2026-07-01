@@ -2,14 +2,15 @@
 
 // Главный экран тренажёра.
 // Три состояния: idle (до старта), active (идёт разговор), paused (пауза).
-// Управляет сессией через REST API и устанавливает WebSocket-соединение
-// (на этом этапе — без обработки аудио, только соединение и команды).
+// Управляет сессией через REST API и WebSocket, захватывает микрофон
+// (PCM 16 кГц) и воспроизводит голосовой ответ ИИ.
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import CallAvatar from "@/app/components/CallAvatar";
 import Timer from "@/app/components/Timer";
 import Button from "@/app/components/Button";
+import { AudioPlayer, MicRecorder } from "@/app/lib/voiceClient";
 
 type ScreenState = "idle" | "active" | "paused";
 
@@ -27,9 +28,12 @@ export default function SessionPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  // Ссылка на активное WebSocket-соединение
+  // Ссылки на активные ресурсы разговора
   const wsRef = useRef<WebSocket | null>(null);
+  const recorderRef = useRef<MicRecorder | null>(null);
+  const playerRef = useRef<AudioPlayer | null>(null);
 
   // Загружаем данные текущего пользователя при монтировании
   useEffect(() => {
@@ -59,10 +63,20 @@ export default function SessionPage() {
     return () => clearInterval(id);
   }, [screenState]);
 
-  // Закрываем WebSocket при размонтировании страницы
+  // Полная очистка ресурсов разговора (микрофон, воспроизведение, сокет)
+  function teardown() {
+    void recorderRef.current?.stop();
+    recorderRef.current = null;
+    playerRef.current?.reset();
+    playerRef.current = null;
+    wsRef.current?.close();
+    wsRef.current = null;
+  }
+
+  // Закрываем всё при размонтировании страницы
   useEffect(() => {
     return () => {
-      wsRef.current?.close();
+      teardown();
     };
   }, []);
 
@@ -74,9 +88,10 @@ export default function SessionPage() {
     }
   }
 
-  // "Начать разговор": создаём сессию и подключаемся к WebSocket
+  // "Начать разговор": создаём сессию, подключаем WebSocket, микрофон и плеер
   async function handleStart() {
     setBusy(true);
+    setErrorMsg("");
     try {
       const res = await fetch("/api/sessions/start", { method: "POST" });
       if (!res.ok) {
@@ -88,51 +103,100 @@ export default function SessionPage() {
         wsUrl: string;
       };
 
+      // Одноразовый ws-токен (основной JWT в httpOnly cookie недоступен из JS)
+      const tokenRes = await fetch("/api/auth/ws-token");
+      if (!tokenRes.ok) {
+        if (tokenRes.status === 401) router.push("/login");
+        setErrorMsg("Не удалось авторизовать голосовое соединение");
+        return;
+      }
+      const { wsToken } = (await tokenRes.json()) as { wsToken: string };
+
       setSessionId(id);
       setSeconds(0);
-      setScreenState("active");
 
-      // Получаем одноразовый ws-токен (основной JWT в httpOnly cookie
-      // недоступен из JS), затем подключаемся к WebSocket с ним в query.
-      try {
-        const tokenRes = await fetch("/api/auth/ws-token");
-        if (!tokenRes.ok) {
-          if (tokenRes.status === 401) router.push("/login");
-          throw new Error("Не удалось получить ws-токен");
+      // Готовим плеер для голосовых ответов ИИ
+      const player = new AudioPlayer();
+      playerRef.current = player;
+
+      // Открываем WebSocket с ws-токеном в query
+      const url = `${wsUrl}?token=${encodeURIComponent(wsToken)}`;
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
+
+      // При открытии соединения переходим в active и запускаем микрофон
+      ws.onopen = async () => {
+        setScreenState("active");
+        try {
+          const recorder = new MicRecorder();
+          recorderRef.current = recorder;
+          await recorder.start((base64) => {
+            sendWs({ type: "audio_chunk", data: base64 });
+          });
+        } catch {
+          setErrorMsg(
+            "Нет доступа к микрофону. Разрешите доступ в браузере и начните заново."
+          );
         }
-        const { wsToken } = (await tokenRes.json()) as { wsToken: string };
+      };
 
-        const url = `${wsUrl}?token=${encodeURIComponent(wsToken)}`;
-        const ws = new WebSocket(url);
-        ws.onerror = () => {
-          console.warn("Ошибка WebSocket-соединения:", wsUrl);
-        };
-        wsRef.current = ws;
-      } catch (err) {
-        console.warn("Не удалось открыть WebSocket:", err);
-      }
+      // Роутинг входящих сообщений сервера
+      ws.onmessage = (event: MessageEvent) => {
+        try {
+          const msg = JSON.parse(event.data as string);
+          switch (msg.type) {
+            case "audio_chunk":
+              playerRef.current?.pushChunk(msg.data);
+              break;
+            case "audio_end":
+              playerRef.current?.endUtterance();
+              break;
+            case "error":
+              setErrorMsg(msg.message || "Ошибка сервера");
+              break;
+            case "session_ended":
+              break;
+            // transcript_user / transcript_ai на экране не показываем —
+            // полный текст доступен на странице транскрипта после разговора
+            default:
+              break;
+          }
+        } catch {
+          // некорректное сообщение — игнорируем
+        }
+      };
+
+      ws.onerror = () => {
+        console.warn("Ошибка WebSocket-соединения");
+      };
     } finally {
       setBusy(false);
     }
   }
 
-  // "Пауза": сообщаем серверу и останавливаем таймер
+  // "Пауза": перестаём слать аудио и сообщаем серверу
   function handlePause() {
+    recorderRef.current?.pause();
     sendWs({ type: "pause" });
     setScreenState("paused");
   }
 
-  // "Продолжить": возобновляем разговор
+  // "Продолжить": возобновляем отправку аудио
   function handleResume() {
+    recorderRef.current?.resume();
     sendWs({ type: "resume" });
     setScreenState("active");
   }
 
-  // "Завершить разговор": стоп по WS + завершение сессии в API + переход к транскрипту
+  // "Завершить разговор": стоп по WS, освобождение ресурсов, переход к транскрипту
   async function handleStop() {
     setBusy(true);
     try {
       sendWs({ type: "stop" });
+      await recorderRef.current?.stop();
+      recorderRef.current = null;
+      playerRef.current?.reset();
+      playerRef.current = null;
       wsRef.current?.close();
       wsRef.current = null;
 
@@ -147,6 +211,7 @@ export default function SessionPage() {
 
   // "Выйти": завершаем сессию авторизации
   async function handleLogout() {
+    teardown();
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   }
@@ -171,6 +236,11 @@ export default function SessionPage() {
 
         {/* Таймер показываем во время разговора и на паузе */}
         {screenState !== "idle" && <Timer seconds={seconds} />}
+
+        {/* Сообщение об ошибке (микрофон/сервер) */}
+        {errorMsg && (
+          <p className="max-w-md text-center text-sm text-red-600">{errorMsg}</p>
+        )}
 
         {/* Кнопки управления в зависимости от состояния */}
         <div className="flex gap-4">

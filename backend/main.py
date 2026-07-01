@@ -131,6 +131,8 @@ async def session_ws(ws: WebSocket, session_id: str):
                         "data": base64.b64encode(chunk).decode("ascii"),
                     },
                 )
+            # Маркер конца аудио: клиент собирает OGG целиком и проигрывает
+            await safe_send(ws, {"type": "audio_end"})
         except Exception as exc:  # noqa: BLE001
             # Любой сбой шага не роняет сервер — сообщаем клиенту
             logger.error("Ошибка пайплайна (сессия %s): %s", session_id, exc)
