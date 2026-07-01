@@ -44,6 +44,9 @@ async def synthesize(text: str) -> bytes:
             )
         ),
         loudness_normalization_type=tts_pb2.UtteranceSynthesisRequest.LUFS,
+        # По умолчанию v3 синтезирует не длиннее 250 символов. Ответ клиента
+        # бывает длиннее — unsafe_mode снимает лимит (до 5000 символов).
+        unsafe_mode=True,
     )
 
     metadata = [("authorization", f"Api-Key {settings.yandex_api_key}")]
