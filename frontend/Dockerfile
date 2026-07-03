@@ -3,21 +3,19 @@
 
 FROM node:20-bookworm AS base
 WORKDIR /app
-# На медленных VPS увеличиваем таймауты npm
 ENV NPM_CONFIG_FETCH_TIMEOUT=600000 \
     NPM_CONFIG_FETCH_RETRIES=5
 
-# --- Установка зависимостей ---
+# --- Установка зависимостей (devDeps нужны для next build / tailwind / typescript) ---
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 # --- Сборка приложения ---
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# npm run — использует prisma из node_modules, npx может снова лезть в registry
-RUN npm run prisma:generate && npm run build
+RUN ./node_modules/.bin/prisma generate && npm run build
 
 # --- Запуск ---
 FROM base AS runner
