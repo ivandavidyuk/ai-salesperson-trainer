@@ -1,10 +1,11 @@
 # Многостадийная сборка Next.js для продакшена.
-# Используем полный node:20-bookworm (не slim): openssl уже в образе.
-# На некоторых VPS (Timeweb и др.) исходящий доступ к deb.debian.org
-# заблокирован — apt-get в Dockerfile там не работает.
+# node:20-bookworm — openssl уже в образе (apt на VPS часто недоступен).
 
 FROM node:20-bookworm AS base
 WORKDIR /app
+# На медленных VPS увеличиваем таймауты npm
+ENV NPM_CONFIG_FETCH_TIMEOUT=600000 \
+    NPM_CONFIG_FETCH_RETRIES=5
 
 # --- Установка зависимостей ---
 FROM base AS deps
@@ -15,12 +16,12 @@ RUN npm ci
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate && npm run build
+# npm run — использует prisma из node_modules, npx может снова лезть в registry
+RUN npm run prisma:generate && npm run build
 
 # --- Запуск ---
 FROM base AS runner
 ENV NODE_ENV=production
 COPY --from=build /app ./
 EXPOSE 3000
-# При старте: применяем миграции БД, затем поднимаем сервер Next.js
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run start"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && npm run start"]
