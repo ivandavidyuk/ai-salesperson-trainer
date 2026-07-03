@@ -1,14 +1,10 @@
 # Многостадийная сборка Next.js для продакшена.
+# Используем полный node:20-bookworm (не slim): openssl уже в образе.
+# На некоторых VPS (Timeweb и др.) исходящий доступ к deb.debian.org
+# заблокирован — apt-get в Dockerfile там не работает.
 
-FROM node:20-bookworm-slim AS base
+FROM node:20-bookworm AS base
 WORKDIR /app
-# openssl нужен Prisma. apt по HTTP (порт 80) на некоторых VPS заблокирован —
-# переключаем зеркала Debian на HTTPS (443).
-RUN sed -i -e 's|http://deb.debian.org|https://deb.debian.org|g' \
-      /etc/apt/sources.list.d/debian.sources \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends openssl \
-    && rm -rf /var/lib/apt/lists/*
 
 # --- Установка зависимостей ---
 FROM base AS deps
