@@ -5,10 +5,13 @@ MVP голосового тренажёра, где менеджер по про
 
 ```
 ai-salesperson-trainer/
-├── frontend/            # Next.js 14 (App Router): API + интерфейс
-├── backend/             # Python FastAPI: WebSocket + голосовой пайплайн
-├── development-stages/  # описания этапов разработки
-└── docker-compose.yml   # PostgreSQL + Redis для локальной разработки
+├── frontend/              # Next.js 14 (App Router): API + интерфейс
+├── backend/               # Python FastAPI: WebSocket + голосовой пайплайн
+├── deploy/                # Caddyfile для продакшена
+├── development-stages/    # описания этапов разработки
+├── docker-compose.yml     # PostgreSQL + Redis для локальной разработки
+├── docker-compose.prod.yml # полный продакшен-стек (5 контейнеров)
+└── DEPLOY.md              # подробная инструкция по деплою и обновлению
 ```
 
 Готовы все три части: REST API и интерфейс (`frontend/`) и WebSocket-сервер
@@ -193,7 +196,128 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 
 ---
 
-## API (этап 1)
+## Продакшен
+
+Приложение развёрнуто на **VPS Timeweb Cloud** (Ubuntu 22.04, 2 vCPU / 4 ГБ RAM).
+**Yandex Cloud** используется только как API для SpeechKit и YandexGPT — не для хостинга.
+
+| Параметр | Значение |
+|---|---|
+| **URL** | https://5.129.206.63.nip.io |
+| **Публичный IPv4** | `5.129.206.63` |
+| **Домен** | `5.129.206.63.nip.io` (сервис [nip.io](https://nip.io), отдельный домен не нужен) |
+| **HTTPS / WSS** | Caddy + Let's Encrypt (автоматически) |
+| **Репозиторий** | https://github.com/ivandavidyuk/ai-salesperson-trainer (private) |
+| **Путь на сервере** | `~/ai-salesperson-trainer` |
+
+### Стек на сервере
+
+Пять контейнеров через `docker-compose.prod.yml`:
+
+- **caddy** — единая точка входа (80/443), проксирует `/` → frontend и `/ws` → backend
+- **frontend** — Next.js (REST API + интерфейс, миграции Prisma при старте)
+- **backend** — FastAPI WebSocket (STT → LLM → TTS)
+- **postgres** — PostgreSQL 16 (данные только в volume, наружу не открыт)
+- **redis** — Redis 7 (JWT whitelist, ws-токены)
+
+### SSH и управление
+
+```bash
+ssh root@5.129.206.63
+cd ~/ai-salesperson-trainer
+
+# статус контейнеров
+docker compose -f docker-compose.prod.yml ps
+
+# логи (frontend / backend / caddy)
+docker compose -f docker-compose.prod.yml logs -f backend --tail 50
+
+# перезапуск сервиса
+docker compose -f docker-compose.prod.yml restart frontend
+```
+
+### Переменные окружения на сервере
+
+Три файла (не в git, создаются из `*.example`):
+
+| Файл | Назначение |
+|---|---|
+| `./.env` | `DOMAIN`, `ACME_EMAIL`, `POSTGRES_*` |
+| `frontend/.env` | `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `FASTAPI_WS_URL` |
+| `backend/.env` | Yandex-ключи, `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET` |
+
+Критично, чтобы совпадали:
+
+```env
+# корневой .env
+DOMAIN=5.129.206.63.nip.io
+
+# frontend/.env
+FASTAPI_WS_URL=wss://5.129.206.63.nip.io
+```
+
+`JWT_SECRET` и пароль PostgreSQL — одинаковые в `frontend/.env` и `backend/.env`.
+
+### Создание пользователей для тестировщиков
+
+```bash
+docker compose -f docker-compose.prod.yml exec frontend npx ts-node create-user.ts
+```
+
+Скрипт спросит email, пароль и имя. Каждому тестировщику — отдельный аккаунт.
+
+### Обновление после изменений в коде
+
+На VPS **сборка frontend через `npm ci` ненадёжна** (медленная сеть, таймауты, неполная
+установка пакетов). Backend обычно собирается на сервере нормально.
+
+**Backend** (на сервере):
+
+```bash
+git pull
+docker compose -f docker-compose.prod.yml up -d --build backend
+```
+
+**Frontend** (рекомендуется — сборка локально или в CI, доставка через Docker Hub):
+
+```powershell
+# на Windows (Docker Desktop)
+cd frontend
+docker build -t ai-salesperson-trainer-frontend:latest .
+docker tag ai-salesperson-trainer-frontend:latest <DOCKERHUB_USER>/ai-trainer-frontend:latest
+docker push <DOCKERHUB_USER>/ai-trainer-frontend:latest
+```
+
+```bash
+# на сервере
+docker pull <DOCKERHUB_USER>/ai-trainer-frontend:latest
+docker tag <DOCKERHUB_USER>/ai-trainer-frontend:latest ai-salesperson-trainer-frontend:latest
+cd ~/ai-salesperson-trainer
+docker compose -f docker-compose.prod.yml up -d --no-build
+```
+
+Подробнее — в [DEPLOY.md](./DEPLOY.md).
+
+### Известные ограничения VPS Timeweb
+
+- **Исходящий доступ к `deb.debian.org` заблокирован** — в Dockerfile frontend нет `apt-get`,
+  используется полный образ `node:20-bookworm`.
+- **Медленный npm на сервере** — frontend лучше не собирать на VPS.
+- **Блокировки у некоторых российских провайдеров (ТСПУ)** — отдельные IP могут быть
+  недоступны с части сетей. Предыдущий IP `109.73.192.18` был заменён на `5.129.206.63`
+  по рекомендации поддержки Timeweb. Если у тестировщика сайт или WebSocket не открываются,
+  попросить проверить консоль браузера (F12) и логи backend во время сессии.
+
+### Рекомендации для тестировщиков
+
+- Браузер: **Chrome** или **Edge** (Safari на iOS может работать нестабильно).
+- Обязательно **HTTPS** — без него браузер не даст доступ к микрофону.
+- При первом разговоре — **разрешить микрофон**; лучше использовать **наушники**,
+  чтобы STT не подхватывал голос ИИ из колонок.
+
+---
+
+## API
 
 | Метод | Маршрут | Описание |
 |---|---|---|
@@ -238,10 +362,13 @@ docker compose down -v
 
 ## Этапы разработки
 
-- **Этап 1** — бэкенд: авторизация, сессии, транскрипт (`frontend/`) — **готово**
-- **Этап 2** — интерфейс: `/login`, `/session`, `/transcript/[id]` (`frontend/`) — **готово**
-- **Этап 3** — FastAPI WebSocket-сервер и голосовой пайплайн (`backend/`) — **готово**
-- **Голосовой ввод/вывод в браузере** — захват микрофона и воспроизведение
-  ответа ИИ (`frontend/app/lib/voiceClient.ts`, `frontend/public/pcm-recorder-worklet.js`) — **готово**
+| Этап | Описание | Статус |
+|---|---|---|
+| 1 | REST API: авторизация, сессии, транскрипт (`frontend/`) | готово |
+| 2 | Интерфейс: `/login`, `/session`, `/transcript/[id]` | готово |
+| 3 | FastAPI WebSocket и голосовой пайплайн (`backend/`) | готово |
+| 4 | Голос в браузере: микрофон + воспроизведение (`voiceClient.ts`) | готово |
+| 5 | Продакшен-деплой на Timeweb Cloud | готово |
 
-Подробные описания — в папке `development-stages/`.
+Подробные описания этапов 1–4 — в папке `development-stages/`.
+Инструкция по деплою и обновлению — в [DEPLOY.md](./DEPLOY.md).

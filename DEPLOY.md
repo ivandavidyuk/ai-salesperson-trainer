@@ -1,26 +1,28 @@
-# Деплой на Yandex Cloud
+# Деплой на VPS (Timeweb Cloud)
 
-Инструкция по развёртыванию голосового ИИ-тренажёра на одной виртуальной
-машине Yandex Compute Cloud. Весь стек (Next.js, FastAPI, PostgreSQL, Redis)
-поднимается через Docker Compose за реверс-прокси **Caddy** с автоматическим
-HTTPS/WSS (Let's Encrypt).
+Инструкция по развёртыванию голосового ИИ-тренажёра на виртуальной машине
+**Timeweb Cloud**. Весь стек (Next.js, FastAPI, PostgreSQL, Redis) поднимается
+через Docker Compose за реверс-прокси **Caddy** с автоматическим HTTPS/WSS
+(Let's Encrypt).
+
+> **Текущий продакшен:** https://5.129.206.63.nip.io (IP `5.129.206.63`).
+> Yandex Cloud используется только для API SpeechKit / YandexGPT, не для хостинга.
 
 > **Почему именно так.** Для MVP на одного-двух тестировщиков одна VM —
 > самый простой и дешёвый вариант. WebSocket-пайплайн требует долгоживущих
 > соединений, поэтому serverless-контейнеры не подходят. HTTPS обязателен:
-> без него браузер не даст доступ к микрофону. VM в Yandex Cloud расположена
-> рядом со SpeechKit → низкая задержка.
+> без него браузер не даст доступ к микрофону.
 
 ---
 
 ## Рекомендуемая конфигурация сервера
 
-- **Сервис:** Yandex Compute Cloud (виртуальная машина)
+- **Сервис:** Timeweb Cloud (облачный сервер)
 - **ОС:** Ubuntu 22.04 LTS
-- **vCPU / RAM:** 2 vCPU (можно 50–100% гарантированной доли) / 4 ГБ
-- **Диск:** 20–30 ГБ SSD
-- **Публичный IP:** нужен (статический — удобнее для DNS)
-- **Порты (security group / firewall):** 22 (SSH), 80 и 443 (HTTP/HTTPS)
+- **vCPU / RAM:** 2 vCPU / 4 ГБ
+- **Диск:** ≥ 30 ГБ NVMe
+- **Публичный IPv4:** обязателен (в панели Timeweb — «Сеть → Firewall»: порты 22, 80, 443)
+- **Домен:** свой A-запись **или** бесплатный `<IP>.nip.io` (например `5.129.206.63.nip.io`)
 
 Для роста в будущем: вынести БД в **Managed Service for PostgreSQL** и Redis в
 **Managed Service for Valkey/Redis**, приложения оставить на VM. Пока не нужно.
@@ -29,8 +31,9 @@ HTTPS/WSS (Let's Encrypt).
 
 ## Предварительно
 
-1. **Домен.** Заведи A-запись (например `trainer.example.com`), указывающую на
-   публичный IP VM. Без домена Let's Encrypt не выдаст сертификат.
+1. **Домен.** Заведи A-запись на публичный IP **или** используй `<IP>.nip.io`
+   (например `5.129.206.63.nip.io`). Без резолвящегося имени Let's Encrypt
+   не выдаст сертификат.
 2. **Ключ Yandex Cloud** для SpeechKit + YandexGPT (`YANDEX_API_KEY`,
    `YANDEX_FOLDER_ID`) — те же, что использовались локально.
 
@@ -124,6 +127,19 @@ docker compose -f docker-compose.prod.yml exec frontend npx ts-node create-user.
 ---
 
 ## Обновление после изменений в коде
+
+**Backend** — на сервере:
+
+```bash
+git pull
+docker compose -f docker-compose.prod.yml up -d --build backend
+```
+
+**Frontend** — на Timeweb VPS `npm ci` часто падает по таймауту. Надёжнее
+собрать образ локально (или в CI) и доставить через Docker Hub — см. раздел
+«Обновление» в [README.md](./README.md#обновление-после-изменений-в-коде).
+
+Попытка полной пересборки на сервере (может не сработать из‑за сети):
 
 ```bash
 git pull
