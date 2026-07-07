@@ -6,7 +6,12 @@
 (Let's Encrypt).
 
 > **Текущий продакшен:** https://5.129.206.63.nip.io (IP `5.129.206.63`).
-> Yandex Cloud используется только для API SpeechKit / YandexGPT, не для хостинга.
+
+> **Важно:** код переведён на OpenRouter (LLM) + ElevenLabs (STT/TTS).
+> API ElevenLabs недоступен с российских IP, поэтому деплой нового стека
+> на этот RU-сервер невозможен — голосовой backend нужно переносить на
+> зарубежный VPS. Инструкция ниже описывает развёртывание текущей
+> (ещё Yandex-) версии и будет обновлена на этапе деплоя нового стека.
 
 > **Почему именно так.** Для MVP на одного-двух тестировщиков одна VM —
 > самый простой и дешёвый вариант. WebSocket-пайплайн требует долгоживущих
@@ -34,8 +39,9 @@
 1. **Домен.** Заведи A-запись на публичный IP **или** используй `<IP>.nip.io`
    (например `5.129.206.63.nip.io`). Без резолвящегося имени Let's Encrypt
    не выдаст сертификат.
-2. **Ключ Yandex Cloud** для SpeechKit + YandexGPT (`YANDEX_API_KEY`,
-   `YANDEX_FOLDER_ID`) — те же, что использовались локально.
+2. **Ключи голосового пайплайна** — `LLM_API_KEY` (OpenRouter),
+   `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` — те же, что использовались
+   локально (для ElevenLabs сервер должен быть за пределами РФ).
 
 ---
 
@@ -90,7 +96,8 @@ cp backend/.env.production.example backend/.env
 | `JWT_SECRET` | одинаковый в `frontend/.env` и `backend/.env` |
 | `DOMAIN` (в `.env`) | тот же домен в `FASTAPI_WS_URL=wss://<domain>` в `frontend/.env` |
 
-Заполни в `backend/.env` ключи `YANDEX_API_KEY` и `YANDEX_FOLDER_ID`.
+Заполни в `backend/.env` ключи `LLM_API_KEY`, `ELEVENLABS_API_KEY`
+и `ELEVENLABS_VOICE_ID`.
 
 ## Шаг 4. Запустить
 

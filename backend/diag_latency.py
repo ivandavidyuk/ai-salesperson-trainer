@@ -1,9 +1,10 @@
 """Диагностика задержек пайплайна (в изоляции от голоса).
 
 Измеряет:
-  1. Сетевую задержку (TCP-connect) до эндпоинтов Yandex — ловит влияние VPN.
-  2. Чистую задержку LLM для разных моделей (lite vs pro) на одном промпте.
-  3. Чистую задержку TTS v3 (marina).
+  1. Сетевую задержку (TCP-connect) до эндпоинтов OpenRouter и ElevenLabs.
+     ElevenLabs недоступен с RU IP — без VPN коннект не пройдёт.
+  2. Чистую задержку LLM (OpenRouter) на одном промпте.
+  3. Чистую задержку TTS (ElevenLabs, модель из настроек).
 """
 
 import asyncio
@@ -18,9 +19,8 @@ from services import llm
 REPEATS = 3
 
 ENDPOINTS = [
-    ("LLM ", "llm.api.cloud.yandex.net", 443),
-    ("TTS ", "tts.api.cloud.yandex.net", 443),
-    ("STT ", "stt.api.cloud.yandex.net", 443),
+    ("LLM (OpenRouter) ", "openrouter.ai", 443),
+    ("STT/TTS (11Labs) ", "api.elevenlabs.io", 443),
 ]
 
 # Короткий представительный диалог (тот же system prompt, что в проде)
@@ -36,45 +36,41 @@ def tcp_connect_ms(host: str, port: int) -> float:
     return dt
 
 
-async def time_llm(model_uri: str) -> float:
-    """Один вызов YandexGPT с заданным modelUri, возвращает мс."""
+async def time_llm(model: str) -> float:
+    """Один вызов chat/completions с заданной моделью, возвращает мс."""
     s = get_settings()
-    messages = [
-        {"role": "system", "text": llm.SYSTEM_PROMPT},
-        {"role": "user", "text": USER_TURN},
-    ]
     payload = {
-        "modelUri": model_uri,
-        "completionOptions": {"stream": False, "temperature": 0.6, "maxTokens": 300},
-        "messages": messages,
+        "model": model,
+        "messages": [
+            {"role": "system", "content": llm.SYSTEM_PROMPT},
+            {"role": "user", "content": USER_TURN},
+        ],
+        "temperature": 0.6,
+        "max_tokens": 300,
     }
-    headers = {
-        "Authorization": f"Api-Key {s.yandex_api_key}",
-        "x-folder-id": s.yandex_folder_id,
-    }
+    headers = {"Authorization": f"Bearer {s.llm_api_key}"}
+    url = f"{s.llm_base_url}/chat/completions"
     t = time.perf_counter()
     async with httpx.AsyncClient(timeout=60) as c:
-        r = await c.post(llm.GPT_URL, json=payload, headers=headers)
+        r = await c.post(url, json=payload, headers=headers)
         r.raise_for_status()
-        _ = r.json()["result"]["alternatives"][0]["message"]["text"]
+        _ = r.json()["choices"][0]["message"]["content"]
     return (time.perf_counter() - t) * 1000
 
 
 async def time_tts() -> float:
-    """Один вызов TTS v3 (marina), возвращает мс."""
+    """Один вызов ElevenLabs TTS (модель из настроек), возвращает мс."""
     from services import tts
 
     t = time.perf_counter()
-    audio = await tts.synthesize("Здравствуйте, мне надо подумать, я как-то не уверена.")
-    dt = (time.perf_counter() - t) * 1000
-    return dt
+    await tts.synthesize("Здравствуйте, мне надо подумать, я как-то не уверена.")
+    return (time.perf_counter() - t) * 1000
 
 
 async def main() -> None:
     s = get_settings()
-    folder = s.yandex_folder_id
 
-    print("=== 1. Сеть (TCP-connect, мс) — влияние VPN ===")
+    print("=== 1. Сеть (TCP-connect, мс) — ElevenLabs требует VPN с RU ===")
     for label, host, port in ENDPOINTS:
         vals = []
         for _ in range(REPEATS):
@@ -83,34 +79,36 @@ async def main() -> None:
             except Exception as e:
                 vals.append(float("nan"))
                 print(f"  {label} {host}: ошибка {e}")
-        avg = sum(v for v in vals if v == v) / max(1, len([v for v in vals if v == v]))
-        print(f"  {label} {host:32s} avg={avg:6.0f}  {[round(v) for v in vals]}")
+        ok = [v for v in vals if v == v]
+        avg = sum(ok) / max(1, len(ok))
+        print(f"  {label} {host:24s} avg={avg:6.0f}  {[round(v) for v in vals]}")
 
-    print("\n=== 2. LLM (мс) — сравнение моделей на одном промпте ===")
+    print("\n=== 2. LLM OpenRouter (мс) ===")
     models = {
-        f"current ({s.yandex_gpt_model})": s.gpt_model_uri,
-        "yandexgpt-lite/latest": f"gpt://{folder}/yandexgpt-lite/latest",
-        "yandexgpt/latest (pro)": f"gpt://{folder}/yandexgpt/latest",
+        f"current ({s.llm_model})": s.llm_model,
+        "openai/gpt-4o-mini": "openai/gpt-4o-mini",
+        "google/gemini-2.5-flash": "google/gemini-2.5-flash",
     }
-    for name, uri in models.items():
+    for name, model in dict.fromkeys(models.items()):
         vals = []
         for _ in range(REPEATS):
             try:
-                vals.append(await time_llm(uri))
+                vals.append(await time_llm(model))
             except Exception as e:
-                print(f"  {name:28s} ошибка: {e}")
+                print(f"  {name:32s} ошибка: {e}")
                 vals = []
                 break
         if vals:
-            print(f"  {name:28s} avg={sum(vals)/len(vals):6.0f}  {[round(v) for v in vals]}")
+            print(f"  {name:32s} avg={sum(vals)/len(vals):6.0f}  {[round(v) for v in vals]}")
 
-    print("\n=== 3. TTS v3 marina (мс) ===")
+    print(f"\n=== 3. TTS ElevenLabs ({s.elevenlabs_tts_model}, мс) ===")
     vals = []
     for _ in range(REPEATS):
         try:
             vals.append(await time_tts())
         except Exception as e:
-            print(f"  ошибка: {e}"); break
+            print(f"  ошибка: {e}")
+            break
     if vals:
         print(f"  TTS avg={sum(vals)/len(vals):6.0f}  {[round(v) for v in vals]}")
 

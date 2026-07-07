@@ -1,132 +1,120 @@
-"""STT — потоковое распознавание речи через Yandex SpeechKit (gRPC v3).
+"""STT — потоковое распознавание речи через ElevenLabs Realtime (WebSocket).
 
-Принимает аудио-чанки (PCM 16kHz mono), стримит их в Yandex SpeechKit
-Streaming Recognition и при получении финального результата вызывает
-переданный колбэк on_final(text).
+Принимает аудио-чанки (PCM 16kHz mono), стримит их в ElevenLabs
+Speech-to-Text Realtime и при получении зафиксированного результата
+(committed_transcript) вызывает переданный колбэк on_final(text).
 
-gRPC-стабы берутся из пакета yandexcloud (yandex.cloud.ai.stt.v3).
-Если пакет недоступен, сервис помечается как недоступный, но импорт модуля
-не падает — это позволяет запускать остальной сервер без SpeechKit.
+Конец фразы определяет VAD на стороне ElevenLabs (commit_strategy=vad):
+после паузы EOU_SILENCE_SECS сервис сам фиксирует транскрипт.
 """
 
 import asyncio
+import base64
+import json
 import logging
 from typing import Awaitable, Callable, Optional
+from urllib.parse import urlencode
+
+import websockets
+
+from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Адрес gRPC-эндпоинта Yandex SpeechKit
-STT_ENDPOINT = "stt.api.cloud.yandex.net:443"
+# WebSocket-эндпоинт ElevenLabs Realtime STT
+STT_ENDPOINT = "wss://api.elevenlabs.io/v1/speech-to-text/realtime"
 
-# Пауза (мс), после которой фраза считается законченной (EOU).
+# Частота дискретизации входного аудио (совпадает с записью в браузере)
+SAMPLE_RATE = 16000
+
+# Пауза (сек), после которой VAD считает фразу законченной.
 # Меньше значение — быстрее ответ, но выше риск обрезать речь на паузах.
-EOU_MAX_PAUSE_MS = 1000
+EOU_SILENCE_SECS = 1.0
 
-# Пытаемся импортировать gRPC-стабы. Если не вышло — STT недоступен.
-try:
-    import grpc
-    from yandex.cloud.ai.stt.v3 import stt_pb2, stt_service_pb2_grpc
-
-    STT_AVAILABLE = True
-except Exception as exc:  # noqa: BLE001
-    STT_AVAILABLE = False
-    _IMPORT_ERROR = exc
-    logger.warning("STT недоступен (нет gRPC-стабов SpeechKit): %s", exc)
-
+# Типы сообщений-ошибок от ElevenLabs (все содержат поле error)
+_ERROR_TYPES = {
+    "error",
+    "auth_error",
+    "quota_exceeded",
+    "commit_throttled",
+    "unaccepted_terms",
+    "rate_limited",
+    "queue_overflow",
+    "resource_exhausted",
+    "session_time_limit_exceeded",
+    "input_error",
+    "chunk_size_exceeded",
+    "transcriber_error",
+}
 
 # Тип колбэка: получает финальный распознанный текст
 OnFinal = Callable[[str], Awaitable[None]]
 
 
-class YandexSTT:
+class ElevenLabsSTT:
     """Управляет одной потоковой сессией распознавания речи."""
 
     def __init__(self, api_key: str, on_final: OnFinal) -> None:
         self._api_key = api_key
         self._on_final = on_final
-        self._audio_queue: asyncio.Queue[Optional[bytes]] = asyncio.Queue()
+        self._ws: Optional[websockets.ClientConnection] = None
         self._task: Optional[asyncio.Task] = None
-        self._channel = None  # type: ignore[var-annotated]
         self._closed = False
 
-    async def _request_iterator(self):
-        """Генератор запросов: сначала параметры сессии, затем аудио-чанки."""
-        # Параметры распознавания: PCM 16kHz mono, русский язык, реальное время
-        recognize_options = stt_pb2.StreamingOptions(
-            recognition_model=stt_pb2.RecognitionModelOptions(
-                audio_format=stt_pb2.AudioFormatOptions(
-                    raw_audio=stt_pb2.RawAudio(
-                        audio_encoding=stt_pb2.RawAudio.LINEAR16_PCM,
-                        sample_rate_hertz=16000,
-                        audio_channel_count=1,
-                    )
-                ),
-                text_normalization=stt_pb2.TextNormalizationOptions(
-                    text_normalization=stt_pb2.TextNormalizationOptions.TEXT_NORMALIZATION_ENABLED,
-                    profanity_filter=False,
-                    literature_text=False,
-                ),
-                language_restriction=stt_pb2.LanguageRestrictionOptions(
-                    restriction_type=stt_pb2.LanguageRestrictionOptions.WHITELIST,
-                    language_code=["ru-RU"],
-                ),
-                audio_processing_type=stt_pb2.RecognitionModelOptions.REAL_TIME,
-            ),
-            # Классификатор конца фразы: фиксируем паузу ~1 с, после которой
-            # SpeechKit выдаёт финал (быстрее реакция ИИ на реплику).
-            eou_classifier=stt_pb2.EouClassifierOptions(
-                default_classifier=stt_pb2.DefaultEouClassifier(
-                    type=stt_pb2.DefaultEouClassifier.DEFAULT,
-                    max_pause_between_words_hint_ms=EOU_MAX_PAUSE_MS,
-                )
-            ),
-        )
-        yield stt_pb2.StreamingRequest(session_options=recognize_options)
-
-        # Далее — аудио из очереди, пока не получим сигнал завершения (None)
-        while True:
-            chunk = await self._audio_queue.get()
-            if chunk is None:
-                break
-            yield stt_pb2.StreamingRequest(
-                chunk=stt_pb2.AudioChunk(data=chunk)
-            )
-
     async def start(self) -> None:
-        """Открывает gRPC-соединение и запускает фоновую обработку ответов."""
-        if not STT_AVAILABLE:
-            raise RuntimeError(
-                f"SpeechKit STT недоступен: {_IMPORT_ERROR}"
-            )
+        """Открывает WebSocket-соединение и запускает чтение результатов."""
         if not self._api_key:
-            raise RuntimeError("Не задан YANDEX_API_KEY для STT")
+            raise RuntimeError("Не задан ELEVENLABS_API_KEY для STT")
 
-        self._channel = grpc.aio.secure_channel(
-            STT_ENDPOINT, grpc.ssl_channel_credentials()
+        settings = get_settings()
+        query = urlencode(
+            {
+                "model_id": settings.elevenlabs_stt_model,
+                "audio_format": f"pcm_{SAMPLE_RATE}",
+                "language_code": "ru",
+                "commit_strategy": "vad",
+                "vad_silence_threshold_secs": EOU_SILENCE_SECS,
+            }
         )
-        stub = stt_service_pb2_grpc.RecognizerStub(self._channel)
-        metadata = (("authorization", f"Api-Key {self._api_key}"),)
-        self._task = asyncio.create_task(self._consume(stub, metadata))
-        logger.info("STT: gRPC-стрим запущен")
+        url = f"{STT_ENDPOINT}?{query}"
+        headers = {"xi-api-key": self._api_key}
 
-    async def _consume(self, stub, metadata) -> None:
-        """Читает ответы распознавания и вызывает колбэк на финальных фразах."""
+        # Имя параметра заголовков зависит от версии websockets
         try:
-            responses = stub.RecognizeStreaming(
-                self._request_iterator(), metadata=metadata
-            )
-            async for response in responses:
-                event = response.WhichOneof("Event")
-                # На одну фразу SpeechKit присылает и `final`, и следом
-                # `final_refinement` (уточнённый текст). Обрабатываем только
-                # `final`, иначе реплика уйдёт в LLM/TTS дважды и ИИ повторится.
-                if event == "final":
-                    text = " ".join(
-                        alt.text for alt in response.final.alternatives
-                    ).strip()
+            self._ws = await websockets.connect(url, additional_headers=headers)
+        except TypeError:
+            self._ws = await websockets.connect(url, extra_headers=headers)
+
+        self._task = asyncio.create_task(self._consume())
+        logger.info("STT: WebSocket-стрим ElevenLabs запущен")
+
+    async def _consume(self) -> None:
+        """Читает ответы распознавания и вызывает колбэк на финальных фразах."""
+        assert self._ws is not None
+        try:
+            async for raw in self._ws:
+                try:
+                    msg = json.loads(raw)
+                except (TypeError, ValueError):
+                    continue
+
+                msg_type = msg.get("message_type")
+
+                # Обрабатываем только зафиксированный транскрипт;
+                # partial_transcript игнорируем, иначе реплика уйдёт
+                # в LLM/TTS несколько раз.
+                if msg_type == "committed_transcript":
+                    text = (msg.get("text") or "").strip()
                     if text:
                         logger.info("STT финальный результат: %s", text)
                         await self._on_final(text)
+                elif msg_type in _ERROR_TYPES:
+                    logger.error(
+                        "STT ошибка (%s): %s", msg_type, msg.get("error")
+                    )
+        except websockets.ConnectionClosed:
+            if not self._closed:
+                logger.warning("STT: соединение закрыто сервером")
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001
@@ -135,16 +123,31 @@ class YandexSTT:
 
     async def push_audio(self, data: bytes) -> None:
         """Передаёт очередной аудио-чанк в распознавание."""
-        if self._closed:
+        if self._closed or self._ws is None:
             return
-        await self._audio_queue.put(data)
+        message = {
+            "message_type": "input_audio_chunk",
+            "audio_base_64": base64.b64encode(data).decode("ascii"),
+            "commit": False,  # фиксацию выполняет VAD по паузе
+            "sample_rate": SAMPLE_RATE,
+        }
+        try:
+            await self._ws.send(json.dumps(message))
+        except websockets.ConnectionClosed:
+            if not self._closed:
+                logger.warning("STT: не удалось отправить аудио — стрим закрыт")
 
     async def stop(self) -> None:
         """Завершает поток распознавания и закрывает соединение."""
         if self._closed:
             return
         self._closed = True
-        await self._audio_queue.put(None)  # сигнал завершения генератору
+
+        if self._ws is not None:
+            try:
+                await self._ws.close()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("STT: ошибка при закрытии WebSocket: %s", exc)
 
         if self._task is not None:
             try:
@@ -154,6 +157,4 @@ class YandexSTT:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("STT: ошибка при завершении: %s", exc)
 
-        if self._channel is not None:
-            await self._channel.close()
         logger.info("STT: остановлен")

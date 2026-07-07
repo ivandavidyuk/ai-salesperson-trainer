@@ -1,7 +1,7 @@
 """Настройки сервиса, читаются из переменных окружения (.env).
 
 Используется pydantic-settings: имена полей сопоставляются с переменными
-окружения без учёта регистра (например, YANDEX_API_KEY -> yandex_api_key).
+окружения без учёта регистра (например, LLM_API_KEY -> llm_api_key).
 """
 
 from functools import lru_cache
@@ -17,20 +17,22 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Yandex Cloud
-    yandex_api_key: str = ""
-    yandex_folder_id: str = ""
-    yandex_gpt_model: str = "yandexgpt-lite"
+    # LLM — любой OpenAI-совместимый провайдер (сейчас OpenRouter)
+    llm_api_key: str = ""
+    llm_base_url: str = "https://openrouter.ai/api/v1"
+    llm_model: str = "openai/gpt-4o-mini"
+
+    # ElevenLabs — STT (Realtime) и TTS
+    elevenlabs_api_key: str = ""
+    elevenlabs_voice_id: str = ""
+    # eleven_flash_v2_5 — минимальная задержка; eleven_v3 — эмоции и audio-теги
+    elevenlabs_tts_model: str = "eleven_flash_v2_5"
+    elevenlabs_stt_model: str = "scribe_v2_realtime"
 
     # Инфраструктура (те же значения, что и в Next.js приложении)
     database_url: str = ""
     redis_url: str = ""
     jwt_secret: str = ""
-
-    @property
-    def gpt_model_uri(self) -> str:
-        """URI модели для YandexGPT в формате gpt://<folder>/<model>/latest."""
-        return f"gpt://{self.yandex_folder_id}/{self.yandex_gpt_model}/latest"
 
     @property
     def asyncpg_dsn(self) -> str:

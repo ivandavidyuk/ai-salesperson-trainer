@@ -1,69 +1,64 @@
-"""TTS — синтез речи через Yandex SpeechKit (API v3, gRPC).
+"""TTS — синтез речи через ElevenLabs (REST API).
 
-Принимает текст, синтезирует его голосом marina (амплуа neutral),
-возвращает аудио в формате OGG (opus) и нарезает его на чанки.
+Принимает текст, синтезирует его голосом из настроек (ELEVENLABS_VOICE_ID),
+возвращает аудио в формате MP3 и нарезает его на чанки.
+
+Модель задаётся через ELEVENLABS_TTS_MODEL:
+  eleven_flash_v2_5 — минимальная задержка (по умолчанию);
+  eleven_v3         — эмоции и audio-теги ([sighs], [hesitant]), но медленнее.
 """
 
 import logging
 from typing import AsyncIterator, Iterator
 
-import grpc
-from yandex.cloud.ai.tts.v3 import tts_pb2, tts_service_pb2_grpc
+import httpx
 
 from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# gRPC-эндпоинт синтеза речи (v3)
-TTS_ENDPOINT = "tts.api.cloud.yandex.net:443"
+# Базовый URL ElevenLabs API
+API_BASE = "https://api.elevenlabs.io/v1"
 
-# Голос и амплуа
-TTS_VOICE = "marina"
-TTS_ROLE = "neutral"
+# Формат вывода: MP3 44.1 кГц 64 кбит/с — компромисс качество/размер для речи
+OUTPUT_FORMAT = "mp3_44100_64"
 
 # Размер аудио-чанка для отправки клиенту (в байтах)
 CHUNK_SIZE = 16 * 1024
 
 
 async def synthesize(text: str) -> bytes:
-    """Синтезирует речь и возвращает аудио целиком (OGG/opus) через v3 gRPC."""
+    """Синтезирует речь и возвращает аудио целиком (MP3)."""
     settings = get_settings()
-    if not settings.yandex_api_key:
-        raise RuntimeError("Не задан YANDEX_API_KEY для TTS")
+    if not settings.elevenlabs_api_key:
+        raise RuntimeError("Не задан ELEVENLABS_API_KEY для TTS")
+    if not settings.elevenlabs_voice_id:
+        raise RuntimeError("Не задан ELEVENLABS_VOICE_ID для TTS")
 
-    request = tts_pb2.UtteranceSynthesisRequest(
-        text=text,
-        # Голос marina + амплуа neutral (каждая подсказка — отдельный Hints)
-        hints=[
-            tts_pb2.Hints(voice=TTS_VOICE),
-            tts_pb2.Hints(role=TTS_ROLE),
-        ],
-        output_audio_spec=tts_pb2.AudioFormatOptions(
-            container_audio=tts_pb2.ContainerAudio(
-                container_audio_type=tts_pb2.ContainerAudio.OGG_OPUS
-            )
-        ),
-        loudness_normalization_type=tts_pb2.UtteranceSynthesisRequest.LUFS,
-        # По умолчанию v3 синтезирует не длиннее 250 символов. Ответ клиента
-        # бывает длиннее — unsafe_mode снимает лимит (до 5000 символов).
-        unsafe_mode=True,
+    url = (
+        f"{API_BASE}/text-to-speech/{settings.elevenlabs_voice_id}"
+        f"?output_format={OUTPUT_FORMAT}"
     )
+    payload = {
+        "text": text,
+        "model_id": settings.elevenlabs_tts_model,
+        "voice_settings": {
+            "stability": 0.5,
+            "similarity_boost": 0.75,
+        },
+    }
+    headers = {"xi-api-key": settings.elevenlabs_api_key}
 
-    metadata = [("authorization", f"Api-Key {settings.yandex_api_key}")]
-    if settings.yandex_folder_id:
-        metadata.append(("x-folder-id", settings.yandex_folder_id))
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        audio = response.content
 
-    async with grpc.aio.secure_channel(
-        TTS_ENDPOINT, grpc.ssl_channel_credentials()
-    ) as channel:
-        stub = tts_service_pb2_grpc.SynthesizerStub(channel)
-        responses = stub.UtteranceSynthesis(request, metadata=metadata)
-        chunks: list[bytes] = []
-        async for response in responses:
-            chunks.append(response.audio_chunk.data)
-
-    audio = b"".join(chunks)
-    logger.info("TTS синтезировал %d байт аудио (голос %s)", len(audio), TTS_VOICE)
+    logger.info(
+        "TTS синтезировал %d байт аудио (модель %s)",
+        len(audio),
+        settings.elevenlabs_tts_model,
+    )
     return audio
 
 

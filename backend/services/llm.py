@@ -1,4 +1,4 @@
-"""LLM — генерация ответа клиента через YandexGPT (REST API).
+"""LLM — генерация ответа клиента через OpenRouter (OpenAI-совместимый API).
 
 Получает историю диалога, добавляет системный промпт (роль клиента —
 Тамара Михайловна) и возвращает текстовый ответ.
@@ -11,9 +11,6 @@ import httpx
 from core.config import get_settings
 
 logger = logging.getLogger(__name__)
-
-# REST-эндпоинт YandexGPT
-GPT_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 
 # Системный промпт — роль клиента (захардкожен согласно ТЗ этапа 3)
 SYSTEM_PROMPT = (
@@ -103,34 +100,29 @@ async def generate_reply(history: list[dict]) -> str:
     в хронологическом порядке.
     """
     settings = get_settings()
-    if not settings.yandex_api_key:
-        raise RuntimeError("Не задан YANDEX_API_KEY для YandexGPT")
+    if not settings.llm_api_key:
+        raise RuntimeError("Не задан LLM_API_KEY для LLM")
 
     # Формируем сообщения: системный промпт + история диалога
-    messages = [{"role": "system", "text": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for item in history:
-        messages.append({"role": item["role"], "text": item["text"]})
+        messages.append({"role": item["role"], "content": item["text"]})
 
     payload = {
-        "modelUri": settings.gpt_model_uri,
-        "completionOptions": {
-            "stream": False,
-            "temperature": 0.6,
-            "maxTokens": 300,
-        },
+        "model": settings.llm_model,
         "messages": messages,
+        "temperature": 0.6,
+        "max_tokens": 300,
     }
-    headers = {
-        "Authorization": f"Api-Key {settings.yandex_api_key}",
-        "x-folder-id": settings.yandex_folder_id,
-    }
+    headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
+    url = f"{settings.llm_base_url}/chat/completions"
 
     async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(GPT_URL, json=payload, headers=headers)
+        response = await client.post(url, json=payload, headers=headers)
         response.raise_for_status()
         data = response.json()
 
-    # Извлекаем текст ответа
-    text = data["result"]["alternatives"][0]["message"]["text"].strip()
+    # Извлекаем текст ответа (формат OpenAI Chat Completions)
+    text = data["choices"][0]["message"]["content"].strip()
     logger.info("LLM ответил (%d симв.)", len(text))
     return text

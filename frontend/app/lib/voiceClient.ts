@@ -1,6 +1,6 @@
 // Клиентские утилиты для голосового звонка (работают только в браузере):
 //   MicRecorder — захват микрофона и потоковая отправка PCM 16 кГц mono;
-//   AudioPlayer — сборка OGG-ответа из чанков и последовательное воспроизведение.
+//   AudioPlayer — сборка MP3-ответа из чанков и последовательное воспроизведение.
 
 // Кодирует ArrayBuffer в base64 (порциями, чтобы не переполнить стек).
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -121,16 +121,16 @@ export class AudioPlayer {
   private playing = false;
   private current: HTMLAudioElement | null = null;
 
-  // Добавляет очередной OGG-чанк текущего ответа
+  // Добавляет очередной аудио-чанк текущего ответа
   pushChunk(base64: string): void {
     this.pending.push(base64ToBytes(base64));
   }
 
-  // Ответ завершён: собираем OGG целиком и ставим в очередь воспроизведения
+  // Ответ завершён: собираем MP3 целиком и ставим в очередь воспроизведения
   endUtterance(): void {
     if (this.pending.length === 0) return;
     const parts = this.pending.map((u) => u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength) as ArrayBuffer);
-    const blob = new Blob(parts, { type: "audio/ogg" });
+    const blob = new Blob(parts, { type: "audio/mpeg" });
     this.pending = [];
     this.queue.push(blob);
     if (!this.playing) {

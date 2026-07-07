@@ -1,13 +1,11 @@
 # Веб-фреймворк и ASGI-сервер
 fastapi>=0.115
 uvicorn[standard]>=0.30
+
+# ElevenLabs Realtime STT (WebSocket-клиент)
 websockets>=12
 
-# Yandex SpeechKit STT (gRPC) + готовые protobuf-стабы
-grpcio>=1.66
-yandexcloud>=0.300
-
-# YandexGPT и TTS (REST)
+# OpenRouter LLM и ElevenLabs TTS (REST)
 httpx>=0.27
 
 # Хранилище состояния сессии

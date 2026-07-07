@@ -22,7 +22,7 @@ from services.session import (
     STATUS_PAUSED,
     SessionStore,
 )
-from services.stt import YandexSTT
+from services.stt import ElevenLabsSTT
 
 # Логирование каждого шага пайплайна
 logging.basicConfig(
@@ -137,7 +137,7 @@ async def session_ws(ws: WebSocket, session_id: str):
                         "data": base64.b64encode(chunk).decode("ascii"),
                     },
                 )
-            # Маркер конца аудио: клиент собирает OGG целиком и проигрывает
+            # Маркер конца аудио: клиент собирает MP3 целиком и проигрывает
             await safe_send(ws, {"type": "audio_end"})
             total_ms = (time.perf_counter() - t_start) * 1000
             # Разбивка задержки по этапам: видно, что именно тормозит
@@ -156,11 +156,11 @@ async def session_ws(ws: WebSocket, session_id: str):
                 {"type": "error", "message": f"Ошибка обработки: {exc}"},
             )
 
-    # 4. Инициализируем STT (если SpeechKit доступен)
+    # 4. Инициализируем STT (ElevenLabs Realtime)
     from core.config import get_settings
 
-    api_key = get_settings().yandex_api_key
-    stt = YandexSTT(api_key=api_key, on_final=handle_user_text)
+    api_key = get_settings().elevenlabs_api_key
+    stt = ElevenLabsSTT(api_key=api_key, on_final=handle_user_text)
     stt_started = False
     try:
         await stt.start()

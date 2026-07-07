@@ -29,7 +29,10 @@ ai-salesperson-trainer/
 - **Node.js** 18+ (проверено на 22.x) — для `frontend`
 - **Python** 3.11+ (проверено на 3.14) — для `backend`
 - **Docker Desktop** (для PostgreSQL и Redis)
-- ключ **Yandex Cloud** — для реального голосового пайплайна
+- ключ **OpenRouter** (LLM) и ключ **ElevenLabs** (STT + TTS) — для реального
+  голосового пайплайна
+- **VPN** на машине разработчика — API ElevenLabs недоступен с российских IP
+  (OpenRouter работает и без VPN)
 
 ---
 
@@ -137,8 +140,9 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 > В `backend/.env` значения `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET` должны
-> **совпадать** с `frontend/.env`. Для реального голоса заполни `YANDEX_API_KEY`
-> и `YANDEX_FOLDER_ID` — без них пайплайн отвечает `error` (каркас рабочий).
+> **совпадать** с `frontend/.env`. Для реального голоса заполни `LLM_API_KEY`
+> (OpenRouter), `ELEVENLABS_API_KEY` и `ELEVENLABS_VOICE_ID` — без них
+> пайплайн отвечает `error` (каркас рабочий).
 > Healthcheck: `GET http://localhost:8000/health`.
 
 ---
@@ -177,29 +181,46 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 
 | Переменная | Назначение | Значение по умолчанию |
 |---|---|---|
-| `YANDEX_API_KEY` | API-ключ Yandex Cloud (STT / LLM / TTS) | — |
-| `YANDEX_FOLDER_ID` | идентификатор каталога Yandex Cloud | — |
-| `YANDEX_GPT_MODEL` | имя модели YandexGPT (не URI) | `yandexgpt-lite` |
+| `LLM_API_KEY` | ключ OpenRouter (или другого OpenAI-совместимого провайдера) | — |
+| `LLM_BASE_URL` | базовый URL LLM-провайдера | `https://openrouter.ai/api/v1` |
+| `LLM_MODEL` | ID модели (формат OpenRouter) | `google/gemini-2.5-flash` |
+| `ELEVENLABS_API_KEY` | ключ ElevenLabs (STT + TTS) | — |
+| `ELEVENLABS_VOICE_ID` | ID голоса клиента (из ElevenLabs dashboard) | — |
+| `ELEVENLABS_TTS_MODEL` | модель TTS | `eleven_flash_v2_5` |
 | `DATABASE_URL` | строка подключения к PostgreSQL (должна совпадать с `frontend/.env`) | — |
 | `REDIS_URL` | строка подключения к Redis (та же, что в `frontend/.env`) | — |
 | `JWT_SECRET` | секрет для проверки JWT (тот же, что в `frontend/.env`) | — |
 
-> `YANDEX_GPT_MODEL` задаётся именем модели (например `yandexgpt-lite`),
-> URI вида `gpt://<folder>/<model>/latest` собирается автоматически.
+> На **бесплатном тарифе ElevenLabs** через API работают только стандартные
+> (premade) голоса — голоса из Voice Library вернут `402 Payment Required`.
+> `ELEVENLABS_TTS_MODEL=eleven_v3` включает эмоции и audio-теги ([sighs],
+> [hesitant]), но заметно медленнее `eleven_flash_v2_5`.
 
 ### Голосовой пайплайн (детали)
 
-- **STT** (Yandex SpeechKit v3, gRPC): PCM 16 кГц mono, распознавание ru-RU.
-  Конец фразы (пауза) — `EOU_MAX_PAUSE_MS = 1000` мс в `services/stt.py`.
-- **LLM** (YandexGPT REST): роль клиента «Тамара Михайловна» (промпт в `services/llm.py`).
-- **TTS** (Yandex SpeechKit v3, gRPC): голос **marina**, амплуа **neutral**, OGG/opus.
+- **STT** (ElevenLabs Scribe v2 Realtime, WebSocket): PCM 16 кГц mono,
+  язык ru. Конец фразы определяет VAD — пауза `EOU_SILENCE_SECS = 1.0` с
+  в `services/stt.py`.
+- **LLM** (OpenRouter, OpenAI-совместимый REST): роль клиента
+  «Тамара Михайловна» (промпт в `services/llm.py`).
+- **TTS** (ElevenLabs REST): голос из `ELEVENLABS_VOICE_ID`, формат MP3
+  44.1 кГц 64 кбит/с.
+
+Замеренные задержки (Windows + VPN, июль 2026): LLM `gemini-2.5-flash`
+~0.8 с, `gpt-4o-mini` ~1.2 с; TTS `eleven_flash_v2_5` ~0.6 с.
 
 ---
 
 ## Продакшен
 
 Приложение развёрнуто на **VPS Timeweb Cloud** (Ubuntu 22.04, 2 vCPU / 4 ГБ RAM).
-**Yandex Cloud** используется только как API для SpeechKit и YandexGPT — не для хостинга.
+
+> **Внимание: продакшен ещё на старом стеке (Yandex SpeechKit + YandexGPT).**
+> Код в репозитории уже переведён на OpenRouter + ElevenLabs, но API ElevenLabs
+> **недоступен с российских IP** — для деплоя нового стека голосовой backend
+> нужно перенести на зарубежный VPS (например, в Германии), а RU-сервер
+> оставить для frontend/БД с проксированием `/ws` на зарубежный backend.
+> План описан в `.cursor/plans/`, деплой — отдельный этап.
 
 | Параметр | Значение |
 |---|---|
@@ -207,7 +228,7 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 | **Публичный IPv4** | `5.129.206.63` |
 | **Домен** | `5.129.206.63.nip.io` (сервис [nip.io](https://nip.io), отдельный домен не нужен) |
 | **HTTPS / WSS** | Caddy + Let's Encrypt (автоматически) |
-| **Репозиторий** | https://github.com/ivandavidyuk/ai-salesperson-trainer (private) |
+| **Репозиторий** | https://github.com/ivandavidyuk/ai-salesperson-trainer |
 | **Путь на сервере** | `~/ai-salesperson-trainer` |
 
 ### Стек на сервере
@@ -244,7 +265,7 @@ docker compose -f docker-compose.prod.yml restart frontend
 |---|---|
 | `./.env` | `DOMAIN`, `ACME_EMAIL`, `POSTGRES_*` |
 | `frontend/.env` | `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `FASTAPI_WS_URL` |
-| `backend/.env` | Yandex-ключи, `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET` |
+| `backend/.env` | `LLM_*` (OpenRouter), `ELEVENLABS_*`, `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET` |
 
 Критично, чтобы совпадали:
 
