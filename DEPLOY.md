@@ -1,178 +1,162 @@
-# Деплой на VPS (Timeweb Cloud)
+# Деплой: два сервера + автодеплой через GitHub Actions
 
-Инструкция по развёртыванию голосового ИИ-тренажёра на виртуальной машине
-**Timeweb Cloud**. Весь стек (Next.js, FastAPI, PostgreSQL, Redis) поднимается
-через Docker Compose за реверс-прокси **Caddy** с автоматическим HTTPS/WSS
-(Let's Encrypt).
+Продакшен разнесён на два VPS:
 
-> **Текущий продакшен:** https://5.129.206.63.nip.io (IP `5.129.206.63`).
+- **RU-сервер** (Timeweb, `5.129.206.63`) — Caddy (HTTPS/WSS), Next.js,
+  PostgreSQL, Redis. Пользователи ходят на https://5.129.206.63.nip.io.
+- **DE-сервер** (`103.7.55.214`) — голосовой FastAPI backend (STT → LLM → TTS).
+  Он вынесен за рубеж, потому что API ElevenLabs недоступен с российских IP.
 
-> **Важно:** код переведён на OpenRouter (LLM) + ElevenLabs (STT/TTS).
-> API ElevenLabs недоступен с российских IP, поэтому деплой нового стека
-> на этот RU-сервер невозможен — голосовой backend нужно переносить на
-> зарубежный VPS. Инструкция ниже описывает развёртывание текущей
-> (ещё Yandex-) версии и будет обновлена на этапе деплоя нового стека.
+Caddy на RU проксирует `/ws/*` на DE-сервер (порт 8000). Backend на DE ходит
+в PostgreSQL/Redis на RU — порты 5432/6379 опубликованы, но файрволом
+разрешены **только с IP DE-сервера**.
 
-> **Почему именно так.** Для MVP на одного-двух тестировщиков одна VM —
-> самый простой и дешёвый вариант. WebSocket-пайплайн требует долгоживущих
-> соединений, поэтому serverless-контейнеры не подходят. HTTPS обязателен:
-> без него браузер не даст доступ к микрофону.
+```mermaid
+flowchart LR
+    Browser[Браузер] -->|"HTTPS/WSS"| Caddy[RU: Caddy]
+    Caddy -->|"/"| Frontend[RU: Next.js]
+    Caddy -->|"/ws/*"| Backend[DE: FastAPI]
+    Frontend --> PG[RU: PostgreSQL]
+    Frontend --> Redis[RU: Redis]
+    Backend -->|"только с DE IP"| PG
+    Backend -->|"только с DE IP"| Redis
+    Backend --> EL[ElevenLabs API]
+    Backend --> OR[OpenRouter API]
+```
 
 ---
 
-## Рекомендуемая конфигурация сервера
+## Автодеплой (CI/CD)
 
-- **Сервис:** Timeweb Cloud (облачный сервер)
-- **ОС:** Ubuntu 22.04 LTS
-- **vCPU / RAM:** 2 vCPU / 4 ГБ
-- **Диск:** ≥ 30 ГБ NVMe
-- **Публичный IPv4:** обязателен (в панели Timeweb — «Сеть → Firewall»: порты 22, 80, 443)
-- **Домен:** свой A-запись **или** бесплатный `<IP>.nip.io` (например `5.129.206.63.nip.io`)
+Каждый push в `main` запускает [.github/workflows/deploy.yml](.github/workflows/deploy.yml):
 
-Для роста в будущем: вынести БД в **Managed Service for PostgreSQL** и Redis в
-**Managed Service for Valkey/Redis**, приложения оставить на VM. Пока не нужно.
+1. **build** — сборка Docker-образов `ai-trainer-frontend` и `ai-trainer-backend`
+   на раннерах GitHub и push в Docker Hub (решает проблему медленного npm на VPS).
+2. **deploy-de** — SSH на DE: `docker compose pull && up -d` в `~/ai-trainer`.
+3. **deploy-ru** — SSH на RU: `git pull`, `docker compose pull && up -d`
+   в `~/ai-salesperson-trainer`.
+
+Т.е. для обновления продакшена достаточно `git push` — руками на серверы
+ходить не нужно.
+
+### Секреты репозитория (Settings → Secrets and variables → Actions)
+
+| Секрет | Значение |
+|---|---|
+| `DOCKERHUB_USERNAME` | логин Docker Hub |
+| `DOCKERHUB_TOKEN` | access token Docker Hub (Read & Write) |
+| `RU_HOST`, `RU_SSH_PASSWORD` | IP и root-пароль RU-сервера |
+| `DE_HOST`, `DE_SSH_PASSWORD` | IP и root-пароль DE-сервера |
+
+SSH-аутентификация — по паролю (`appleboy/ssh-action`). Значения секретов
+зашифрованы и маскируются в логах workflow.
 
 ---
 
-## Предварительно
+## Разовая настройка серверов (уже выполнена)
 
-1. **Домен.** Заведи A-запись на публичный IP **или** используй `<IP>.nip.io`
-   (например `5.129.206.63.nip.io`). Без резолвящегося имени Let's Encrypt
-   не выдаст сертификат.
-2. **Ключи голосового пайплайна** — `LLM_API_KEY` (OpenRouter),
-   `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` — те же, что использовались
-   локально (для ElevenLabs сервер должен быть за пределами РФ).
+### DE-сервер — голосовой backend
 
----
+Всё живёт в отдельной папке `~/ai-trainer`, файлы других проектов не
+затрагиваются. Файрвол на DE не настраивается: порт 8000 защищён самим
+приложением — WebSocket без валидного одноразового ws-токена закрывается
+сразу (код 4001).
 
-## Шаг 1. Установить Docker на VM
-
-```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl git
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo tee /etc/apt/keyrings/docker.asc > /dev/null
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-sudo usermod -aG docker $USER   # затем перелогиниться (exit + ssh снова)
+```
+~/ai-trainer/
+├── docker-compose.yml   # копия deploy/docker-compose.de.yml
+├── .env                 # DOCKERHUB_USER=<логин Docker Hub>
+└── backend.env          # секреты backend (см. backend/.env.production.example)
 ```
 
-## Шаг 2. Получить код
+`backend.env` — по шаблону [backend/.env.production.example](backend/.env.production.example):
+ключи `LLM_*` и `ELEVENLABS_*`, а `DATABASE_URL`/`REDIS_URL` указывают на
+публичный IP RU-сервера. `JWT_SECRET` совпадает с frontend на RU.
+
+Запуск вручную (обычно не нужен — делает workflow):
 
 ```bash
-git clone <URL-репозитория> ai-salesperson-trainer
-cd ai-salesperson-trainer
+cd ~/ai-trainer && docker compose pull && docker compose up -d
 ```
 
-## Шаг 3. Заполнить переменные окружения
+### RU-сервер — frontend, БД, Caddy
 
-Сгенерируй общий секрет JWT (используется и во фронтенде, и в бэкенде):
+Репозиторий в `~/ai-salesperson-trainer`, стек — [docker-compose.prod.yml](docker-compose.prod.yml).
 
-```bash
-openssl rand -base64 48
-```
+Файлы окружения:
 
-Создай три файла из шаблонов и заполни значения:
+- `.env` (корень) — по [.env.prod.example](.env.prod.example): `DOMAIN`,
+  `ACME_EMAIL`, `POSTGRES_*`, `REDIS_PASSWORD`, `BACKEND_UPSTREAM=<DE_IP>:8000`,
+  `DOCKERHUB_USER`.
+- `frontend/.env` — по [frontend/.env.production.example](frontend/.env.production.example);
+  `REDIS_URL` — с паролем (`redis://:ПАРОЛЬ@redis:6379`).
 
-```bash
-# 1) Переменные compose (домен, email, пароль БД)
-cp .env.prod.example .env
-
-# 2) Next.js
-cp frontend/.env.production.example frontend/.env
-
-# 3) FastAPI
-cp backend/.env.production.example backend/.env
-```
-
-Проверь, что согласованы значения:
+Согласованность значений:
 
 | Значение | Где должно совпадать |
 |---|---|
-| `POSTGRES_PASSWORD` (в `.env`) | пароль внутри `DATABASE_URL` в `frontend/.env` и `backend/.env` |
-| `JWT_SECRET` | одинаковый в `frontend/.env` и `backend/.env` |
-| `DOMAIN` (в `.env`) | тот же домен в `FASTAPI_WS_URL=wss://<domain>` в `frontend/.env` |
+| `POSTGRES_PASSWORD` (`.env` RU) | `DATABASE_URL` в `frontend/.env` (RU) и `backend.env` (DE) |
+| `REDIS_PASSWORD` (`.env` RU) | `REDIS_URL` в `frontend/.env` (RU) и `backend.env` (DE) |
+| `JWT_SECRET` | одинаковый в `frontend/.env` (RU) и `backend.env` (DE) |
+| `DOMAIN` (`.env` RU) | `FASTAPI_WS_URL=wss://<domain>` в `frontend/.env` |
 
-Заполни в `backend/.env` ключи `LLM_API_KEY`, `ELEVENLABS_API_KEY`
-и `ELEVENLABS_VOICE_ID`.
+#### Файрвол: Postgres/Redis только для DE
 
-## Шаг 4. Запустить
-
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-Что произойдёт:
-- поднимутся PostgreSQL и Redis (данные в именованных volume);
-- фронтенд при старте применит миграции Prisma (`prisma migrate deploy`);
-- Caddy автоматически получит TLS-сертификат для `DOMAIN` и включит HTTPS/WSS.
-
-Проверить статус и логи:
+Порты 5432/6379 опубликованы наружу (нужны DE-backend), поэтому доступ
+ограничен на уровне iptables (цепочка `DOCKER-USER` — обычный ufw
+Docker обходит):
 
 ```bash
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs -f caddy      # выдача сертификата
-docker compose -f docker-compose.prod.yml logs -f frontend   # миграции/сервер
+# правила добавляет скрипт (идемпотентно):
+/usr/local/sbin/docker-user-firewall.sh
+# автозапуск после ребута/рестарта Docker:
+systemctl status docker-user-firewall.service
 ```
 
-## Шаг 5. Создать пользователя для тестировщика
-
-```bash
-docker compose -f docker-compose.prod.yml exec frontend npx ts-node create-user.ts
-```
-
-Скрипт спросит email, пароль и имя.
-
-## Шаг 6. Проверить
-
-Открой `https://<domain>`, войди созданными данными, нажми «Начать разговор»,
-разреши доступ к микрофону и проговори фразу. Должен прийти голосовой ответ.
+Скрипт дропает входящие на 5432/6379 с любых адресов, кроме IP DE-сервера.
+Трафик внутри compose-сети (frontend → postgres) не затрагивается.
 
 ---
 
-## Обновление после изменений в коде
+## Проверка после деплоя
 
-**Backend** — на сервере:
+1. Workflow в GitHub Actions зелёный (вкладка Actions).
+2. https://5.129.206.63.nip.io открывается, логин работает.
+3. «Начать разговор» → доступ к микрофону → фраза → голосовой ответ.
+4. Логи backend на DE: `cd ~/ai-trainer && docker compose logs -f backend`
+   (подключение к RU postgres/redis, тайминги STT/LLM/TTS).
 
-```bash
-git pull
-docker compose -f docker-compose.prod.yml up -d --build backend
-```
+## Создать пользователя для тестировщика
 
-**Frontend** — на Timeweb VPS `npm ci` часто падает по таймауту. Надёжнее
-собрать образ локально (или в CI) и доставить через Docker Hub — см. раздел
-«Обновление» в [README.md](./README.md#обновление-после-изменений-в-коде).
-
-Попытка полной пересборки на сервере (может не сработать из‑за сети):
+На RU-сервере:
 
 ```bash
-git pull
-docker compose -f docker-compose.prod.yml up -d --build
+cd ~/ai-salesperson-trainer
+docker compose -f docker-compose.prod.yml exec frontend npx ts-node create-user.ts
 ```
 
 ## Полезные команды
 
 ```bash
-# перезапустить только бэкенд
-docker compose -f docker-compose.prod.yml restart backend
+# RU: статус и логи
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f caddy
+docker compose -f docker-compose.prod.yml logs -f frontend
 
-# остановить всё (данные сохраняются)
+# DE: статус и логи backend
+cd ~/ai-trainer && docker compose ps && docker compose logs -f backend
+
+# RU: остановить всё (данные сохраняются)
 docker compose -f docker-compose.prod.yml down
-
-# остановить и удалить данные БД (осторожно!)
-docker compose -f docker-compose.prod.yml down -v
 ```
 
 ---
 
 ## Чек-лист безопасности
 
-- `.env`, `frontend/.env`, `backend/.env` **не** коммитятся (в `.gitignore`).
-- `JWT_SECRET` — длинный случайный, не из примера.
-- `POSTGRES_PASSWORD` — сильный, не из примера.
-- Порт PostgreSQL/Redis наружу **не** публикуется (доступ только внутри
-  compose-сети). Наружу открыт только Caddy (80/443).
-- Куки выставляются с флагом `Secure` в продакшене (работает только по HTTPS).
+- `.env`, `frontend/.env`, `backend.env` **не** коммитятся.
+- `JWT_SECRET`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD` — длинные случайные.
+- 5432/6379 на RU открыты **только** для IP DE-сервера (iptables `DOCKER-USER`).
+- Порт 8000 на DE открыт, но WebSocket требует одноразовый ws-токен;
+  `/health` не раскрывает данных.
+- Куки выставляются с флагом `Secure` (только HTTPS).

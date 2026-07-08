@@ -1,0 +1,82 @@
+# CI/CD: push в main → сборка образов → автодеплой на оба сервера.
+#
+# Секреты репозитория (Settings → Secrets and variables → Actions):
+#   DOCKERHUB_USERNAME, DOCKERHUB_TOKEN — доступ к Docker Hub
+#   RU_HOST, RU_SSH_PASSWORD          — RU-сервер (frontend + БД + Caddy)
+#   DE_HOST, DE_SSH_PASSWORD          — DE-сервер (голосовой backend)
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    name: Build & push images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ai-trainer-frontend:latest
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/ai-trainer-backend:latest
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+  deploy-de:
+    name: Deploy backend (DE)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Pull & restart backend
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DE_HOST }}
+          username: root
+          password: ${{ secrets.DE_SSH_PASSWORD }}
+          script_stop: true
+          script: |
+            cd ~/ai-trainer
+            docker compose pull
+            docker compose up -d
+            docker image prune -f
+
+  deploy-ru:
+    name: Deploy frontend (RU)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Pull & restart stack
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.RU_HOST }}
+          username: root
+          password: ${{ secrets.RU_SSH_PASSWORD }}
+          script_stop: true
+          script: |
+            cd ~/ai-salesperson-trainer
+            git pull
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+            docker image prune -f

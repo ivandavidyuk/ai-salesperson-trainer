@@ -1,15 +1,17 @@
 # Caddy: реверс-прокси с автоматическим HTTPS (Let's Encrypt).
-# Домен и email берутся из переменных окружения (см. docker-compose.prod.yml).
+# Домен, email и адрес голосового backend берутся из переменных окружения
+# (см. docker-compose.prod.yml и корневой .env).
 
 {
 	email {$ACME_EMAIL}
 }
 
 {$DOMAIN} {
-	# WebSocket голосовой сессии → FastAPI. Путь сохраняется как есть
-	# (/ws/session/{id}), апгрейд соединения Caddy проксирует автоматически.
+	# WebSocket голосовой сессии → FastAPI на зарубежном VPS.
+	# Путь сохраняется как есть (/ws/session/{id}), апгрейд соединения
+	# Caddy проксирует автоматически.
 	@ws path /ws/*
-	reverse_proxy @ws backend:8000
+	reverse_proxy @ws {$BACKEND_UPSTREAM}
 
 	# Всё остальное (интерфейс + REST API) → Next.js
 	reverse_proxy frontend:3000

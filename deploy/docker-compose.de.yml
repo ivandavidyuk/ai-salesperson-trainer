@@ -1,0 +1,20 @@
+# Голосовой backend на зарубежном VPS (Германия).
+# Только один контейнер — FastAPI WebSocket (STT → LLM → TTS).
+# ElevenLabs и OpenRouter доступны отсюда напрямую (недоступны с RU IP).
+#
+# Развёртывание на сервере (папка ~/ai-trainer):
+#   ~/ai-trainer/docker-compose.yml  — этот файл
+#   ~/ai-trainer/backend.env         — секреты (LLM_*, ELEVENLABS_*, DATABASE_URL,
+#                                      REDIS_URL — указывают на RU-сервер, JWT_SECRET)
+#   docker compose pull && docker compose up -d
+#
+# Порт 8000 открыт наружу: RU-Caddy проксирует сюда /ws.
+# Доступ защищён одноразовым ws-токеном (без него соединение закрывается).
+
+services:
+  backend:
+    image: ${DOCKERHUB_USER}/ai-trainer-backend:latest
+    restart: unless-stopped
+    env_file: ./backend.env
+    ports:
+      - "8000:8000"

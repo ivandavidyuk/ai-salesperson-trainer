@@ -7,10 +7,11 @@ MVP голосового тренажёра, где менеджер по про
 ai-salesperson-trainer/
 ├── frontend/              # Next.js 14 (App Router): API + интерфейс
 ├── backend/               # Python FastAPI: WebSocket + голосовой пайплайн
-├── deploy/                # Caddyfile для продакшена
+├── deploy/                # Caddyfile + compose DE-сервера (голосовой backend)
 ├── development-stages/    # описания этапов разработки
+├── .github/workflows/     # CI/CD: автодеплой на оба сервера при push в main
 ├── docker-compose.yml     # PostgreSQL + Redis для локальной разработки
-├── docker-compose.prod.yml # полный продакшен-стек (5 контейнеров)
+├── docker-compose.prod.yml # продакшен-стек RU-сервера (Caddy, Next.js, БД)
 └── DEPLOY.md              # подробная инструкция по деплою и обновлению
 ```
 
@@ -213,73 +214,60 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 
 ## Продакшен
 
-Приложение развёрнуто на **VPS Timeweb Cloud** (Ubuntu 22.04, 2 vCPU / 4 ГБ RAM).
+Продакшен разнесён на **два VPS** (подробно — в [DEPLOY.md](./DEPLOY.md)):
 
-> **Внимание: продакшен ещё на старом стеке (Yandex SpeechKit + YandexGPT).**
-> Код в репозитории уже переведён на OpenRouter + ElevenLabs, но API ElevenLabs
-> **недоступен с российских IP** — для деплоя нового стека голосовой backend
-> нужно перенести на зарубежный VPS (например, в Германии), а RU-сервер
-> оставить для frontend/БД с проксированием `/ws` на зарубежный backend.
-> План описан в `.cursor/plans/`, деплой — отдельный этап.
+| Параметр | RU-сервер | DE-сервер |
+|---|---|---|
+| **Роль** | Caddy, Next.js, PostgreSQL, Redis | голосовой FastAPI backend |
+| **IP** | `5.129.206.63` (Timeweb) | `103.7.55.214` |
+| **Путь** | `~/ai-salesperson-trainer` (git-репозиторий) | `~/ai-trainer` (только compose + env) |
 
-| Параметр | Значение |
-|---|---|
-| **URL** | https://5.129.206.63.nip.io |
-| **Публичный IPv4** | `5.129.206.63` |
-| **Домен** | `5.129.206.63.nip.io` (сервис [nip.io](https://nip.io), отдельный домен не нужен) |
-| **HTTPS / WSS** | Caddy + Let's Encrypt (автоматически) |
-| **Репозиторий** | https://github.com/ivandavidyuk/ai-salesperson-trainer |
-| **Путь на сервере** | `~/ai-salesperson-trainer` |
+- **URL:** https://5.129.206.63.nip.io (домен `<IP>.nip.io`, HTTPS/WSS — Caddy + Let's Encrypt)
+- **Репозиторий:** https://github.com/ivandavidyuk/ai-salesperson-trainer
 
-### Стек на сервере
+Голосовой backend вынесен в Германию, потому что API ElevenLabs недоступен
+с российских IP. Caddy на RU проксирует `/ws/*` на DE (порт 8000); backend
+на DE ходит в PostgreSQL/Redis на RU — порты 5432/6379 открыты файрволом
+только для IP DE-сервера.
 
-Пять контейнеров через `docker-compose.prod.yml`:
+### Автодеплой
 
-- **caddy** — единая точка входа (80/443), проксирует `/` → frontend и `/ws` → backend
-- **frontend** — Next.js (REST API + интерфейс, миграции Prisma при старте)
-- **backend** — FastAPI WebSocket (STT → LLM → TTS)
-- **postgres** — PostgreSQL 16 (данные только в volume, наружу не открыт)
-- **redis** — Redis 7 (JWT whitelist, ws-токены)
+Каждый `git push` в `main` запускает GitHub Actions
+([.github/workflows/deploy.yml](.github/workflows/deploy.yml)):
+сборка образов `ai-trainer-frontend`/`ai-trainer-backend` → push в Docker Hub →
+SSH-деплой на оба сервера (`docker compose pull && up -d`). Руками на серверы
+ходить не нужно. Секреты (Docker Hub, SSH) — в Settings → Secrets → Actions.
 
 ### SSH и управление
 
 ```bash
+# RU: frontend, БД, Caddy
 ssh root@5.129.206.63
 cd ~/ai-salesperson-trainer
-
-# статус контейнеров
 docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f frontend --tail 50
 
-# логи (frontend / backend / caddy)
-docker compose -f docker-compose.prod.yml logs -f backend --tail 50
-
-# перезапуск сервиса
-docker compose -f docker-compose.prod.yml restart frontend
+# DE: голосовой backend
+ssh root@103.7.55.214
+cd ~/ai-trainer
+docker compose ps
+docker compose logs -f backend --tail 50
 ```
 
-### Переменные окружения на сервере
+### Переменные окружения
 
-Три файла (не в git, создаются из `*.example`):
+| Файл | Где | Назначение |
+|---|---|---|
+| `./.env` | RU | `DOMAIN`, `ACME_EMAIL`, `POSTGRES_*`, `REDIS_PASSWORD`, `BACKEND_UPSTREAM`, `DOCKERHUB_USER` |
+| `frontend/.env` | RU | `DATABASE_URL`, `REDIS_URL` (с паролем), `JWT_SECRET`, `FASTAPI_WS_URL` |
+| `~/ai-trainer/backend.env` | DE | `LLM_*` (OpenRouter), `ELEVENLABS_*`, `DATABASE_URL`/`REDIS_URL` (на RU IP), `JWT_SECRET` |
 
-| Файл | Назначение |
-|---|---|
-| `./.env` | `DOMAIN`, `ACME_EMAIL`, `POSTGRES_*` |
-| `frontend/.env` | `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `FASTAPI_WS_URL` |
-| `backend/.env` | `LLM_*` (OpenRouter), `ELEVENLABS_*`, `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET` |
-
-Критично, чтобы совпадали:
-
-```env
-# корневой .env
-DOMAIN=5.129.206.63.nip.io
-
-# frontend/.env
-FASTAPI_WS_URL=wss://5.129.206.63.nip.io
-```
-
-`JWT_SECRET` и пароль PostgreSQL — одинаковые в `frontend/.env` и `backend/.env`.
+`JWT_SECRET`, `POSTGRES_PASSWORD` и `REDIS_PASSWORD` должны совпадать между
+серверами (см. таблицу согласованности в [DEPLOY.md](./DEPLOY.md)).
 
 ### Создание пользователей для тестировщиков
+
+На RU-сервере:
 
 ```bash
 docker compose -f docker-compose.prod.yml exec frontend npx ts-node create-user.ts
@@ -289,33 +277,9 @@ docker compose -f docker-compose.prod.yml exec frontend npx ts-node create-user.
 
 ### Обновление после изменений в коде
 
-На VPS **сборка frontend через `npm ci` ненадёжна** (медленная сеть, таймауты, неполная
-установка пакетов). Backend обычно собирается на сервере нормально.
-
-**Backend** (на сервере):
-
-```bash
-git pull
-docker compose -f docker-compose.prod.yml up -d --build backend
-```
-
-**Frontend** (рекомендуется — сборка локально или в CI, доставка через Docker Hub):
-
-```powershell
-# на Windows (Docker Desktop)
-cd frontend
-docker build -t ai-salesperson-trainer-frontend:latest .
-docker tag ai-salesperson-trainer-frontend:latest <DOCKERHUB_USER>/ai-trainer-frontend:latest
-docker push <DOCKERHUB_USER>/ai-trainer-frontend:latest
-```
-
-```bash
-# на сервере
-docker pull <DOCKERHUB_USER>/ai-trainer-frontend:latest
-docker tag <DOCKERHUB_USER>/ai-trainer-frontend:latest ai-salesperson-trainer-frontend:latest
-cd ~/ai-salesperson-trainer
-docker compose -f docker-compose.prod.yml up -d --no-build
-```
+Просто `git push` в `main` — GitHub Actions соберёт образы и обновит оба
+сервера. Ручной вариант (если Actions недоступен): собрать образы локально,
+запушить в Docker Hub и выполнить `docker compose pull && up -d` на серверах.
 
 Подробнее — в [DEPLOY.md](./DEPLOY.md).
 
@@ -390,6 +354,7 @@ docker compose down -v
 | 3 | FastAPI WebSocket и голосовой пайплайн (`backend/`) | готово |
 | 4 | Голос в браузере: микрофон + воспроизведение (`voiceClient.ts`) | готово |
 | 5 | Продакшен-деплой на Timeweb Cloud | готово |
+| 6 | Миграция на OpenRouter + ElevenLabs, два сервера (RU+DE), CI/CD | готово |
 
 Подробные описания этапов 1–4 — в папке `development-stages/`.
 Инструкция по деплою и обновлению — в [DEPLOY.md](./DEPLOY.md).
