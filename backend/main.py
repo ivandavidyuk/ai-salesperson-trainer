@@ -34,6 +34,37 @@ logger = logging.getLogger("ws-server")
 # Единое хранилище состояния сессий (Redis + PostgreSQL)
 store = SessionStore()
 
+# Знаки конца предложения для нарезки LLM-стрима под TTS
+_SENTENCE_ENDINGS = ".!?…"
+
+# Минимальная длина предложения (симв.): слишком короткие обрывки
+# («Ну.») склеиваем со следующим предложением, чтобы TTS не звучал рвано
+_MIN_SENTENCE_LEN = 20
+
+
+def split_first_sentence(text: str) -> tuple[str | None, str]:
+    """Отрезает первое законченное предложение от буфера LLM-стрима.
+
+    Возвращает (предложение, остаток). Если законченного предложения
+    достаточной длины ещё нет — (None, исходный текст).
+    """
+    for i, ch in enumerate(text):
+        if ch not in _SENTENCE_ENDINGS:
+            continue
+        # Захватываем повторяющуюся пунктуацию («?!», «...») целиком
+        end = i + 1
+        while end < len(text) and text[end] in _SENTENCE_ENDINGS:
+            end += 1
+        # Многоточие в середине числа/сокращения не режем: требуем после
+        # пунктуации пробел или конец буфера
+        if end < len(text) and not text[end].isspace():
+            continue
+        sentence = text[:end].strip()
+        if len(sentence) < _MIN_SENTENCE_LEN:
+            continue
+        return sentence, text[end:]
+    return None, text
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -109,7 +140,10 @@ async def session_ws(ws: WebSocket, session_id: str):
         "Сессия %s: подключение установлено (user=%s)", session_id, user_id
     )
 
-    # 3. Колбэк, запускающий цепочку LLM -> TTS при финальном STT-результате
+    # 3. Колбэк, запускающий конвейер LLM -> TTS при финальном STT-результате.
+    # LLM стримит токены; готовые предложения сразу уходят в TTS-stream
+    # и к клиенту (каждое предложение — отдельный audio_end), поэтому
+    # первое предложение звучит, пока LLM догенерирует остальное.
     async def handle_user_text(text: str) -> None:
         try:
             t_start = time.perf_counter()
@@ -117,35 +151,71 @@ async def session_ws(ws: WebSocket, session_id: str):
             await safe_send(ws, {"type": "transcript_user", "text": text})
             await store.append_message(session_id, "user", text)
 
-            # LLM: ответ клиента
             history = await store.get_messages(session_id)
-            t_llm = time.perf_counter()
-            reply = await llm.generate_reply(history)
-            llm_ms = (time.perf_counter() - t_llm) * 1000
-            await safe_send(ws, {"type": "transcript_ai", "text": reply})
-            await store.append_message(session_id, "assistant", reply)
 
-            # TTS: озвучка ответа, отправляем чанками
-            t_tts = time.perf_counter()
-            audio = await tts.synthesize(reply)
-            tts_ms = (time.perf_counter() - t_tts) * 1000
-            for chunk in tts.chunk_audio(audio):
-                await safe_send(
-                    ws,
-                    {
-                        "type": "audio_chunk",
-                        "data": base64.b64encode(chunk).decode("ascii"),
-                    },
-                )
-            # Маркер конца аудио: клиент собирает MP3 целиком и проигрывает
-            await safe_send(ws, {"type": "audio_end"})
+            # Очередь предложений между LLM (producer) и TTS (consumer);
+            # None — маркер конца стрима
+            sentences: asyncio.Queue[str | None] = asyncio.Queue()
+
+            async def produce_sentences() -> str:
+                """Читает LLM-стрим, кладёт предложения в очередь, возвращает весь ответ."""
+                buffer = ""
+                full_reply = ""
+                try:
+                    async for delta in llm.stream_reply(history):
+                        buffer += delta
+                        full_reply += delta
+                        # Вырезаем из буфера готовые предложения
+                        while True:
+                            sentence, rest = split_first_sentence(buffer)
+                            if sentence is None:
+                                break
+                            buffer = rest
+                            await sentences.put(sentence)
+                    # Остаток без завершающей пунктуации тоже озвучиваем
+                    tail = buffer.strip()
+                    if tail:
+                        await sentences.put(tail)
+                finally:
+                    await sentences.put(None)
+                return full_reply.strip()
+
+            first_audio_ms: float | None = None
+
+            async def consume_sentences() -> None:
+                """Синтезирует предложения по очереди и стримит аудио клиенту."""
+                nonlocal first_audio_ms
+                while True:
+                    sentence = await sentences.get()
+                    if sentence is None:
+                        break
+                    async for chunk in tts.synthesize_stream(sentence):
+                        if first_audio_ms is None:
+                            first_audio_ms = (time.perf_counter() - t_start) * 1000
+                        await safe_send(
+                            ws,
+                            {
+                                "type": "audio_chunk",
+                                "data": base64.b64encode(chunk).decode("ascii"),
+                            },
+                        )
+                    # Маркер конца предложения: клиент собирает MP3 и ставит
+                    # его в очередь воспроизведения
+                    await safe_send(ws, {"type": "audio_end"})
+
+            producer = asyncio.create_task(produce_sentences())
+            await consume_sentences()
+            reply = await producer
+
+            await safe_send(ws, {"type": "transcript_ai", "text": reply})
+            # Запись в Postgres не блокирует пайплайн
+            asyncio.create_task(store.append_message(session_id, "assistant", reply))
+
             total_ms = (time.perf_counter() - t_start) * 1000
-            # Разбивка задержки по этапам: видно, что именно тормозит
             logger.info(
-                "ТАЙМИНГ сессия %s: LLM=%.0f мс, TTS=%.0f мс, всего(после STT)=%.0f мс",
+                "ТАЙМИНГ сессия %s: до первого аудио=%.0f мс, всего(после STT)=%.0f мс",
                 session_id,
-                llm_ms,
-                tts_ms,
+                first_audio_ms if first_audio_ms is not None else -1,
                 total_ms,
             )
         except Exception as exc:  # noqa: BLE001

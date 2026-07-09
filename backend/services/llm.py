@@ -1,16 +1,24 @@
 """LLM — генерация ответа клиента через OpenRouter (OpenAI-совместимый API).
 
 Получает историю диалога, добавляет системный промпт (роль клиента —
-Тамара Михайловна) и возвращает текстовый ответ.
+Тамара Михайловна) и возвращает текстовый ответ. Основной путь —
+stream_reply: SSE-стриминг токенов, чтобы TTS мог начать синтез
+первого предложения до окончания генерации.
 """
 
+import json
 import logging
+from typing import AsyncIterator
 
 import httpx
 
 from core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Общий HTTP-клиент на модуль: переиспользует TCP/TLS-соединения между
+# запросами (экономит ~50-100 мс на рукопожатии для каждой реплики)
+_client = httpx.AsyncClient(timeout=30)
 
 # Системный промпт — роль клиента (захардкожен согласно ТЗ этапа 3)
 SYSTEM_PROMPT = (
@@ -93,12 +101,8 @@ SYSTEM_PROMPT = (
 )
 
 
-async def generate_reply(history: list[dict]) -> str:
-    """Генерирует ответ клиента на основе истории диалога.
-
-    history — список сообщений вида {"role": "user"|"assistant", "text": ...}
-    в хронологическом порядке.
-    """
+def _build_request(history: list[dict], stream: bool) -> tuple[str, dict, dict]:
+    """Собирает URL, payload и заголовки запроса Chat Completions."""
     settings = get_settings()
     if not settings.llm_api_key:
         raise RuntimeError("Не задан LLM_API_KEY для LLM")
@@ -112,15 +116,60 @@ async def generate_reply(history: list[dict]) -> str:
         "model": settings.llm_model,
         "messages": messages,
         "temperature": 0.6,
-        "max_tokens": 300,
+        # Промпт требует ответы в 1-3 предложения — 150 токенов достаточно,
+        # а генерация завершается быстрее
+        "max_tokens": 150,
+        "stream": stream,
     }
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
     url = f"{settings.llm_base_url}/chat/completions"
+    return url, payload, headers
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(url, json=payload, headers=headers)
+
+async def stream_reply(history: list[dict]) -> AsyncIterator[str]:
+    """Стримит ответ клиента по мере генерации (дельты текста).
+
+    history — список сообщений вида {"role": "user"|"assistant", "text": ...}
+    в хронологическом порядке.
+    """
+    url, payload, headers = _build_request(history, stream=True)
+
+    total_chars = 0
+    async with _client.stream("POST", url, json=payload, headers=headers) as response:
         response.raise_for_status()
-        data = response.json()
+        # SSE-формат: строки "data: {json}", финальный маркер "data: [DONE]"
+        async for line in response.aiter_lines():
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if not data or data == "[DONE]":
+                continue
+            try:
+                chunk = json.loads(data)
+            except ValueError:
+                continue
+            choices = chunk.get("choices") or []
+            if not choices:
+                continue
+            delta = (choices[0].get("delta") or {}).get("content")
+            if delta:
+                total_chars += len(delta)
+                yield delta
+
+    logger.info("LLM ответил (%d симв., стрим)", total_chars)
+
+
+async def generate_reply(history: list[dict]) -> str:
+    """Генерирует ответ клиента целиком (нестриминговый вариант).
+
+    history — список сообщений вида {"role": "user"|"assistant", "text": ...}
+    в хронологическом порядке.
+    """
+    url, payload, headers = _build_request(history, stream=False)
+
+    response = await _client.post(url, json=payload, headers=headers)
+    response.raise_for_status()
+    data = response.json()
 
     # Извлекаем текст ответа (формат OpenAI Chat Completions)
     text = data["choices"][0]["message"]["content"].strip()
