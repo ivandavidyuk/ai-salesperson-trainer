@@ -1,15 +1,18 @@
-# Голосовой backend на зарубежном VPS (Германия).
-# Только один контейнер — FastAPI WebSocket (STT → LLM → TTS).
+# Голосовой backend на зарубежном VPS (Германия) + Redis.
 # ElevenLabs и OpenRouter доступны отсюда напрямую (недоступны с RU IP).
+# Redis живёт рядом с backend: обращения к нему — на каждый аудио-чанк,
+# поэтому межстрановая задержка до RU недопустима.
 #
 # Развёртывание на сервере (папка ~/ai-trainer):
 #   ~/ai-trainer/docker-compose.yml  — этот файл
-#   ~/ai-trainer/backend.env         — секреты (LLM_*, ELEVENLABS_*, DATABASE_URL,
-#                                      REDIS_URL — указывают на RU-сервер, JWT_SECRET)
+#   ~/ai-trainer/.env                — DOCKERHUB_USER, REDIS_PASSWORD
+#   ~/ai-trainer/backend.env         — секреты (LLM_*, ELEVENLABS_*,
+#                                      DATABASE_URL — на RU, REDIS_URL — локальный,
+#                                      JWT_SECRET)
 #   docker compose pull && docker compose up -d
 #
-# Порт 8000 открыт наружу: RU-Caddy проксирует сюда /ws.
-# Доступ защищён одноразовым ws-токеном (без него соединение закрывается).
+# Порт 8000 открыт наружу: RU-Caddy проксирует сюда /ws (защита — ws-токен).
+# Порт 6379 открыт наружу: нужен Next.js на RU (защита — requirepass).
 
 services:
   backend:
@@ -18,3 +21,27 @@ services:
     env_file: ./backend.env
     ports:
       - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Redis — whitelist JWT-токенов, одноразовые ws-токены, состояние сессий.
+  # Первичное хранилище (PostgreSQL) остаётся на RU-сервере, здесь — кэш.
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a $${REDIS_PASSWORD:-} ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+volumes:
+  redis-data:

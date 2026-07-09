@@ -1,16 +1,17 @@
-# Продакшен-стек RU-сервера (Timeweb): Caddy + Next.js + PostgreSQL + Redis.
-# Голосовой backend работает на отдельном зарубежном VPS
-# (см. deploy/docker-compose.de.yml) — Caddy проксирует /ws туда.
+# Продакшен-стек RU-сервера (Timeweb): Caddy + Next.js + PostgreSQL.
+# Голосовой backend и Redis работают на отдельном зарубежном VPS
+# (см. deploy/docker-compose.de.yml) — Caddy проксирует /ws туда,
+# frontend ходит в Redis на DE (REDIS_URL в frontend/.env).
 #
 # Запуск:
 #   docker compose -f docker-compose.prod.yml up -d
 #
 # Требуются файлы окружения:
-#   ./.env          — DOMAIN, ACME_EMAIL, POSTGRES_*, REDIS_PASSWORD,
+#   ./.env          — DOMAIN, ACME_EMAIL, POSTGRES_*,
 #                     BACKEND_UPSTREAM, DOCKERHUB_USER
 #   ./frontend/.env — переменные Next.js
 #
-# Порты 5432/6379 опубликованы для backend на зарубежном VPS.
+# Порт 5432 опубликован для backend на зарубежном VPS.
 # ОБЯЗАТЕЛЬНО ограничить доступ файрволом (только IP backend-сервера).
 
 services:
@@ -32,34 +33,15 @@ services:
       timeout: 5s
       retries: 10
 
-  # Redis — whitelist JWT-токенов, одноразовые ws-токены, состояние сессий.
-  # Порт публичный (нужен backend на DE) — пароль обязателен.
-  redis:
-    image: redis:7
-    restart: unless-stopped
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a $${REDIS_PASSWORD:-} ping | grep PONG"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-
   # Next.js: REST API + интерфейс. При старте применяет миграции Prisma.
   # Образ собирается в GitHub Actions и публикуется в Docker Hub.
+  # Redis — на DE-сервере (REDIS_URL в frontend/.env).
   frontend:
     image: ${DOCKERHUB_USER}/ai-trainer-frontend:latest
     restart: unless-stopped
     env_file: ./frontend/.env
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
 
   # Caddy: единая точка входа, авто-HTTPS.
@@ -83,6 +65,5 @@ services:
 
 volumes:
   postgres-data:
-  redis-data:
   caddy-data:
   caddy-config:

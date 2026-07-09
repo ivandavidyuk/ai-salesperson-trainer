@@ -153,32 +153,48 @@ class SessionStore:
         raw = await self._redis.lrange(_messages_key(session_id), 0, -1)
         return [json.loads(item) for item in raw]
 
-    async def append_message(
+    async def append_message_cache(
         self, session_id: str, role: str, text: str
     ) -> None:
-        """Добавляет сообщение в историю Redis и сохраняет его в PostgreSQL.
+        """Добавляет сообщение в контекст LLM (Redis-кэш).
 
         role: "user" (менеджер) | "assistant" (клиент-ИИ).
+        Redis локален для backend — вызов дешёвый, можно ждать синхронно.
         """
-        assert self._redis is not None and self._pool is not None
-
-        # 1. Контекст для LLM — в Redis
+        assert self._redis is not None
         await self._redis.rpush(
             _messages_key(session_id),
             json.dumps({"role": role, "text": text}, ensure_ascii=False),
         )
 
-        # 2. Постоянное хранение — в PostgreSQL.
+    async def persist_message(
+        self, session_id: str, role: str, text: str
+    ) -> None:
+        """Сохраняет сообщение в PostgreSQL (первичное хранилище, RU-сервер).
+
+        Вызывается фоновой задачей: межстрановая задержка до Postgres
+        не должна блокировать голосовой конвейер.
+        """
+        assert self._pool is not None
         # id в таблице не имеет дефолта в БД (Prisma генерирует его на уровне
         # клиента), поэтому формируем UUID сами.
-        await self._pool.execute(
-            'INSERT INTO "Message" ("id", "sessionId", "role", "text", "createdAt") '
-            'VALUES ($1, $2, $3::"MessageRole", $4, NOW())',
-            str(uuid.uuid4()),
-            session_id,
-            role,
-            text,
-        )
+        try:
+            await self._pool.execute(
+                'INSERT INTO "Message" ("id", "sessionId", "role", "text", "createdAt") '
+                'VALUES ($1, $2, $3::"MessageRole", $4, NOW())',
+                str(uuid.uuid4()),
+                session_id,
+                role,
+                text,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Фоновая задача: ошибку логируем, конвейер не трогаем
+            logger.error(
+                "Не удалось сохранить сообщение в PostgreSQL (сессия %s): %s",
+                session_id,
+                exc,
+            )
+
 
     # --- Очистка ---------------------------------------------------------
 

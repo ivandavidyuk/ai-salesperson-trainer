@@ -1,6 +1,8 @@
 // Клиентские утилиты для голосового звонка (работают только в браузере):
 //   MicRecorder — захват микрофона и потоковая отправка PCM 16 кГц mono;
-//   AudioPlayer — сборка MP3-ответа из чанков и последовательное воспроизведение.
+//   AudioPlayer — стриминговое воспроизведение MP3-ответа через MediaSource
+//                 (звук с первого чанка); фолбэк — сборка Blob по предложениям
+//                 для браузеров без MSE (iOS Safari).
 
 // Кодирует ArrayBuffer в base64 (порциями, чтобы не переполнить стек).
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -113,21 +115,57 @@ export class MicRecorder {
 
 // --- Воспроизведение ответа ------------------------------------------------
 
+// Поддерживается ли стриминговое воспроизведение MP3 через MediaSource.
+// iOS Safari не поддерживает MSE — там работает фолбэк на Blob-очередь.
+function mseSupported(): boolean {
+  return (
+    typeof MediaSource !== "undefined" &&
+    typeof MediaSource.isTypeSupported === "function" &&
+    MediaSource.isTypeSupported("audio/mpeg")
+  );
+}
+
 export class AudioPlayer {
-  // Накопитель чанков текущего (ещё не завершённого) ответа
+  // --- Основной путь: MediaSource (звук с первого чанка) ---
+  private useMse: boolean;
+  private audio: HTMLAudioElement | null = null;
+  private mediaSource: MediaSource | null = null;
+  private objectUrl: string | null = null;
+  private sourceBuffer: SourceBuffer | null = null;
+  // Чанки, ожидающие appendBuffer (он асинхронный — аппендим по одному)
+  private appendQueue: Uint8Array[] = [];
+  private destroyed = false;
+
+  // --- Фолбэк: сборка Blob по предложениям ---
   private pending: Uint8Array[] = [];
-  // Очередь готовых к проигрыванию аудио-ответов
   private queue: Blob[] = [];
   private playing = false;
   private current: HTMLAudioElement | null = null;
 
-  // Добавляет очередной аудио-чанк текущего ответа
-  pushChunk(base64: string): void {
-    this.pending.push(base64ToBytes(base64));
+  constructor() {
+    this.useMse = mseSupported();
+    if (this.useMse) {
+      this._initMse();
+    }
   }
 
-  // Ответ завершён: собираем MP3 целиком и ставим в очередь воспроизведения
+  // Добавляет очередной аудио-чанк текущего ответа
+  pushChunk(base64: string): void {
+    const bytes = base64ToBytes(base64);
+    if (this.useMse) {
+      this.appendQueue.push(bytes);
+      this._appendNext();
+      this._ensurePlaying();
+    } else {
+      this.pending.push(bytes);
+    }
+  }
+
+  // Маркер конца предложения/ответа.
+  // MSE: не нужен — поток непрерывный, звук уже играет с первого чанка.
+  // Фолбэк: собираем накопленный MP3 и ставим в очередь воспроизведения.
   endUtterance(): void {
+    if (this.useMse) return;
     if (this.pending.length === 0) return;
     const parts = this.pending.map((u) => u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength) as ArrayBuffer);
     const blob = new Blob(parts, { type: "audio/mpeg" });
@@ -138,7 +176,100 @@ export class AudioPlayer {
     }
   }
 
-  // Проигрывает следующий ответ из очереди
+  // Останавливает воспроизведение и освобождает ресурсы (терминально)
+  reset(): void {
+    this.destroyed = true;
+    // MSE-путь
+    this.appendQueue = [];
+    if (this.audio) {
+      this.audio.pause();
+      this.audio.src = "";
+      this.audio = null;
+    }
+    if (this.objectUrl) {
+      URL.revokeObjectURL(this.objectUrl);
+      this.objectUrl = null;
+    }
+    this.sourceBuffer = null;
+    this.mediaSource = null;
+    // Фолбэк
+    this.pending = [];
+    this.queue = [];
+    this.playing = false;
+    if (this.current) {
+      this.current.pause();
+      this.current.onended = null;
+      this.current.onerror = null;
+      this.current = null;
+    }
+  }
+
+  // --- Внутренности MSE-пути ---
+
+  private _initMse(): void {
+    this.mediaSource = new MediaSource();
+    this.objectUrl = URL.createObjectURL(this.mediaSource);
+    this.audio = new Audio(this.objectUrl);
+
+    this.mediaSource.addEventListener("sourceopen", () => {
+      if (this.destroyed || !this.mediaSource) return;
+      const sb = this.mediaSource.addSourceBuffer("audio/mpeg");
+      // sequence: сегменты идут подряд по мере добавления — таймстемпы
+      // MP3-фреймов из разных TTS-ответов не важны, пауз между ответами
+      // в буфере нет (элемент просто ждёт новых данных)
+      sb.mode = "sequence";
+      sb.addEventListener("updateend", () => {
+        this._cleanupPlayed();
+        this._appendNext();
+      });
+      this.sourceBuffer = sb;
+      this._appendNext();
+    });
+  }
+
+  // Аппендит следующий чанк, когда SourceBuffer свободен
+  private _appendNext(): void {
+    const sb = this.sourceBuffer;
+    if (this.destroyed || !sb || sb.updating) return;
+    const chunk = this.appendQueue.shift();
+    if (!chunk) return;
+    try {
+      sb.appendBuffer(chunk as BufferSource);
+    } catch {
+      // QuotaExceededError и подобное: вернём чанк и попробуем после чистки
+      this.appendQueue.unshift(chunk);
+      this._cleanupPlayed();
+    }
+  }
+
+  // Удаляет уже отыгранные диапазоны, чтобы буфер не рос бесконечно
+  private _cleanupPlayed(): void {
+    const sb = this.sourceBuffer;
+    const audio = this.audio;
+    if (!sb || !audio || sb.updating || sb.buffered.length === 0) return;
+    const start = sb.buffered.start(0);
+    // Держим последние 30 секунд до текущей позиции
+    const cutoff = audio.currentTime - 30;
+    if (cutoff > start) {
+      try {
+        sb.remove(start, cutoff);
+      } catch {
+        // не критично — почистим в следующий раз
+      }
+    }
+  }
+
+  // Запускает воспроизведение, если оно ещё не идёт
+  private _ensurePlaying(): void {
+    const audio = this.audio;
+    if (!audio || !audio.paused) return;
+    audio.play().catch(() => {
+      // автоплей заблокирован — звук пойдёт после жеста пользователя
+    });
+  }
+
+  // --- Внутренности фолбэка (Blob-очередь) ---
+
   private async _playNext(): Promise<void> {
     const blob = this.queue.shift();
     if (!blob) {
@@ -163,19 +294,6 @@ export class AudioPlayer {
     } catch {
       // автоплей мог быть заблокирован — переходим к следующему
       cleanup();
-    }
-  }
-
-  // Останавливает воспроизведение и очищает всё накопленное
-  reset(): void {
-    this.pending = [];
-    this.queue = [];
-    this.playing = false;
-    if (this.current) {
-      this.current.pause();
-      this.current.onended = null;
-      this.current.onerror = null;
-      this.current = null;
     }
   }
 }

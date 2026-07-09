@@ -149,7 +149,11 @@ async def session_ws(ws: WebSocket, session_id: str):
             t_start = time.perf_counter()
             # Распознанная реплика менеджера
             await safe_send(ws, {"type": "transcript_user", "text": text})
-            await store.append_message(session_id, "user", text)
+            # Первичная запись — PostgreSQL (RU): стартует сразу, но фоном,
+            # чтобы межстрановая задержка не тормозила LLM
+            asyncio.create_task(store.persist_message(session_id, "user", text))
+            # Контекст для LLM — локальный Redis-кэш (~1 мс)
+            await store.append_message_cache(session_id, "user", text)
 
             history = await store.get_messages(session_id)
 
@@ -208,8 +212,11 @@ async def session_ws(ws: WebSocket, session_id: str):
             reply = await producer
 
             await safe_send(ws, {"type": "transcript_ai", "text": reply})
-            # Запись в Postgres не блокирует пайплайн
-            asyncio.create_task(store.append_message(session_id, "assistant", reply))
+            # Кэш — синхронно (дёшево), Postgres — фоном
+            await store.append_message_cache(session_id, "assistant", reply)
+            asyncio.create_task(
+                store.persist_message(session_id, "assistant", reply)
+            )
 
             total_ms = (time.perf_counter() - t_start) * 1000
             logger.info(
