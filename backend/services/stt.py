@@ -4,14 +4,27 @@
 Speech-to-Text Realtime и при получении зафиксированного результата
 (committed_transcript) вызывает переданный колбэк on_final(text).
 
-Конец фразы определяет VAD на стороне ElevenLabs (commit_strategy=vad):
-после паузы EOU_SILENCE_SECS сервис сам фиксирует транскрипт.
+Конец фразы определяется двумя механизмами:
+1. Семантический коммит (быстрый путь): если partial-транскрипт
+   заканчивается завершающей пунктуацией и во входящем аудио наступила
+   короткая тишина — отправляем принудительный commit, не дожидаясь VAD.
+   Для вопросов порог тишины меньше: «...верно?» — явный конец реплики.
+2. VAD на стороне ElevenLabs (фолбэк): после паузы EOU_SILENCE_SECS
+   сервис сам фиксирует транскрипт (когда пунктуации нет или тихо).
+
+Важно: коммитить только по пунктуации нельзя — partial «что вас
+беспокоит?» может прийти, пока менеджер договаривает «...со зрением?»
+(проверено на записи). Поэтому семантический коммит требует и тишины,
+которую детектируем по RMS-энергии входящих чанков.
 """
 
 import asyncio
 import base64
 import json
 import logging
+import math
+import time
+from array import array
 from typing import Awaitable, Callable, Optional
 from urllib.parse import urlencode
 
@@ -27,9 +40,37 @@ STT_ENDPOINT = "wss://api.elevenlabs.io/v1/speech-to-text/realtime"
 # Частота дискретизации входного аудио (совпадает с записью в браузере)
 SAMPLE_RATE = 16000
 
-# Пауза (сек), после которой VAD считает фразу законченной.
+# Пауза (сек), после которой VAD считает фразу законченной (фолбэк).
 # Меньше значение — быстрее ответ, но выше риск обрезать речь на паузах.
 EOU_SILENCE_SECS = 0.65
+
+# Семантический коммит: сколько тишины нужно после завершающей пунктуации.
+# Вопрос/восклицание — почти наверняка конец реплики, ждём меньше
+SEMANTIC_SILENCE_QUESTION_SECS = 0.25
+# Точка — менеджер мог просто сделать паузу между предложениями
+SEMANTIC_SILENCE_STATEMENT_SECS = 0.40
+
+# Пунктуация, после которой реплика считается семантически завершённой
+_QUESTION_ENDINGS = ("?", "!")
+_STATEMENT_ENDINGS = (".", "…")
+
+# Детекция тишины по энергии: чанк с RMS ниже порога считается тихим.
+# Фиксированный порог: браузер записывает с AGC, речь даёт RMS 1000-5000,
+# фоновый шум — до пары сотен. Если фон громче порога (шумный офис),
+# семантический коммит просто не сработает и фразу зафиксирует VAD-фолбэк.
+_MIN_VOICE_RMS = 500.0
+
+
+def _chunk_rms(data: bytes) -> float:
+    """RMS-энергия чанка PCM16 (моно)."""
+    samples = array("h")
+    samples.frombytes(data[: len(data) // 2 * 2])
+    if not samples:
+        return 0.0
+    acc = 0
+    for s in samples:
+        acc += s * s
+    return math.sqrt(acc / len(samples))
 
 # Типы сообщений-ошибок от ElevenLabs (все содержат поле error)
 _ERROR_TYPES = {
@@ -61,6 +102,11 @@ class ElevenLabsSTT:
         self._task: Optional[asyncio.Task] = None
         self._closed = False
 
+        # Состояние семантического коммита (сбрасывается на каждом committed)
+        self._partial_text = ""
+        self._last_voice_ts = 0.0     # когда в аудио последний раз был голос
+        self._commit_sent = False     # принудительный commit уже отправлен
+
     async def start(self) -> None:
         """Открывает WebSocket-соединение и запускает чтение результатов."""
         if not self._api_key:
@@ -85,6 +131,9 @@ class ElevenLabsSTT:
         except TypeError:
             self._ws = await websockets.connect(url, extra_headers=headers)
 
+        # Пока голоса не было, тишину не отсчитываем от «начала эпохи»
+        self._last_voice_ts = time.monotonic()
+
         self._task = asyncio.create_task(self._consume())
         logger.info("STT: WebSocket-стрим ElevenLabs запущен")
 
@@ -100,10 +149,15 @@ class ElevenLabsSTT:
 
                 msg_type = msg.get("message_type")
 
-                # Обрабатываем только зафиксированный транскрипт;
-                # partial_transcript игнорируем, иначе реплика уйдёт
-                # в LLM/TTS несколько раз.
-                if msg_type == "committed_transcript":
+                if msg_type == "partial_transcript":
+                    # Запоминаем прогресс распознавания для семантического
+                    # коммита; текст мог «дозреть» позже начала тишины,
+                    # поэтому проверяем условие и здесь
+                    self._partial_text = (msg.get("text") or "").strip()
+                    await self._maybe_semantic_commit()
+                elif msg_type == "committed_transcript":
+                    self._partial_text = ""
+                    self._commit_sent = False
                     text = (msg.get("text") or "").strip()
                     if text:
                         logger.info("STT финальный результат: %s", text)
@@ -121,14 +175,55 @@ class ElevenLabsSTT:
             logger.error("Ошибка STT-стрима: %s", exc)
             raise
 
+    async def _maybe_semantic_commit(self) -> None:
+        """Форсирует commit, если фраза семантически завершена и тихо.
+
+        Оба условия обязательны: пунктуация без тишины — менеджер может
+        договаривать фразу; тишина без пунктуации — обычная пауза,
+        её обрабатывает VAD-фолбэк.
+        """
+        if self._commit_sent or self._ws is None or not self._partial_text:
+            return
+        if self._partial_text.endswith(_QUESTION_ENDINGS):
+            need_silence = SEMANTIC_SILENCE_QUESTION_SECS
+        elif self._partial_text.endswith(_STATEMENT_ENDINGS):
+            need_silence = SEMANTIC_SILENCE_STATEMENT_SECS
+        else:
+            return
+        silence = time.monotonic() - self._last_voice_ts
+        if silence < need_silence:
+            return
+
+        self._commit_sent = True
+        message = {
+            "message_type": "input_audio_chunk",
+            "audio_base_64": "",
+            "commit": True,
+            "sample_rate": SAMPLE_RATE,
+        }
+        try:
+            await self._ws.send(json.dumps(message))
+            logger.info(
+                "STT: семантический коммит (тишина %.2f с): %s",
+                silence,
+                self._partial_text,
+            )
+        except websockets.ConnectionClosed:
+            pass
+
     async def push_audio(self, data: bytes) -> None:
         """Передаёт очередной аудио-чанк в распознавание."""
         if self._closed or self._ws is None:
             return
+
+        # Локальный детектор голоса/тишины для семантического коммита
+        if _chunk_rms(data) > _MIN_VOICE_RMS:
+            self._last_voice_ts = time.monotonic()
+
         message = {
             "message_type": "input_audio_chunk",
             "audio_base_64": base64.b64encode(data).decode("ascii"),
-            "commit": False,  # фиксацию выполняет VAD по паузе
+            "commit": False,  # фиксацию выполняет VAD или семантический коммит
             "sample_rate": SAMPLE_RATE,
         }
         try:
@@ -136,6 +231,10 @@ class ElevenLabsSTT:
         except websockets.ConnectionClosed:
             if not self._closed:
                 logger.warning("STT: не удалось отправить аудио — стрим закрыт")
+            return
+
+        # Тишина «созревает» между partial'ами — проверяем и на каждом чанке
+        await self._maybe_semantic_commit()
 
     async def stop(self) -> None:
         """Завершает поток распознавания и закрывает соединение."""
