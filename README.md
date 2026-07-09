@@ -90,11 +90,13 @@ docker compose up -d
 
 ## Продакшен
 
-Два VPS: **RU** (Caddy, frontend, БД) + **DE** (голосовой backend). Caddy проксирует `/ws/*` на DE; backend ходит в Postgres/Redis на RU.
+Два VPS: **RU** (Caddy, frontend, PostgreSQL) + **DE** (голосовой backend, Redis).
+Caddy проксирует `/ws/*` на DE; backend пишет в Postgres на RU, а Redis — локально
+на DE (кэш сессий, ws-токены); frontend на RU ходит в тот же Redis на DE.
 
 | | RU (`5.129.206.63`) | DE (`103.7.55.214`) |
 |---|---|---|
-| Сервисы | Caddy, Next.js, PostgreSQL, Redis | FastAPI backend |
+| Сервисы | Caddy, Next.js, PostgreSQL | FastAPI backend, Redis |
 | Путь | `~/ai-salesperson-trainer` | `~/ai-trainer` |
 
 **Обновление:** `git push` в `main` → GitHub Actions собирает образы и деплоит на оба сервера.
