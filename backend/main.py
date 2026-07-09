@@ -12,6 +12,7 @@ import base64
 import logging
 import time
 from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
@@ -140,6 +141,16 @@ async def session_ws(ws: WebSocket, session_id: str):
         "Сессия %s: подключение установлено (user=%s)", session_id, user_id
     )
 
+    # Постоянный TTS WebSocket на всю сессию: соединение устанавливается
+    # здесь один раз, чтобы на каждой реплике не тратить время на TLS
+    tts_stream = tts.TtsWsStream()
+    try:
+        await tts_stream.start()
+    except Exception as exc:  # noqa: BLE001
+        # Не критично: stream_sentence переподключится, а при повторном
+        # сбое сработает HTTP-фолбэк в консьюмере
+        logger.warning("TTS: не удалось открыть WebSocket заранее: %s", exc)
+
     # 3. Колбэк, запускающий конвейер LLM -> TTS при финальном STT-результате.
     # LLM стримит токены; готовые предложения сразу уходят в TTS-stream
     # и к клиенту (каждое предложение — отдельный audio_end), поэтому
@@ -186,6 +197,24 @@ async def session_ws(ws: WebSocket, session_id: str):
 
             first_audio_ms: float | None = None
 
+            async def synthesize_sentence(sentence: str) -> AsyncIterator[bytes]:
+                """Постоянный WS-канал TTS; при сбое — HTTP-фолбэк."""
+                got_audio = False
+                try:
+                    async for chunk in tts_stream.stream_sentence(sentence):
+                        got_audio = True
+                        yield chunk
+                except Exception as exc:  # noqa: BLE001
+                    if got_audio:
+                        # Часть предложения уже ушла клиенту — повторный
+                        # синтез продублировал бы речь
+                        raise
+                    logger.warning(
+                        "TTS WS не сработал (%s), фолбэк на HTTP", exc
+                    )
+                    async for chunk in tts.synthesize_stream(sentence):
+                        yield chunk
+
             async def consume_sentences() -> None:
                 """Синтезирует предложения по очереди и стримит аудио клиенту."""
                 nonlocal first_audio_ms
@@ -193,7 +222,7 @@ async def session_ws(ws: WebSocket, session_id: str):
                     sentence = await sentences.get()
                     if sentence is None:
                         break
-                    async for chunk in tts.synthesize_stream(sentence):
+                    async for chunk in synthesize_sentence(sentence):
                         if first_audio_ms is None:
                             first_audio_ms = (time.perf_counter() - t_start) * 1000
                         await safe_send(
@@ -300,12 +329,16 @@ async def session_ws(ws: WebSocket, session_id: str):
         logger.error("Сессия %s: непредвиденная ошибка: %s", session_id, exc)
         await safe_send(ws, {"type": "error", "message": "Внутренняя ошибка"})
     finally:
-        # 6. Корректно закрываем STT и соединение
+        # 6. Корректно закрываем STT, TTS и соединение
         if stt_started:
             try:
                 await stt.stop()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Ошибка при остановке STT: %s", exc)
+        try:
+            await tts_stream.stop()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Ошибка при остановке TTS: %s", exc)
         try:
             await ws.close()
         except Exception:  # noqa: BLE001
