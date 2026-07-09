@@ -10,7 +10,7 @@ ai-salesperson-trainer/
 ├── backend/                # FastAPI, голосовой пайплайн
 ├── deploy/                 # Caddyfile, compose для DE-сервера
 ├── docker-compose.yml      # PostgreSQL + Redis (локально)
-├── docker-compose.prod.yml # RU-продакшен (Caddy, frontend, БД)
+├── docker-compose.prod.yml # RU-продакшен (Caddy, frontend, PostgreSQL)
 └── DEPLOY.md               # деплой и продакшен
 ```
 
@@ -117,4 +117,5 @@ Caddy проксирует `/ws/*` на DE; backend пишет в Postgres на 
 | POST | `/api/sessions/[id]/stop` | завершить сессию |
 | GET | `/api/sessions/[id]/transcript` | транскрипт |
 
-WebSocket: `ws://localhost:8000/ws/session/{id}?token=...` — голосовой пайплайн STT → LLM → TTS.
+WebSocket: `ws://localhost:8000/ws/session/{id}?token=...` — стриминговый
+пайплайн STT → LLM → TTS (MP3 по предложениям, см. `backend/README.md`).

@@ -3,13 +3,14 @@
 Продакшен разнесён на два VPS:
 
 - **RU-сервер** (Timeweb, `5.129.206.63`) — Caddy (HTTPS/WSS), Next.js,
-  PostgreSQL, Redis. Пользователи ходят на https://5.129.206.63.nip.io.
-- **DE-сервер** (`103.7.55.214`) — голосовой FastAPI backend (STT → LLM → TTS).
-  Он вынесен за рубеж, потому что API ElevenLabs недоступен с российских IP.
+  PostgreSQL. Пользователи ходят на https://5.129.206.63.nip.io.
+- **DE-сервер** (`103.7.55.214`) — голосовой FastAPI backend (STT → LLM → TTS)
+  и Redis (кэш сессий, ws-токены). Вынесен за рубеж: API ElevenLabs
+  недоступен с российских IP.
 
-Caddy на RU проксирует `/ws/*` на DE-сервер (порт 8000). Backend на DE ходит
-в PostgreSQL/Redis на RU — порты 5432/6379 опубликованы, но файрволом
-разрешены **только с IP DE-сервера**.
+Caddy на RU проксирует `/ws/*` на DE (порт 8000). Backend на DE пишет
+в PostgreSQL на RU (порт 5432, файрвол — только IP DE). Redis — локально
+на DE; frontend на RU подключается к нему по `103.7.55.214:6379` (пароль).
 
 ```mermaid
 flowchart LR
@@ -17,9 +18,9 @@ flowchart LR
     Caddy -->|"/"| Frontend[RU: Next.js]
     Caddy -->|"/ws/*"| Backend[DE: FastAPI]
     Frontend --> PG[RU: PostgreSQL]
-    Frontend --> Redis[RU: Redis]
-    Backend -->|"только с DE IP"| PG
-    Backend -->|"только с DE IP"| Redis
+    Frontend -->|"6379"| Redis[DE: Redis]
+    Backend -->|"5432"| PG
+    Backend --> Redis
     Backend --> EL[ElevenLabs API]
     Backend --> OR[OpenRouter API]
 ```
@@ -36,7 +37,7 @@ flowchart LR
 3. **deploy-ru** — SSH на RU: `git pull`, `docker compose pull && up -d`
    в `~/ai-salesperson-trainer`.
 
-Т.е. для обновления продакшена достаточно `git push` — руками на серверы
+Для обновления продакшена достаточно `git push` — руками на серверы
 ходить не нужно.
 
 ### Секреты репозитория (Settings → Secrets and variables → Actions)
@@ -55,23 +56,23 @@ SSH-аутентификация — по паролю (`appleboy/ssh-action`). 
 
 ## Разовая настройка серверов (уже выполнена)
 
-### DE-сервер — голосовой backend
+### DE-сервер — голосовой backend + Redis
 
 Всё живёт в отдельной папке `~/ai-trainer`, файлы других проектов не
-затрагиваются. Файрвол на DE не настраивается: порт 8000 защищён самим
-приложением — WebSocket без валидного одноразового ws-токена закрывается
-сразу (код 4001).
+затрагиваются. Порт 8000 защищён ws-токеном (без валидного токена
+соединение закрывается с кодом 4001). Redis на 6379 — с `requirepass`.
 
 ```
 ~/ai-trainer/
 ├── docker-compose.yml   # копия deploy/docker-compose.de.yml
-├── .env                 # DOCKERHUB_USER=<логин Docker Hub>
+├── .env                 # DOCKERHUB_USER, REDIS_PASSWORD
 └── backend.env          # секреты backend (см. backend/.env.production.example)
 ```
 
 `backend.env` — по шаблону [backend/.env.production.example](backend/.env.production.example):
-ключи `LLM_*` и `ELEVENLABS_*`, а `DATABASE_URL`/`REDIS_URL` указывают на
-публичный IP RU-сервера. `JWT_SECRET` совпадает с frontend на RU.
+ключи `LLM_*` и `ELEVENLABS_*`; `DATABASE_URL` — публичный IP RU (Postgres);
+`REDIS_URL` — локальный `redis:6379` в compose-сети. `JWT_SECRET` совпадает
+с frontend на RU.
 
 Запуск вручную (обычно не нужен — делает workflow):
 
@@ -86,23 +87,23 @@ cd ~/ai-trainer && docker compose pull && docker compose up -d
 Файлы окружения:
 
 - `.env` (корень) — по [.env.prod.example](.env.prod.example): `DOMAIN`,
-  `ACME_EMAIL`, `POSTGRES_*`, `REDIS_PASSWORD`, `BACKEND_UPSTREAM=<DE_IP>:8000`,
+  `ACME_EMAIL`, `POSTGRES_*`, `BACKEND_UPSTREAM=<DE_IP>:8000`,
   `DOCKERHUB_USER`.
 - `frontend/.env` — по [frontend/.env.production.example](frontend/.env.production.example);
-  `REDIS_URL` — с паролем (`redis://:ПАРОЛЬ@redis:6379`).
+  `REDIS_URL` — на DE (`redis://:ПАРОЛЬ@103.7.55.214:6379`).
 
 Согласованность значений:
 
 | Значение | Где должно совпадать |
 |---|---|
 | `POSTGRES_PASSWORD` (`.env` RU) | `DATABASE_URL` в `frontend/.env` (RU) и `backend.env` (DE) |
-| `REDIS_PASSWORD` (`.env` RU) | `REDIS_URL` в `frontend/.env` (RU) и `backend.env` (DE) |
+| `REDIS_PASSWORD` (`~/ai-trainer/.env` DE) | `REDIS_URL` в `frontend/.env` (RU) и `backend.env` (DE) |
 | `JWT_SECRET` | одинаковый в `frontend/.env` (RU) и `backend.env` (DE) |
 | `DOMAIN` (`.env` RU) | `FASTAPI_WS_URL=wss://<domain>` в `frontend/.env` |
 
-#### Файрвол: Postgres/Redis только для DE
+#### Файрвол: Postgres на RU только для DE
 
-Порты 5432/6379 опубликованы наружу (нужны DE-backend), поэтому доступ
+Порт 5432 опубликован наружу (нужен DE-backend), поэтому доступ
 ограничен на уровне iptables (цепочка `DOCKER-USER` — обычный ufw
 Docker обходит):
 
@@ -113,7 +114,7 @@ Docker обходит):
 systemctl status docker-user-firewall.service
 ```
 
-Скрипт дропает входящие на 5432/6379 с любых адресов, кроме IP DE-сервера.
+Скрипт дропает входящие на 5432 с любых адресов, кроме IP DE-сервера.
 Трафик внутри compose-сети (frontend → postgres) не затрагивается.
 
 ---
@@ -124,7 +125,7 @@ systemctl status docker-user-firewall.service
 2. https://5.129.206.63.nip.io открывается, логин работает.
 3. «Начать разговор» → доступ к микрофону → фраза → голосовой ответ.
 4. Логи backend на DE: `cd ~/ai-trainer && docker compose logs -f backend`
-   (подключение к RU postgres/redis, тайминги STT/LLM/TTS).
+   (подключение к Postgres на RU, локальный Redis, тайминги STT/LLM/TTS).
 
 ## Создать пользователя для тестировщика
 
@@ -143,7 +144,7 @@ docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs -f caddy
 docker compose -f docker-compose.prod.yml logs -f frontend
 
-# DE: статус и логи backend
+# DE: статус и логи backend + redis
 cd ~/ai-trainer && docker compose ps && docker compose logs -f backend
 
 # RU: остановить всё (данные сохраняются)
@@ -156,7 +157,8 @@ docker compose -f docker-compose.prod.yml down
 
 - `.env`, `frontend/.env`, `backend.env` **не** коммитятся.
 - `JWT_SECRET`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD` — длинные случайные.
-- 5432/6379 на RU открыты **только** для IP DE-сервера (iptables `DOCKER-USER`).
+- 5432 на RU открыт **только** для IP DE-сервера (iptables `DOCKER-USER`).
+- 6379 на DE — с `requirepass`; первичные данные в PostgreSQL на RU.
 - Порт 8000 на DE открыт, но WebSocket требует одноразовый ws-токен;
   `/health` не раскрывает данных.
 - Куки выставляются с флагом `Secure` (только HTTPS).
