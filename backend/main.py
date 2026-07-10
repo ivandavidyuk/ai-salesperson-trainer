@@ -207,7 +207,39 @@ class TurnManager:
         self.restart_task = asyncio.create_task(self._restart_if_noise())
 
     async def on_sustained_voice(self) -> None:
-        """Устойчивый громкий голос во время речи ИИ — barge-in."""
+        """Устойчивый громкий голос во время речи ИИ — barge-in по RMS."""
+        await self._maybe_barge_in("RMS")
+
+    async def on_partial(self, text: str) -> None:
+        """Barge-in по распознанным словам: надёжнее RMS-детектора.
+
+        Эхоподавление браузера приглушает голос менеджера во время
+        воспроизведения, и энергетический детектор может не добрать до
+        порога. Если ElevenLabs распознал несколько слов, которых нет
+        в звучащем ответе ИИ, — менеджер действительно говорит.
+        """
+        if not self.barge_in_enabled or not self._ai_speaking():
+            return
+        words = _norm_words(text)
+        if len(words) < 3:
+            return
+        fresh = [w for w in words if w not in self.reply_words]
+        if len(fresh) < 2:
+            return  # похоже на эхо собственного ответа ИИ
+        await self._maybe_barge_in("partial")
+
+    def _ai_speaking(self) -> bool:
+        """Ответ ИИ генерируется или предположительно ещё звучит у клиента."""
+        if (
+            self.task is not None
+            and not self.task.done()
+            and self.audio_started
+        ):
+            return True
+        return time.monotonic() < self.playback_end
+
+    async def _maybe_barge_in(self, reason: str) -> None:
+        """Обрывает речь ИИ, если менеджер перебивает."""
         if not self.barge_in_enabled:
             return
         if self.task is not None and not self.task.done() and self.audio_started:
@@ -219,31 +251,41 @@ class TurnManager:
             await safe_send(self.ws, {"type": "barge_in"})
             self.playback_end = 0.0
             logger.info(
-                "Сессия %s: barge-in, ответ оборван (озвучено предложений: %d)",
+                "Сессия %s: barge-in (%s), ответ оборван (озвучено предложений: %d)",
                 self.session_id,
+                reason,
                 len(self.sent_sentences),
             )
             await store.append_message_cache(self.session_id, "user", user_text)
-            asyncio.create_task(
-                store.persist_message(self.session_id, "user", user_text)
-            )
             self.last_user_text = user_text
             if spoken:
                 await safe_send(self.ws, {"type": "transcript_ai", "text": spoken})
                 await store.append_message_cache(
                     self.session_id, "assistant", spoken
                 )
-                asyncio.create_task(
-                    store.persist_message(self.session_id, "assistant", spoken)
-                )
+            asyncio.create_task(
+                self._persist_turn(user_text, spoken if spoken else None)
+            )
         elif time.monotonic() < self.playback_end:
             # Пайплайн завершён, но клиент ещё доигрывает буфер — сбрасываем
             # только воспроизведение (история уже записана целиком)
             await safe_send(self.ws, {"type": "barge_in"})
             self.playback_end = 0.0
             logger.info(
-                "Сессия %s: barge-in на доигрывании буфера", self.session_id
+                "Сессия %s: barge-in (%s) на доигрывании буфера",
+                self.session_id,
+                reason,
             )
+
+    async def _persist_turn(self, user_text: str, reply: str | None) -> None:
+        """Пишет ход в PostgreSQL строго последовательно (user → assistant).
+
+        Параллельные вставки давали одинаковый createdAt, и в расшифровке
+        (ORDER BY createdAt) ответ ИИ мог оказаться раньше реплики менеджера.
+        """
+        await store.persist_message(self.session_id, "user", user_text)
+        if reply:
+            await store.persist_message(self.session_id, "assistant", reply)
 
     async def shutdown(self) -> None:
         """Останавливает активный пайплайн при закрытии сессии."""
@@ -440,14 +482,12 @@ class TurnManager:
             reply = await producer
 
             await safe_send(ws, {"type": "transcript_ai", "text": reply})
-            # Успешное завершение хода — фиксируем историю:
-            # кэш синхронно (дёшево, Redis локальный), Postgres фоном
+            # Успешное завершение хода — фиксируем историю: кэш синхронно
+            # (дёшево, Redis локальный), Postgres фоном одной задачей,
+            # чтобы createdAt сохранял порядок user → assistant
             await store.append_message_cache(session_id, "user", text)
-            asyncio.create_task(store.persist_message(session_id, "user", text))
             await store.append_message_cache(session_id, "assistant", reply)
-            asyncio.create_task(
-                store.persist_message(session_id, "assistant", reply)
-            )
+            asyncio.create_task(self._persist_turn(text, reply))
             self.last_user_text = text
 
             total_ms = (time.perf_counter() - t_start) * 1000
@@ -547,6 +587,7 @@ async def session_ws(ws: WebSocket, session_id: str):
         on_final=manager.on_final,
         on_voice_resumed=manager.on_voice_resumed,
         on_sustained_voice=manager.on_sustained_voice,
+        on_partial=manager.on_partial,
     )
     manager.stt = stt
     stt_started = False

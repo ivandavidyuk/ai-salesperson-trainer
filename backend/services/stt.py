@@ -64,9 +64,11 @@ _MIN_VOICE_RMS = 500.0
 # эхоподавления браузера) не принимались за голос менеджера
 _BARGE_IN_RMS = 1000.0
 
-# Barge-in: сколько подряд должен длиться громкий голос, чтобы считаться
-# осознанным перебиванием (одиночный стук/кашель не считается)
-_BARGE_IN_MIN_VOICE_SECS = 0.30
+# Barge-in: скользящее окно детекции. Живая речь неравномерна (паузы между
+# словами дают тихие чанки), поэтому требуем не непрерывности, а нескольких
+# громких чанков внутри окна: 3 чанка по ~200 мс за 1.2 с ≈ 0.6 с речи.
+_BARGE_IN_WINDOW_SECS = 1.2
+_BARGE_IN_MIN_LOUD_CHUNKS = 3
 
 
 def _chunk_rms(data: bytes) -> float:
@@ -102,6 +104,9 @@ OnFinal = Callable[[str], Awaitable[None]]
 # Тип колбэка-уведомления о голосовой активности (без аргументов)
 OnVoiceEvent = Callable[[], Awaitable[None]]
 
+# Тип колбэка partial-транскрипта (текст по мере распознавания)
+OnPartial = Callable[[str], Awaitable[None]]
+
 
 class ElevenLabsSTT:
     """Управляет одной потоковой сессией распознавания речи."""
@@ -112,13 +117,16 @@ class ElevenLabsSTT:
         on_final: OnFinal,
         on_voice_resumed: Optional[OnVoiceEvent] = None,
         on_sustained_voice: Optional[OnVoiceEvent] = None,
+        on_partial: Optional[OnPartial] = None,
     ) -> None:
         self._api_key = api_key
         self._on_final = on_final
         # Голос появился после коммита (для отмены пайплайна со склейкой)
         self._on_voice_resumed = on_voice_resumed
-        # Устойчивый громкий голос ≥ _BARGE_IN_MIN_VOICE_SECS (для barge-in)
+        # Устойчивый громкий голос в скользящем окне (для barge-in по RMS)
         self._on_sustained_voice = on_sustained_voice
+        # Partial-транскрипт (для barge-in по распознанным словам)
+        self._on_partial = on_partial
         self._ws: Optional[websockets.ClientConnection] = None
         self._task: Optional[asyncio.Task] = None
         self._closed = False
@@ -134,8 +142,9 @@ class ElevenLabsSTT:
         self._voice_since_commit = False
         self._peak_rms = 0.0          # пиковый RMS с прошлого коммита (в логи)
 
-        # Детектор устойчивого громкого голоса для barge-in
-        self._loud_since: Optional[float] = None
+        # Детектор устойчивого громкого голоса для barge-in:
+        # времена громких чанков в скользящем окне
+        self._loud_times: list[float] = []
         self._sustained_fired = False
 
     async def start(self) -> None:
@@ -185,6 +194,8 @@ class ElevenLabsSTT:
                     # коммита; текст мог «дозреть» позже начала тишины,
                     # поэтому проверяем условие и здесь
                     self._partial_text = (msg.get("text") or "").strip()
+                    if self._on_partial is not None and self._partial_text:
+                        await self._on_partial(self._partial_text)
                     await self._maybe_semantic_commit()
                 elif msg_type == "committed_transcript":
                     self._partial_text = ""
@@ -286,20 +297,23 @@ class ElevenLabsSTT:
                 if self._on_voice_resumed is not None:
                     await self._on_voice_resumed()
 
-        # Устойчивый громкий голос — сигнал barge-in (перебивание ИИ)
+        # Устойчивый громкий голос — сигнал barge-in (перебивание ИИ).
+        # Скользящее окно: одиночные тихие чанки (паузы между словами)
+        # не сбрасывают отсчёт, короткий стук/кашель не триггерит.
         if rms > _BARGE_IN_RMS:
-            if self._loud_since is None:
-                self._loud_since = now
-            elif (
-                not self._sustained_fired
-                and now - self._loud_since >= _BARGE_IN_MIN_VOICE_SECS
-            ):
-                self._sustained_fired = True
-                if self._on_sustained_voice is not None:
-                    await self._on_sustained_voice()
-        else:
-            self._loud_since = None
+            self._loud_times.append(now)
+        self._loud_times = [
+            t for t in self._loud_times if now - t <= _BARGE_IN_WINDOW_SECS
+        ]
+        if not self._loud_times:
             self._sustained_fired = False
+        elif (
+            not self._sustained_fired
+            and len(self._loud_times) >= _BARGE_IN_MIN_LOUD_CHUNKS
+        ):
+            self._sustained_fired = True
+            if self._on_sustained_voice is not None:
+                await self._on_sustained_voice()
 
         message = {
             "message_type": "input_audio_chunk",

@@ -185,18 +185,16 @@ export class AudioPlayer {
       const audio = this.audio;
       if (!sb || !audio) return;
       try {
-        if (sb.updating) sb.abort();
-        // Выкидываем неотыгранное аудио впереди текущей позиции
+        // Перескакиваем за конец буфера: там данных нет, звук мгновенно
+        // замолкает, а следующий ответ (sequence-режим кладёт его ровно
+        // в эту точку) продолжит воспроизведение автоматически.
+        // Никаких асинхронных операций с SourceBuffer — надёжнее remove().
         if (sb.buffered.length > 0) {
           const end = sb.buffered.end(sb.buffered.length - 1);
           if (end > audio.currentTime) {
-            sb.remove(audio.currentTime, end);
+            audio.currentTime = end;
           }
         }
-        // В режиме sequence следующий сегмент лёг бы после удалённого
-        // (осталась бы дыра и вечное ожидание данных) — ставим точку
-        // продолжения на текущую позицию воспроизведения
-        sb.timestampOffset = audio.currentTime;
       } catch {
         // не критично: страховка _healGap подтянет позицию при аппенде
       }
