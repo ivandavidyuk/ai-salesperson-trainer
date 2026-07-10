@@ -157,6 +157,7 @@ class TurnManager:
         self.last_user_text = ""        # последняя завершённая реплика менеджера
         self.reply_words: set[str] = set()  # слова уже озвученного ответа ИИ
         self.playback_end = 0.0  # оценка, когда клиент доиграет буфер (monotonic)
+        self._barge_in_until = 0.0  # антидребезг клиентского и STT-триггеров
 
     # --- Колбэки STT ------------------------------------------------------
 
@@ -228,6 +229,15 @@ class TurnManager:
             return  # похоже на эхо собственного ответа ИИ
         await self._maybe_barge_in("partial")
 
+    async def on_client_interrupt(self) -> None:
+        """Клиент обнаружил речь менеджера поверх фактического воспроизведения."""
+        interrupted = await self._maybe_barge_in("client")
+        if not interrupted:
+            # Клиент знает реальное состояние AudioPlayer точнее серверной
+            # оценки playback_end. Подтверждаем границу, чтобы он перестал
+            # отбрасывать входящие чанки даже при рассинхронизации таймеров.
+            await safe_send(self.ws, {"type": "barge_in"})
+
     def _ai_speaking(self) -> bool:
         """Ответ ИИ генерируется или предположительно ещё звучит у клиента."""
         if (
@@ -238,10 +248,15 @@ class TurnManager:
             return True
         return time.monotonic() < self.playback_end
 
-    async def _maybe_barge_in(self, reason: str) -> None:
+    async def _maybe_barge_in(self, reason: str) -> bool:
         """Обрывает речь ИИ, если менеджер перебивает."""
-        if not self.barge_in_enabled:
-            return
+        if not self.barge_in_enabled or not self._ai_speaking():
+            return False
+        now = time.monotonic()
+        if now < self._barge_in_until:
+            return False
+        self._barge_in_until = now + 1.0
+
         if self.task is not None and not self.task.done() and self.audio_started:
             # Перебивание во время генерации: обрываем пайплайн, в историю
             # идёт только та часть ответа, которая успела прозвучать
@@ -266,6 +281,7 @@ class TurnManager:
             asyncio.create_task(
                 self._persist_turn(user_text, spoken if spoken else None)
             )
+            return True
         elif time.monotonic() < self.playback_end:
             # Пайплайн завершён, но клиент ещё доигрывает буфер — сбрасываем
             # только воспроизведение (история уже записана целиком)
@@ -276,6 +292,8 @@ class TurnManager:
                 self.session_id,
                 reason,
             )
+            return True
+        return False
 
     async def _persist_turn(self, user_text: str, reply: str | None) -> None:
         """Пишет ход в PostgreSQL строго последовательно (user → assistant).
@@ -623,6 +641,10 @@ async def session_ws(ws: WebSocket, session_id: str):
                         ws,
                         {"type": "error", "message": "Некорректный аудио-чанк"},
                     )
+
+            elif msg_type == "interrupt":
+                # Клиент локально обнаружил речь поверх воспроизведения
+                await manager.on_client_interrupt()
 
             elif msg_type == "pause":
                 await store.set_status(session_id, STATUS_PAUSED)
