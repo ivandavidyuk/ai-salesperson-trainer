@@ -88,13 +88,6 @@ export default function SessionPage() {
     }
   }
 
-  // Менеджер перебивает ИИ: сразу глушим локально и просим сервер отменить ход
-  function handleBargeIn() {
-    playerRef.current?.flush();
-    sendWs({ type: "interrupt" });
-    recorderRef.current?.resetBargeIn();
-  }
-
   // "Начать разговор": создаём сессию, подключаем WebSocket, микрофон и плеер
   async function handleStart() {
     setBusy(true);
@@ -137,15 +130,9 @@ export default function SessionPage() {
         try {
           const recorder = new MicRecorder();
           recorderRef.current = recorder;
-          await recorder.start(
-            (base64) => {
-              sendWs({ type: "audio_chunk", data: base64 });
-            },
-            {
-              onBargeIn: handleBargeIn,
-              isAiSpeaking: () => playerRef.current?.isPlaying() ?? false,
-            },
-          );
+          await recorder.start((base64) => {
+            sendWs({ type: "audio_chunk", data: base64 });
+          });
         } catch {
           setErrorMsg(
             "Нет доступа к микрофону. Разрешите доступ в браузере и начните заново."
@@ -165,9 +152,8 @@ export default function SessionPage() {
               playerRef.current?.endUtterance();
               break;
             case "barge_in":
-              // Сервер подтвердил перебивание (дублирует клиентский flush)
+              // Менеджер перебил ИИ: сбрасываем недоигранный буфер
               playerRef.current?.flush();
-              recorderRef.current?.resetBargeIn();
               break;
             case "error":
               setErrorMsg(msg.message || "Ошибка сервера");

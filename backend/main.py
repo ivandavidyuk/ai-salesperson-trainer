@@ -157,7 +157,6 @@ class TurnManager:
         self.last_user_text = ""        # последняя завершённая реплика менеджера
         self.reply_words: set[str] = set()  # слова уже озвученного ответа ИИ
         self.playback_end = 0.0  # оценка, когда клиент доиграет буфер (monotonic)
-        self._barge_in_until = 0.0  # анти-дребезг barge-in
 
     # --- Колбэки STT ------------------------------------------------------
 
@@ -222,16 +221,12 @@ class TurnManager:
         if not self.barge_in_enabled or not self._ai_speaking():
             return
         words = _norm_words(text)
-        if len(words) < 2:
+        if len(words) < 3:
             return
         fresh = [w for w in words if w not in self.reply_words]
-        if len(fresh) < 1:
+        if len(fresh) < 2:
             return  # похоже на эхо собственного ответа ИИ
         await self._maybe_barge_in("partial")
-
-    async def on_client_interrupt(self) -> None:
-        """Клиент обнаружил речь менеджера поверх ответа ИИ."""
-        await self._maybe_barge_in("client")
 
     def _ai_speaking(self) -> bool:
         """Ответ ИИ генерируется или предположительно ещё звучит у клиента."""
@@ -247,12 +242,6 @@ class TurnManager:
         """Обрывает речь ИИ, если менеджер перебивает."""
         if not self.barge_in_enabled:
             return
-        now = time.monotonic()
-        if now < self._barge_in_until:
-            return
-        if not self._ai_speaking():
-            return
-        self._barge_in_until = now + 1.0
         if self.task is not None and not self.task.done() and self.audio_started:
             # Перебивание во время генерации: обрываем пайплайн, в историю
             # идёт только та часть ответа, которая успела прозвучать
@@ -634,10 +623,6 @@ async def session_ws(ws: WebSocket, session_id: str):
                         ws,
                         {"type": "error", "message": "Некорректный аудио-чанк"},
                     )
-
-            elif msg_type == "interrupt":
-                # Клиент обнаружил речь менеджера поверх ответа ИИ
-                await manager.on_client_interrupt()
 
             elif msg_type == "pause":
                 await store.set_status(session_id, STATUS_PAUSED)
