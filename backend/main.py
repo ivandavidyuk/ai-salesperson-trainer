@@ -222,10 +222,10 @@ class TurnManager:
         if not self.barge_in_enabled or not self._ai_speaking():
             return
         words = _norm_words(text)
-        if len(words) < 3:
+        if len(words) < 2:
             return
         fresh = [w for w in words if w not in self.reply_words]
-        if len(fresh) < 2:
+        if not fresh:
             return  # похоже на эхо собственного ответа ИИ
         await self._maybe_barge_in("partial")
 

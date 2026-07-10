@@ -40,11 +40,17 @@ function pcmRms(buffer: ArrayBuffer): number {
   return Math.sqrt(acc / samples.length);
 }
 
-// Клиентский детектор работает на сигнале после браузерного AEC, поэтому его
-// порог ниже серверного. Три чанка по ~200 мс отсекают одиночный шум/кашель.
-const CLIENT_BARGE_IN_RMS = 400;
-const CLIENT_BARGE_IN_WINDOW_MS = 1200;
-const CLIENT_BARGE_IN_MIN_LOUD_CHUNKS = 3;
+// Клиентский детектор работает на сигнале после браузерного AEC, который
+// во время воспроизведения ответа ИИ приглушает голос менеджера на десятки
+// децибел (double-talk suppression). Поэтому порог намного ниже серверного,
+// а для срабатывания достаточно двух громких чанков (~400 мс речи).
+const CLIENT_BARGE_IN_RMS = 250;
+const CLIENT_BARGE_IN_WINDOW_MS = 1000;
+const CLIENT_BARGE_IN_MIN_LOUD_CHUNKS = 2;
+
+// Пауза плеера между предложениями ответа, в течение которой ИИ всё ещё
+// считается говорящим (иначе детектор barge-in мигал бы на каждом стыке)
+const PLAYBACK_GAP_GRACE_MS = 600;
 
 export interface MicRecorderOptions {
   /** Вызывается, когда менеджер говорит поверх ответа ИИ. */
@@ -128,17 +134,29 @@ export class MicRecorder {
 
   private _maybeBargeIn(buffer: ArrayBuffer): void {
     const { onBargeIn, isAiSpeaking } = this.bargeInOptions;
-    if (!onBargeIn || !isAiSpeaking?.()) {
-      this.resetBargeIn();
+    if (!onBargeIn) return;
+
+    const now = performance.now();
+    // Старые чанки выходят из окна естественно; накопленное между
+    // предложениями ответа (короткие паузы плеера) не обнуляется.
+    this.loudChunkTimes = this.loudChunkTimes.filter(
+      (timestamp) => now - timestamp <= CLIENT_BARGE_IN_WINDOW_MS,
+    );
+
+    if (!isAiSpeaking?.()) {
+      // ИИ молчит: обычная реплика менеджера не должна копить громкие
+      // чанки, а сработавший детектор перевооружается к следующему ответу
+      this.bargeInFired = false;
       return;
     }
 
-    const now = performance.now();
-    if (pcmRms(buffer) > CLIENT_BARGE_IN_RMS) {
+    const rms = pcmRms(buffer);
+    if (rms > CLIENT_BARGE_IN_RMS) {
       this.loudChunkTimes.push(now);
     }
-    this.loudChunkTimes = this.loudChunkTimes.filter(
-      (timestamp) => now - timestamp <= CLIENT_BARGE_IN_WINDOW_MS,
+    // Виден в DevTools при уровне логов Verbose — для подбора порога
+    console.debug(
+      `[barge-in] rms=${Math.round(rms)} loud=${this.loudChunkTimes.length}/${CLIENT_BARGE_IN_MIN_LOUD_CHUNKS} fired=${this.bargeInFired}`,
     );
 
     if (
@@ -205,6 +223,10 @@ export class AudioPlayer {
   // appendBuffer мог уже выполняться в момент flush — после updateend нужно
   // перескочить за добавленный хвост отменённого ответа.
   private seekToBufferEndAfterUpdate = false;
+  // Когда плеер последний раз реально играл: короткая пауза между
+  // предложениями ответа (следующее ещё генерируется) не считается
+  // «ИИ замолчал» — иначе детектор barge-in мигал бы вместе с ней.
+  private lastActivePlaybackAt = 0;
 
   // --- Фолбэк: сборка Blob по предложениям ---
   private pending: Uint8Array[] = [];
@@ -261,7 +283,18 @@ export class AudioPlayer {
 
   /** Идёт ли воспроизведение ответа ИИ (для клиентского barge-in). */
   isPlaying(): boolean {
-    if (performance.now() < this.ignoreIncomingUntil) return false;
+    const now = performance.now();
+    if (now < this.ignoreIncomingUntil) return false;
+    if (this._isActivelyPlaying()) {
+      this.lastActivePlaybackAt = now;
+      return true;
+    }
+    // Грация на межпредложенческие паузы стрима (буфер доигран,
+    // следующее предложение ещё синтезируется)
+    return now - this.lastActivePlaybackAt <= PLAYBACK_GAP_GRACE_MS;
+  }
+
+  private _isActivelyPlaying(): boolean {
     if (this.useMse) {
       const audio = this.audio;
       if (!audio) return this.appendQueue.length > 0;
@@ -285,6 +318,7 @@ export class AudioPlayer {
   private _flushPlayback(): void {
     this.appendQueue = [];
     this.pending = [];
+    this.lastActivePlaybackAt = 0;
     if (this.useMse) {
       const sb = this.sourceBuffer;
       const audio = this.audio;
