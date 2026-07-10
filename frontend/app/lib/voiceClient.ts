@@ -29,6 +29,30 @@ function base64ToBytes(base64: string): Uint8Array {
 // Целевая частота дискретизации, которую ждёт STT
 const TARGET_SAMPLE_RATE = 16000;
 
+// RMS-энергия PCM16-чанка (моно)
+function pcmRms(buffer: ArrayBuffer): number {
+  const samples = new Int16Array(buffer);
+  if (samples.length === 0) return 0;
+  let acc = 0;
+  for (let i = 0; i < samples.length; i++) {
+    acc += samples[i] * samples[i];
+  }
+  return Math.sqrt(acc / samples.length);
+}
+
+// Порог громкости для barge-in на клиенте (ниже серверного: AEC приглушает
+// микрофон, пока из динамиков идёт ответ ИИ)
+const CLIENT_BARGE_IN_RMS = 400;
+const CLIENT_BARGE_IN_WINDOW_MS = 1200;
+const CLIENT_BARGE_IN_MIN_LOUD_CHUNKS = 3;
+
+export interface MicRecorderOptions {
+  /** Вызывается, когда менеджер говорит поверх ответа ИИ */
+  onBargeIn?: () => void;
+  /** true, пока клиент воспроизводит ответ ИИ */
+  isAiSpeaking?: () => boolean;
+}
+
 // --- Захват микрофона ------------------------------------------------------
 
 export class MicRecorder {
@@ -37,9 +61,18 @@ export class MicRecorder {
   private source: MediaStreamAudioSourceNode | null = null;
   private node: AudioWorkletNode | null = null;
   private paused = false;
+  private bargeInOpts: MicRecorderOptions = {};
+  private loudChunkTimes: number[] = [];
+  private bargeInFired = false;
 
   // Запускает захват. onPcm вызывается с base64-строкой PCM16 на каждый блок.
-  async start(onPcm: (base64: string) => void): Promise<void> {
+  async start(
+    onPcm: (base64: string) => void,
+    options?: MicRecorderOptions,
+  ): Promise<void> {
+    this.bargeInOpts = options ?? {};
+    this.loudChunkTimes = [];
+    this.bargeInFired = false;
     // Запрашиваем микрофон (моно, с шумо-/эхоподавлением)
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -67,7 +100,9 @@ export class MicRecorder {
     // Получаем готовые PCM16-буферы из ворклета
     this.node.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
       if (this.paused) return;
-      onPcm(arrayBufferToBase64(event.data));
+      const buffer = event.data;
+      onPcm(arrayBufferToBase64(buffer));
+      this._maybeClientBargeIn(buffer);
     };
 
     // Ворклет ничего не выводит в звук (process не пишет output),
@@ -84,6 +119,35 @@ export class MicRecorder {
   // Возобновляет отправку аудио
   resume(): void {
     this.paused = false;
+  }
+
+  /** Сбрасывает детектор barge-in (после успешного перебивания). */
+  resetBargeIn(): void {
+    this.loudChunkTimes = [];
+    this.bargeInFired = false;
+  }
+
+  private _maybeClientBargeIn(buffer: ArrayBuffer): void {
+    const { onBargeIn, isAiSpeaking } = this.bargeInOpts;
+    if (!onBargeIn || !isAiSpeaking?.()) {
+      this.loudChunkTimes = [];
+      this.bargeInFired = false;
+      return;
+    }
+    const now = Date.now();
+    if (pcmRms(buffer) > CLIENT_BARGE_IN_RMS) {
+      this.loudChunkTimes.push(now);
+    }
+    this.loudChunkTimes = this.loudChunkTimes.filter(
+      (t) => now - t <= CLIENT_BARGE_IN_WINDOW_MS,
+    );
+    if (
+      !this.bargeInFired
+      && this.loudChunkTimes.length >= CLIENT_BARGE_IN_MIN_LOUD_CHUNKS
+    ) {
+      this.bargeInFired = true;
+      onBargeIn();
+    }
   }
 
   // Полностью останавливает захват и освобождает ресурсы
@@ -135,6 +199,8 @@ export class AudioPlayer {
   // Чанки, ожидающие appendBuffer (он асинхронный — аппендим по одному)
   private appendQueue: Uint8Array[] = [];
   private destroyed = false;
+  // После flush игнорируем чанки in-flight от отменённого ответа
+  private ignoreUntil = 0;
 
   // --- Фолбэк: сборка Blob по предложениям ---
   private pending: Uint8Array[] = [];
@@ -151,6 +217,7 @@ export class AudioPlayer {
 
   // Добавляет очередной аудио-чанк текущего ответа
   pushChunk(base64: string): void {
+    if (Date.now() < this.ignoreUntil) return;
     const bytes = base64ToBytes(base64);
     if (this.useMse) {
       this.appendQueue.push(bytes);
@@ -176,43 +243,65 @@ export class AudioPlayer {
     }
   }
 
-  // Barge-in: сбрасывает недоигранный буфер, оставляя плеер готовым
-  // к следующему ответу (в отличие от терминального reset)
+  // Barge-in: мгновенно обрывает воспроизведение, игнорирует хвост чанков
   flush(): void {
+    this.ignoreUntil = Date.now() + 800;
+    this.appendQueue = [];
+    this.pending = [];
+
     if (this.useMse) {
-      this.appendQueue = [];
       const sb = this.sourceBuffer;
       const audio = this.audio;
-      if (!sb || !audio) return;
+      if (!audio) return;
+      audio.pause();
+      if (!sb || sb.buffered.length === 0) return;
       try {
-        // Перескакиваем за конец буфера: там данных нет, звук мгновенно
-        // замолкает, а следующий ответ (sequence-режим кладёт его ровно
-        // в эту точку) продолжит воспроизведение автоматически.
-        // Никаких асинхронных операций с SourceBuffer — надёжнее remove().
-        if (sb.buffered.length > 0) {
-          const end = sb.buffered.end(sb.buffered.length - 1);
-          if (end > audio.currentTime) {
-            audio.currentTime = end;
-          }
+        const end = sb.buffered.end(sb.buffered.length - 1);
+        if (end > audio.currentTime) {
+          audio.currentTime = end;
         }
       } catch {
-        // не критично: страховка _healGap подтянет позицию при аппенде
+        // не критично
       }
-    } else {
-      this.pending = [];
-      this.queue = [];
-      this.playing = false;
-      if (this.current) {
-        this.current.onended = null;
-        this.current.onerror = null;
-        this.current.pause();
-        this.current = null;
-      }
+      return;
     }
+
+    this.queue = [];
+    this.playing = false;
+    if (this.current) {
+      this.current.onended = null;
+      this.current.onerror = null;
+      this.current.pause();
+      this.current = null;
+    }
+  }
+
+  /** Идёт ли сейчас воспроизведение ответа ИИ (для клиентского barge-in). */
+  isPlaying(): boolean {
+    if (this.useMse) {
+      const audio = this.audio;
+      if (!audio || audio.paused) {
+        return this.appendQueue.length > 0;
+      }
+      const sb = this.sourceBuffer;
+      if (!sb || sb.buffered.length === 0) {
+        return this.appendQueue.length > 0;
+      }
+      for (let i = 0; i < sb.buffered.length; i++) {
+        const start = sb.buffered.start(i);
+        const end = sb.buffered.end(i);
+        if (audio.currentTime >= start && audio.currentTime < end - 0.05) {
+          return true;
+        }
+      }
+      return this.appendQueue.length > 0;
+    }
+    return this.playing || this.queue.length > 0 || this.pending.length > 0;
   }
 
   // Останавливает воспроизведение и освобождает ресурсы (терминально)
   reset(): void {
+    this.ignoreUntil = 0;
     this.destroyed = true;
     // MSE-путь
     this.appendQueue = [];
@@ -267,6 +356,10 @@ export class AudioPlayer {
   private _appendNext(): void {
     const sb = this.sourceBuffer;
     if (this.destroyed || !sb || sb.updating) return;
+    if (Date.now() < this.ignoreUntil) {
+      this.appendQueue = [];
+      return;
+    }
     const chunk = this.appendQueue.shift();
     if (!chunk) return;
     try {
@@ -319,7 +412,7 @@ export class AudioPlayer {
   // Запускает воспроизведение, если оно ещё не идёт
   private _ensurePlaying(): void {
     const audio = this.audio;
-    if (!audio || !audio.paused) return;
+    if (!audio || !audio.paused || Date.now() < this.ignoreUntil) return;
     audio.play().catch(() => {
       // автоплей заблокирован — звук пойдёт после жеста пользователя
     });
