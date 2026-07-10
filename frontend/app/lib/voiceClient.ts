@@ -176,6 +176,43 @@ export class AudioPlayer {
     }
   }
 
+  // Barge-in: сбрасывает недоигранный буфер, оставляя плеер готовым
+  // к следующему ответу (в отличие от терминального reset)
+  flush(): void {
+    if (this.useMse) {
+      this.appendQueue = [];
+      const sb = this.sourceBuffer;
+      const audio = this.audio;
+      if (!sb || !audio) return;
+      try {
+        if (sb.updating) sb.abort();
+        // Выкидываем неотыгранное аудио впереди текущей позиции
+        if (sb.buffered.length > 0) {
+          const end = sb.buffered.end(sb.buffered.length - 1);
+          if (end > audio.currentTime) {
+            sb.remove(audio.currentTime, end);
+          }
+        }
+        // В режиме sequence следующий сегмент лёг бы после удалённого
+        // (осталась бы дыра и вечное ожидание данных) — ставим точку
+        // продолжения на текущую позицию воспроизведения
+        sb.timestampOffset = audio.currentTime;
+      } catch {
+        // не критично: страховка _healGap подтянет позицию при аппенде
+      }
+    } else {
+      this.pending = [];
+      this.queue = [];
+      this.playing = false;
+      if (this.current) {
+        this.current.onended = null;
+        this.current.onerror = null;
+        this.current.pause();
+        this.current = null;
+      }
+    }
+  }
+
   // Останавливает воспроизведение и освобождает ресурсы (терминально)
   reset(): void {
     this.destroyed = true;
@@ -219,6 +256,7 @@ export class AudioPlayer {
       // в буфере нет (элемент просто ждёт новых данных)
       sb.mode = "sequence";
       sb.addEventListener("updateend", () => {
+        this._healGap();
         this._cleanupPlayed();
         this._appendNext();
       });
@@ -239,6 +277,27 @@ export class AudioPlayer {
       // QuotaExceededError и подобное: вернём чанк и попробуем после чистки
       this.appendQueue.unshift(chunk);
       this._cleanupPlayed();
+    }
+  }
+
+  // Страховка после flush: если позиция воспроизведения оказалась в дыре
+  // перед новыми данными (буфер впереди был удалён), перескакиваем на них
+  private _healGap(): void {
+    const sb = this.sourceBuffer;
+    const audio = this.audio;
+    if (!sb || !audio || sb.buffered.length === 0) return;
+    for (let i = 0; i < sb.buffered.length; i++) {
+      const start = sb.buffered.start(i);
+      const end = sb.buffered.end(i);
+      // Позиция внутри диапазона, где ещё есть что играть — всё в порядке
+      if (audio.currentTime >= start - 0.05 && audio.currentTime < end - 0.01) {
+        return;
+      }
+      // Данные впереди позиции — перескакиваем на их начало
+      if (start > audio.currentTime + 0.05) {
+        audio.currentTime = start;
+        return;
+      }
     }
   }
 

@@ -151,6 +151,10 @@ export default function SessionPage() {
             case "audio_end":
               playerRef.current?.endUtterance();
               break;
+            case "barge_in":
+              // Менеджер перебил ИИ: сбрасываем недоигранный буфер
+              playerRef.current?.flush();
+              break;
             case "error":
               setErrorMsg(msg.message || "Ошибка сервера");
               break;

@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     elevenlabs_tts_model: str = "eleven_flash_v2_5"
     elevenlabs_stt_model: str = "scribe_v2_realtime"
 
+    # Barge-in: менеджер может перебить ИИ голосом — воспроизведение
+    # обрывается. Рубильник на случай ложных срабатываний от эха на проде.
+    barge_in_enabled: bool = True
+
     # Инфраструктура (те же значения, что и в Next.js приложении)
     database_url: str = ""
     redis_url: str = ""

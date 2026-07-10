@@ -117,7 +117,9 @@ class TtsWsStream:
         ctx = f"s{next(self._ctx_counter)}"
 
         # Инициализация контекста, текст с flush (генерация без ожидания
-        # буфера) и закрытие контекста — одним махом
+        # буфера) и закрытие контекста — одним махом. close_context уходит
+        # сразу: сервер сам завершит контекст после генерации (isFinal),
+        # отдельного закрытия при отмене не требуется.
         await ws.send(json.dumps({
             "text": " ",
             "context_id": ctx,
@@ -127,19 +129,32 @@ class TtsWsStream:
         await ws.send(json.dumps({"context_id": ctx, "close_context": True}))
 
         total = 0
-        while True:
-            raw = await asyncio.wait_for(ws.recv(), timeout=WS_RECV_TIMEOUT)
-            msg = json.loads(raw)
-            # Сообщения других контекстов (запоздавшие) пропускаем
-            if msg.get("contextId") not in (ctx, None):
-                continue
-            audio_b64 = msg.get("audio")
-            if audio_b64:
-                chunk = base64.b64decode(audio_b64)
-                total += len(chunk)
-                yield chunk
-            if msg.get("isFinal"):
-                break
+        try:
+            while True:
+                raw = await asyncio.wait_for(ws.recv(), timeout=WS_RECV_TIMEOUT)
+                msg = json.loads(raw)
+                # Сообщения других контекстов (в т.ч. запоздавшие чанки
+                # брошенного при отмене контекста) пропускаем
+                if msg.get("contextId") not in (ctx, None):
+                    continue
+                audio_b64 = msg.get("audio")
+                if audio_b64:
+                    chunk = base64.b64decode(audio_b64)
+                    total += len(chunk)
+                    yield chunk
+                if msg.get("isFinal"):
+                    break
+        except (asyncio.CancelledError, GeneratorExit):
+            # Пайплайн отменён (склейка фразы или barge-in): бросаем чтение,
+            # соединение остаётся живым для следующих предложений. Квота на
+            # уже отправленный текст сгорает (у ElevenLabs нет abort), но
+            # неотправленные предложения ходa синтезироваться не будут.
+            logger.info(
+                "TTS: синтез контекста %s брошен (отмена, получено %d байт)",
+                ctx,
+                total,
+            )
+            raise
 
         logger.info("TTS отстримил %d байт аудио (WS)", total)
 

@@ -60,6 +60,14 @@ _STATEMENT_ENDINGS = (".", "…")
 # семантический коммит просто не сработает и фразу зафиксирует VAD-фолбэк.
 _MIN_VOICE_RMS = 500.0
 
+# Barge-in: порог выше обычного, чтобы остатки эха ответа ИИ (после
+# эхоподавления браузера) не принимались за голос менеджера
+_BARGE_IN_RMS = 1000.0
+
+# Barge-in: сколько подряд должен длиться громкий голос, чтобы считаться
+# осознанным перебиванием (одиночный стук/кашель не считается)
+_BARGE_IN_MIN_VOICE_SECS = 0.30
+
 
 def _chunk_rms(data: bytes) -> float:
     """RMS-энергия чанка PCM16 (моно)."""
@@ -91,13 +99,26 @@ _ERROR_TYPES = {
 # Тип колбэка: получает финальный распознанный текст
 OnFinal = Callable[[str], Awaitable[None]]
 
+# Тип колбэка-уведомления о голосовой активности (без аргументов)
+OnVoiceEvent = Callable[[], Awaitable[None]]
+
 
 class ElevenLabsSTT:
     """Управляет одной потоковой сессией распознавания речи."""
 
-    def __init__(self, api_key: str, on_final: OnFinal) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        on_final: OnFinal,
+        on_voice_resumed: Optional[OnVoiceEvent] = None,
+        on_sustained_voice: Optional[OnVoiceEvent] = None,
+    ) -> None:
         self._api_key = api_key
         self._on_final = on_final
+        # Голос появился после коммита (для отмены пайплайна со склейкой)
+        self._on_voice_resumed = on_voice_resumed
+        # Устойчивый громкий голос ≥ _BARGE_IN_MIN_VOICE_SECS (для barge-in)
+        self._on_sustained_voice = on_sustained_voice
         self._ws: Optional[websockets.ClientConnection] = None
         self._task: Optional[asyncio.Task] = None
         self._closed = False
@@ -106,6 +127,16 @@ class ElevenLabsSTT:
         self._partial_text = ""
         self._last_voice_ts = 0.0     # когда в аудио последний раз был голос
         self._commit_sent = False     # принудительный commit уже отправлен
+
+        # Гейт по голосу: был ли голос во входящем аудио с прошлого коммита.
+        # Коммит без голоса — фантом (пере-декодирование остатка буфера
+        # ElevenLabs у границы предыдущего коммита), его отбрасываем.
+        self._voice_since_commit = False
+        self._peak_rms = 0.0          # пиковый RMS с прошлого коммита (в логи)
+
+        # Детектор устойчивого громкого голоса для barge-in
+        self._loud_since: Optional[float] = None
+        self._sustained_fired = False
 
     async def start(self) -> None:
         """Открывает WebSocket-соединение и запускает чтение результатов."""
@@ -158,10 +189,30 @@ class ElevenLabsSTT:
                 elif msg_type == "committed_transcript":
                     self._partial_text = ""
                     self._commit_sent = False
+                    had_voice = self._voice_since_commit
+                    peak_rms = self._peak_rms
+                    self._voice_since_commit = False
+                    self._peak_rms = 0.0
                     text = (msg.get("text") or "").strip()
-                    if text:
-                        logger.info("STT финальный результат: %s", text)
-                        await self._on_final(text)
+                    if not text:
+                        continue
+                    if not had_voice:
+                        # С прошлого коммита во входящем аудио не было голоса —
+                        # это пере-декодированный остаток буфера, не речь
+                        logger.info(
+                            "STT: отброшен фантомный коммит (пик RMS %.0f): %s",
+                            peak_rms,
+                            text,
+                        )
+                        continue
+                    # Пиковый RMS в логе позволяет по проду отличить реальную
+                    # речь от эха ответа ИИ, просочившегося через AEC
+                    logger.info(
+                        "STT финальный результат (пик RMS %.0f): %s",
+                        peak_rms,
+                        text,
+                    )
+                    await self._on_final(text)
                 elif msg_type in _ERROR_TYPES:
                     logger.error(
                         "STT ошибка (%s): %s", msg_type, msg.get("error")
@@ -211,14 +262,44 @@ class ElevenLabsSTT:
         except websockets.ConnectionClosed:
             pass
 
+    @property
+    def seconds_since_voice(self) -> float:
+        """Сколько секунд назад во входящем аудио последний раз был голос."""
+        return time.monotonic() - self._last_voice_ts
+
     async def push_audio(self, data: bytes) -> None:
         """Передаёт очередной аудио-чанк в распознавание."""
         if self._closed or self._ws is None:
             return
 
         # Локальный детектор голоса/тишины для семантического коммита
-        if _chunk_rms(data) > _MIN_VOICE_RMS:
-            self._last_voice_ts = time.monotonic()
+        rms = _chunk_rms(data)
+        now = time.monotonic()
+        if rms > self._peak_rms:
+            self._peak_rms = rms
+        if rms > _MIN_VOICE_RMS:
+            self._last_voice_ts = now
+            if not self._voice_since_commit:
+                self._voice_since_commit = True
+                # Голос после тишины: даём main.py шанс отменить пайплайн,
+                # если менеджер продолжил разрезанную коммитом фразу
+                if self._on_voice_resumed is not None:
+                    await self._on_voice_resumed()
+
+        # Устойчивый громкий голос — сигнал barge-in (перебивание ИИ)
+        if rms > _BARGE_IN_RMS:
+            if self._loud_since is None:
+                self._loud_since = now
+            elif (
+                not self._sustained_fired
+                and now - self._loud_since >= _BARGE_IN_MIN_VOICE_SECS
+            ):
+                self._sustained_fired = True
+                if self._on_sustained_voice is not None:
+                    await self._on_sustained_voice()
+        else:
+            self._loud_since = None
+            self._sustained_fired = False
 
         message = {
             "message_type": "input_audio_chunk",
