@@ -49,7 +49,11 @@ WS_INACTIVITY_TIMEOUT = 180
 # Таймаут ожидания очередного сообщения при синтезе одного предложения (сек)
 WS_RECV_TIMEOUT = 15
 
-VOICE_SETTINGS = {"stability": 0.5, "similarity_boost": 0.75}
+# stability 0.65: голос Marina интонационно богатый, а каждое предложение
+# синтезируется отдельным контекстом — при 0.5 эмоциональная окраска
+# «прыгала» между предложениями и звучала неестественно для сдержанного
+# персонажа. Выше 0.7 голос становится монотонным.
+VOICE_SETTINGS = {"stability": 0.65, "similarity_boost": 0.75}
 
 # Общий HTTP-клиент на модуль: переиспользует TCP/TLS-соединения
 _client = httpx.AsyncClient(timeout=60)
@@ -188,10 +192,7 @@ def _request_parts(text: str, stream: bool) -> tuple[str, dict, dict]:
     payload = {
         "text": text,
         "model_id": settings.elevenlabs_tts_model,
-        "voice_settings": {
-            "stability": 0.5,
-            "similarity_boost": 0.75,
-        },
+        "voice_settings": VOICE_SETTINGS,
     }
     headers = {"xi-api-key": settings.elevenlabs_api_key}
     return url, payload, headers

@@ -59,6 +59,11 @@ _ECHO_GRACE_SECS = 1.0
 _NOISE_RESTART_SILENCE_SECS = 1.2
 _NOISE_RESTART_POLL_SECS = 0.5
 
+# Barge-in по partial: сколько секунд назад во входящем аудио должен был
+# звучать реальный голос, чтобы partial-транскрипт считался речью менеджера,
+# а не галлюцинацией Scribe на тишине
+_PARTIAL_VOICE_MAX_AGE_SECS = 1.5
+
 # Пунктуация, отбрасываемая при нормализации слов для фильтра фантомов
 _WORD_STRIP_CHARS = ".,!?…:;«»\"'()—–-"
 
@@ -220,6 +225,11 @@ class TurnManager:
         в звучащем ответе ИИ, — менеджер действительно говорит.
         """
         if not self.barge_in_enabled or not self._ai_speaking():
+            return
+        # Scribe галлюцинирует связный текст на тишине (пик RMS единицы),
+        # а гейт голоса фильтрует только committed-транскрипты. Partial без
+        # недавнего реального голоса во входящем аудио — не перебивание.
+        if self.stt is None or self.stt.seconds_since_voice > _PARTIAL_VOICE_MAX_AGE_SECS:
             return
         words = _norm_words(text)
         if len(words) < 2:
