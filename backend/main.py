@@ -248,6 +248,24 @@ class TurnManager:
             # отбрасывать входящие чанки даже при рассинхронизации таймеров.
             await safe_send(self.ws, {"type": "barge_in"})
 
+    async def on_stt_failed(self) -> None:
+        """STT умер и не восстановился — предупреждаем менеджера.
+
+        Иначе он продолжит говорить в пустоту: сессия и TTS живы,
+        но распознавание речи больше не работает.
+        """
+        logger.error(
+            "Сессия %s: распознавание речи остановлено окончательно",
+            self.session_id,
+        )
+        await safe_send(
+            self.ws,
+            {
+                "type": "error",
+                "message": "Распознавание речи прервано — перезапустите разговор",
+            },
+        )
+
     def _ai_speaking(self) -> bool:
         """Ответ ИИ генерируется или предположительно ещё звучит у клиента."""
         if (
@@ -616,6 +634,7 @@ async def session_ws(ws: WebSocket, session_id: str):
         on_voice_resumed=manager.on_voice_resumed,
         on_sustained_voice=manager.on_sustained_voice,
         on_partial=manager.on_partial,
+        on_fatal=manager.on_stt_failed,
     )
     manager.stt = stt
     stt_started = False
