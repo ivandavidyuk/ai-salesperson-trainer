@@ -88,13 +88,6 @@ export default function SessionPage() {
     }
   }
 
-  // Клиент видит голос раньше STT: сразу глушим звук и просим сервер
-  // отменить генерацию. Серверное сообщение barge_in подтвердит границу.
-  function handleBargeIn() {
-    playerRef.current?.interrupt();
-    sendWs({ type: "interrupt" });
-  }
-
   // "Начать разговор": создаём сессию, подключаем WebSocket, микрофон и плеер
   async function handleStart() {
     setBusy(true);
@@ -137,15 +130,9 @@ export default function SessionPage() {
         try {
           const recorder = new MicRecorder();
           recorderRef.current = recorder;
-          await recorder.start(
-            (base64) => {
-              sendWs({ type: "audio_chunk", data: base64 });
-            },
-            {
-              onBargeIn: handleBargeIn,
-              isAiSpeaking: () => playerRef.current?.isPlaying() ?? false,
-            },
-          );
+          await recorder.start((base64) => {
+            sendWs({ type: "audio_chunk", data: base64 });
+          });
         } catch {
           setErrorMsg(
             "Нет доступа к микрофону. Разрешите доступ в браузере и начните заново."
@@ -167,7 +154,6 @@ export default function SessionPage() {
             case "barge_in":
               // Подтверждение сервера: хвост отменённого ответа уже не придёт
               playerRef.current?.confirmInterrupt();
-              recorderRef.current?.resetBargeIn();
               break;
             case "error":
               setErrorMsg(msg.message || "Ошибка сервера");

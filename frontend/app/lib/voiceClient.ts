@@ -29,36 +29,6 @@ function base64ToBytes(base64: string): Uint8Array {
 // Целевая частота дискретизации, которую ждёт STT
 const TARGET_SAMPLE_RATE = 16000;
 
-// RMS-энергия PCM16-чанка (моно)
-function pcmRms(buffer: ArrayBuffer): number {
-  const samples = new Int16Array(buffer);
-  if (samples.length === 0) return 0;
-  let acc = 0;
-  for (let i = 0; i < samples.length; i++) {
-    acc += samples[i] * samples[i];
-  }
-  return Math.sqrt(acc / samples.length);
-}
-
-// Клиентский детектор работает на сигнале после браузерного AEC, который
-// во время воспроизведения ответа ИИ приглушает голос менеджера на десятки
-// децибел (double-talk suppression). Поэтому порог намного ниже серверного,
-// а для срабатывания достаточно двух громких чанков (~400 мс речи).
-const CLIENT_BARGE_IN_RMS = 250;
-const CLIENT_BARGE_IN_WINDOW_MS = 1000;
-const CLIENT_BARGE_IN_MIN_LOUD_CHUNKS = 2;
-
-// Пауза плеера между предложениями ответа, в течение которой ИИ всё ещё
-// считается говорящим (иначе детектор barge-in мигал бы на каждом стыке)
-const PLAYBACK_GAP_GRACE_MS = 600;
-
-export interface MicRecorderOptions {
-  /** Вызывается, когда менеджер говорит поверх ответа ИИ. */
-  onBargeIn?: () => void;
-  /** Возвращает true, пока ответ ИИ действительно воспроизводится. */
-  isAiSpeaking?: () => boolean;
-}
-
 // --- Захват микрофона ------------------------------------------------------
 
 export class MicRecorder {
@@ -67,17 +37,9 @@ export class MicRecorder {
   private source: MediaStreamAudioSourceNode | null = null;
   private node: AudioWorkletNode | null = null;
   private paused = false;
-  private bargeInOptions: MicRecorderOptions = {};
-  private loudChunkTimes: number[] = [];
-  private bargeInFired = false;
 
   // Запускает захват. onPcm вызывается с base64-строкой PCM16 на каждый блок.
-  async start(
-    onPcm: (base64: string) => void,
-    options?: MicRecorderOptions,
-  ): Promise<void> {
-    this.bargeInOptions = options ?? {};
-    this.resetBargeIn();
+  async start(onPcm: (base64: string) => void): Promise<void> {
     // Запрашиваем микрофон (моно, с шумо-/эхоподавлением)
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -105,9 +67,7 @@ export class MicRecorder {
     // Получаем готовые PCM16-буферы из ворклета
     this.node.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
       if (this.paused) return;
-      const buffer = event.data;
-      onPcm(arrayBufferToBase64(buffer));
-      this._maybeBargeIn(buffer);
+      onPcm(arrayBufferToBase64(event.data));
     };
 
     // Ворклет ничего не выводит в звук (process не пишет output),
@@ -124,48 +84,6 @@ export class MicRecorder {
   // Возобновляет отправку аудио
   resume(): void {
     this.paused = false;
-  }
-
-  /** Сбрасывает состояние детектора после подтверждённого перебивания. */
-  resetBargeIn(): void {
-    this.loudChunkTimes = [];
-    this.bargeInFired = false;
-  }
-
-  private _maybeBargeIn(buffer: ArrayBuffer): void {
-    const { onBargeIn, isAiSpeaking } = this.bargeInOptions;
-    if (!onBargeIn) return;
-
-    const now = performance.now();
-    // Старые чанки выходят из окна естественно; накопленное между
-    // предложениями ответа (короткие паузы плеера) не обнуляется.
-    this.loudChunkTimes = this.loudChunkTimes.filter(
-      (timestamp) => now - timestamp <= CLIENT_BARGE_IN_WINDOW_MS,
-    );
-
-    if (!isAiSpeaking?.()) {
-      // ИИ молчит: обычная реплика менеджера не должна копить громкие
-      // чанки, а сработавший детектор перевооружается к следующему ответу
-      this.bargeInFired = false;
-      return;
-    }
-
-    const rms = pcmRms(buffer);
-    if (rms > CLIENT_BARGE_IN_RMS) {
-      this.loudChunkTimes.push(now);
-    }
-    // Виден в DevTools при уровне логов Verbose — для подбора порога
-    console.debug(
-      `[barge-in] rms=${Math.round(rms)} loud=${this.loudChunkTimes.length}/${CLIENT_BARGE_IN_MIN_LOUD_CHUNKS} fired=${this.bargeInFired}`,
-    );
-
-    if (
-      !this.bargeInFired
-      && this.loudChunkTimes.length >= CLIENT_BARGE_IN_MIN_LOUD_CHUNKS
-    ) {
-      this.bargeInFired = true;
-      onBargeIn();
-    }
   }
 
   // Полностью останавливает захват и освобождает ресурсы
@@ -223,10 +141,6 @@ export class AudioPlayer {
   // appendBuffer мог уже выполняться в момент flush — после updateend нужно
   // перескочить за добавленный хвост отменённого ответа.
   private seekToBufferEndAfterUpdate = false;
-  // Когда плеер последний раз реально играл: короткая пауза между
-  // предложениями ответа (следующее ещё генерируется) не считается
-  // «ИИ замолчал» — иначе детектор barge-in мигал бы вместе с ней.
-  private lastActivePlaybackAt = 0;
 
   // --- Фолбэк: сборка Blob по предложениям ---
   private pending: Uint8Array[] = [];
@@ -281,44 +195,10 @@ export class AudioPlayer {
     this.ignoreIncomingUntil = 0;
   }
 
-  /** Идёт ли воспроизведение ответа ИИ (для клиентского barge-in). */
-  isPlaying(): boolean {
-    const now = performance.now();
-    if (now < this.ignoreIncomingUntil) return false;
-    if (this._isActivelyPlaying()) {
-      this.lastActivePlaybackAt = now;
-      return true;
-    }
-    // Грация на межпредложенческие паузы стрима (буфер доигран,
-    // следующее предложение ещё синтезируется)
-    return now - this.lastActivePlaybackAt <= PLAYBACK_GAP_GRACE_MS;
-  }
-
-  private _isActivelyPlaying(): boolean {
-    if (this.useMse) {
-      const audio = this.audio;
-      if (!audio) return this.appendQueue.length > 0;
-      const sb = this.sourceBuffer;
-      if (!audio.paused && sb) {
-        for (let i = 0; i < sb.buffered.length; i++) {
-          if (
-            audio.currentTime >= sb.buffered.start(i) - 0.05
-            && audio.currentTime < sb.buffered.end(i) - 0.05
-          ) {
-            return true;
-          }
-        }
-      }
-      return this.appendQueue.length > 0 || Boolean(sb?.updating);
-    }
-    return this.playing || this.queue.length > 0 || this.pending.length > 0;
-  }
-
   // Сбрасывает недоигранный буфер, оставляя плеер готовым к следующему ответу.
   private _flushPlayback(): void {
     this.appendQueue = [];
     this.pending = [];
-    this.lastActivePlaybackAt = 0;
     if (this.useMse) {
       const sb = this.sourceBuffer;
       const audio = this.audio;

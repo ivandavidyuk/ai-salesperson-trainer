@@ -67,6 +67,23 @@ _PARTIAL_VOICE_MAX_AGE_SECS = 1.5
 # Пунктуация, отбрасываемая при нормализации слов для фильтра фантомов
 _WORD_STRIP_CHARS = ".,!?…:;«»\"'()—–-"
 
+# Поддакивания: короткие подтверждения, которыми менеджер показывает, что
+# слушает, — они не должны перебивать ИИ и не должны порождать его ответ.
+# Осознанно НЕ включаем слова-начала реальных перебиваний («извините»,
+# «секунду», «подождите», «стоп», «простите») — они несут смысл.
+_BACKCHANNEL_WORDS = {
+    "угу", "ага", "аг", "мгм", "угм", "ммхм",
+    "мм", "ммм", "м", "хм", "хмм",
+    "э", "эм", "ээ",
+    "да", "так", "ну", "вот",
+    "ок", "окей",
+    "понятно", "ясно",
+}
+
+# Barge-in разрешён только при наличии осмысленного (не-поддакивающего)
+# содержания в распознанной речи — столько осмысленных слов минимум
+_BARGE_IN_MIN_MEANINGFUL_WORDS = 1
+
 
 def _norm_words(text: str) -> list[str]:
     """Нормализует текст в список слов без пунктуации и регистра."""
@@ -76,6 +93,24 @@ def _norm_words(text: str) -> list[str]:
         if word:
             words.append(word)
     return words
+
+
+def _is_backchannel_token(word: str) -> bool:
+    """Токен целиком поддакивающий (в т.ч. повтор через дефис: «да-да»)."""
+    parts = [p for p in word.split("-") if p]
+    if not parts:
+        return False
+    return all(p in _BACKCHANNEL_WORDS for p in parts)
+
+
+def _meaningful_words(text: str) -> list[str]:
+    """Слова с осмысленным содержанием (без поддакиваний)."""
+    return [w for w in _norm_words(text) if not _is_backchannel_token(w)]
+
+
+def _is_backchannel_only(text: str) -> bool:
+    """Реплика состоит только из поддакиваний (непустая, но без смысла)."""
+    return bool(_norm_words(text)) and not _meaningful_words(text)
 
 
 def split_first_sentence(text: str) -> tuple[str | None, str]:
@@ -170,6 +205,17 @@ class TurnManager:
         """Обрабатывает зафиксированную реплику менеджера (не блокируя STT)."""
         if self._is_phantom(text):
             return
+        # Поддакивание, наложенное на речь ИИ, — не реплика: не перебиваем
+        # (см. on_partial) и не порождаем ответ. Отбрасываем только при
+        # наложении на активную речь ИИ (_ai_speaking): одиночное «да» при
+        # молчащем ИИ — это ответ на вопрос, его сохраняем.
+        if _is_backchannel_only(text) and self._ai_speaking():
+            logger.info(
+                "Сессия %s: отброшено поддакивание поверх речи ИИ: %s",
+                self.session_id,
+                text,
+            )
+            return
         self._cancel_restart_timer()
 
         # Склейка: stash — фрагмент отменённого хода, pending — реплики,
@@ -213,16 +259,21 @@ class TurnManager:
         self.restart_task = asyncio.create_task(self._restart_if_noise())
 
     async def on_sustained_voice(self) -> None:
-        """Устойчивый громкий голос во время речи ИИ — barge-in по RMS."""
-        await self._maybe_barge_in("RMS")
+        """Устойчивый громкий голос во время речи ИИ.
+
+        Больше не перебивает сам по себе: по громкости не отличить
+        поддакивание от осмысленной речи. Решение принимает on_partial
+        по распознанным словам.
+        """
+        return
 
     async def on_partial(self, text: str) -> None:
-        """Barge-in по распознанным словам: надёжнее RMS-детектора.
+        """Barge-in по распознанным словам — единственный триггер перебивания.
 
-        Эхоподавление браузера приглушает голос менеджера во время
-        воспроизведения, и энергетический детектор может не добрать до
-        порога. Если ElevenLabs распознал несколько слов, которых нет
-        в звучащем ответе ИИ, — менеджер действительно говорит.
+        Громкость (RMS) сама по себе больше не перебивает: «угу»/«ага» по
+        энергии неотличимы от осмысленной речи. Перебиваем только когда
+        распознано осмысленное (не-поддакивающее) слово, которого нет
+        в звучащем ответе ИИ. Поддакивания смысла не дают — ИИ говорит дальше.
         """
         if not self.barge_in_enabled or not self._ai_speaking():
             return
@@ -231,22 +282,21 @@ class TurnManager:
         # недавнего реального голоса во входящем аудио — не перебивание.
         if self.stt is None or self.stt.seconds_since_voice > _PARTIAL_VOICE_MAX_AGE_SECS:
             return
-        words = _norm_words(text)
-        if len(words) < 2:
-            return
-        fresh = [w for w in words if w not in self.reply_words]
-        if not fresh:
-            return  # похоже на эхо собственного ответа ИИ
+        # Осмысленные слова минус эхо собственного ответа ИИ
+        fresh = [w for w in _meaningful_words(text) if w not in self.reply_words]
+        if len(fresh) < _BARGE_IN_MIN_MEANINGFUL_WORDS:
+            return  # только поддакивания/эхо — не перебивание
         await self._maybe_barge_in("partial")
 
     async def on_client_interrupt(self) -> None:
-        """Клиент обнаружил речь менеджера поверх фактического воспроизведения."""
-        interrupted = await self._maybe_barge_in("client")
-        if not interrupted:
-            # Клиент знает реальное состояние AudioPlayer точнее серверной
-            # оценки playback_end. Подтверждаем границу, чтобы он перестал
-            # отбрасывать входящие чанки даже при рассинхронизации таймеров.
-            await safe_send(self.ws, {"type": "barge_in"})
+        """Устаревший путь: клиент больше не шлёт interrupt по громкости.
+
+        Перебивание теперь целиком на стороне сервера (on_partial по словам),
+        а клиент глушит звук только по подтверждённому barge_in. Обработчик
+        оставлен безопасным no-op на случай старого клиента: реагировать на
+        громкость без содержания нельзя — это и есть исходный баг.
+        """
+        return
 
     async def on_stt_failed(self) -> None:
         """STT умер и не восстановился — предупреждаем менеджера.
