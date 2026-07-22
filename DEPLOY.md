@@ -27,15 +27,32 @@ flowchart LR
 
 ---
 
-## Автодеплой (CI/CD)
+## Проверки перед мержем (CI)
+
+Каждый pull request запускает [.github/workflows/ci.yml](.github/workflows/ci.yml):
+типы и ESLint во frontend, `pytest` в backend. Эти проверки стоит держать
+обязательными в правилах защиты ветки `main` — она уезжает прямо в прод.
+
+## Автодеплой (CD)
 
 Каждый push в `main` запускает [.github/workflows/deploy.yml](.github/workflows/deploy.yml):
 
 1. **build** — сборка Docker-образов `ai-trainer-frontend` и `ai-trainer-backend`
    на раннерах GitHub и push в Docker Hub (решает проблему медленного npm на VPS).
-2. **deploy-de** — SSH на DE: `docker compose pull && up -d` в `~/ai-trainer`.
-3. **deploy-ru** — SSH на RU: `git pull`, `docker compose pull && up -d`
-   в `~/ai-salesperson-trainer`.
+2. **deploy-de** — SSH на DE, `~/ai-trainer`.
+3. **deploy-ru** — SSH на RU, `~/ai-salesperson-trainer` (плюс `git pull`).
+
+Оба деплой-шага делают одно и то же: логинятся в Docker Hub, тянут **только
+образ приложения** и проверяют, что контейнер поднялся именно на свежем образе.
+
+> Почему так. Раньше серверы ходили в Docker Hub анонимно и тянули все образы
+> сразу. Анонимные загрузки лимитированы: после нескольких выкаток подряд
+> Hub ответил `429`, pull прервался вместе с образом приложения, `up -d`
+> оставил работать старый контейнер — **а workflow отрапортовал успех**.
+> Отсюда три правила: авторизация, pull только нужного образа (`caddy`,
+> `postgres` и `redis` меняются раз в год, но тратят лимит) и явная сверка
+> ID запущенного образа со свежим тегом. Молчаливо «успешный» деплой опаснее
+> упавшего.
 
 Для обновления продакшена достаточно `git push` — руками на серверы
 ходить не нужно.
@@ -86,7 +103,7 @@ cd ~/ai-trainer && docker compose pull && docker compose up -d
 
 Файлы окружения:
 
-- `.env` (корень) — по [.env.prod.example](.env.prod.example): `DOMAIN`,
+- `.env` (корень) — по [.env.production.example](.env.production.example): `DOMAIN`,
   `ACME_EMAIL`, `POSTGRES_*`, `BACKEND_UPSTREAM=<DE_IP>:8000`,
   `DOCKERHUB_USER`.
 - `frontend/.env` — по [frontend/.env.production.example](frontend/.env.production.example);
@@ -123,18 +140,34 @@ systemctl status docker-user-firewall.service
 
 1. Workflow в GitHub Actions зелёный (вкладка Actions).
 2. https://5.129.206.63.nip.io открывается, логин работает.
-3. «Начать разговор» → доступ к микрофону → фраза → голосовой ответ.
-4. Логи backend на DE: `cd ~/ai-trainer && docker compose logs -f backend`
+3. После входа открывается главная: приветствие, «Совет дня», статистика.
+4. «Начать тренировку» → доступ к микрофону → фраза → голосовой ответ.
+5. Логи backend на DE: `cd ~/ai-trainer && docker compose logs -f backend`
    (подключение к Postgres на RU, локальный Redis, тайминги STT/LLM/TTS).
 
-## Создать пользователя для тестировщика
+## Наполнение данными
 
-На RU-сервере:
+Все команды — на RU-сервере, из `~/ai-salesperson-trainer`. Миграции Prisma
+накатываются автоматически при старте контейнера, наливать данные нужно руками.
 
 ```bash
-cd ~/ai-salesperson-trainer
-docker compose -f docker-compose.prod.yml exec frontend npx ts-node create-user.ts
+# 1. Советы дня и мотивации — ОБЯЗАТЕЛЬНО, иначе блок на главной пуст
+docker compose -f docker-compose.prod.yml exec frontend npm run seed:content
+
+# 2. Пользователь (email, пароль, имя, фамилия)
+docker compose -f docker-compose.prod.yml exec frontend npm run create-user
+
+# 3. Демо-аккаунт с историей разговоров и оценками — для показов
+docker compose -f docker-compose.prod.yml exec frontend npm run seed:demo
 ```
+
+`seed:demo` печатает сгенерированный пароль один раз. Чтобы задать свой:
+`... exec -e DEMO_PASSWORD=... frontend npm run seed:demo`. Скрипт идемпотентный
+и трогает только демо-аккаунт.
+
+> Разбора разговоров пока нет, поэтому у настоящих разговоров не будет оценок —
+> блоки «Прогресс» и «средняя оценка» покажут пустое состояние. Демо-аккаунт
+> существует именно для того, чтобы показывать заполненный интерфейс.
 
 ## Полезные команды
 

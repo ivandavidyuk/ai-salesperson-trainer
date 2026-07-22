@@ -1,6 +1,6 @@
 // Демо-данные для показа продукта: аккаунт с заполненной главной.
-// Запуск: npx ts-node seed-demo.ts
-//         DEMO_PASSWORD=... npx ts-node seed-demo.ts
+// Запуск: npm run seed:demo
+//         DEMO_PASSWORD=... npm run seed:demo
 //
 // Зачем: разбора звонков ещё нет, поэтому у реальных разговоров нет оценок,
 // и блоки «Статистика» и «Прогресс» выглядели бы пустыми. Скрипт создаёт
@@ -296,7 +296,7 @@ async function main() {
   } else {
     console.log(`  пароль: ${password}`);
     console.log("\nПароль сгенерирован случайно и показан один раз — сохраните его.");
-    console.log("Чтобы задать свой: DEMO_PASSWORD=... npx ts-node seed-demo.ts");
+    console.log("Чтобы задать свой: DEMO_PASSWORD=... npm run seed:demo");
   }
 }
 

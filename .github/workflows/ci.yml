@@ -43,6 +43,9 @@ jobs:
       - name: Проверка типов
         run: npx tsc --noEmit
 
+      - name: Линт
+        run: npm run lint
+
   backend:
     name: Backend — тесты
     runs-on: ubuntu-latest
@@ -57,12 +60,14 @@ jobs:
           # 3.11–3.12 рекомендованы: на более новых у asyncpg может не быть wheel
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
 
       - name: Установка зависимостей
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest
+          pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Тесты
         # Все настройки в core/config.py имеют значения по умолчанию,
