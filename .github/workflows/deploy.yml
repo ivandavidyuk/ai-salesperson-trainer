@@ -51,15 +51,33 @@ jobs:
     steps:
       - name: Pull & restart backend
         uses: appleboy/ssh-action@v1
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           host: ${{ secrets.DE_HOST }}
           username: root
           password: ${{ secrets.DE_SSH_PASSWORD }}
           script_stop: true
+          envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
           script: |
+            set -euo pipefail
             cd ~/ai-trainer
-            docker compose pull
+            # Авторизация в Docker Hub: анонимные загрузки ограничены и при
+            # 429 pull молча прерывается, оставляя работать старый образ.
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            # Только образ приложения: redis и прочая инфраструктура меняются
+            # редко, но их загрузка тратит лимит и может уронить весь pull.
+            docker compose pull backend
             docker compose up -d
+            # Контейнер должен работать именно на свежескачанном образе.
+            # Без этой проверки неудачный деплой выглядел бы успешным.
+            running=$(docker inspect -f '{{.Image}}' "$(docker compose ps -q backend)")
+            latest=$(docker image inspect -f '{{.Id}}' "$DOCKERHUB_USERNAME/ai-trainer-backend:latest")
+            if [ "$running" != "$latest" ]; then
+              echo "Ошибка: backend работает на устаревшем образе"
+              exit 1
+            fi
             docker image prune -f
 
   deploy-ru:
@@ -69,14 +87,32 @@ jobs:
     steps:
       - name: Pull & restart stack
         uses: appleboy/ssh-action@v1
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           host: ${{ secrets.RU_HOST }}
           username: root
           password: ${{ secrets.RU_SSH_PASSWORD }}
           script_stop: true
+          envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
           script: |
+            set -euo pipefail
             cd ~/ai-salesperson-trainer
             git pull
-            docker compose -f docker-compose.prod.yml pull
+            # Авторизация в Docker Hub: анонимные загрузки ограничены и при
+            # 429 pull молча прерывается, оставляя работать старый образ.
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            # Только образ приложения: caddy:2 и postgres:16 меняются редко,
+            # но их загрузка тратит лимит и может уронить весь pull.
+            docker compose -f docker-compose.prod.yml pull frontend
             docker compose -f docker-compose.prod.yml up -d
+            # Контейнер должен работать именно на свежескачанном образе.
+            # Без этой проверки неудачный деплой выглядел бы успешным.
+            running=$(docker inspect -f '{{.Image}}' "$(docker compose -f docker-compose.prod.yml ps -q frontend)")
+            latest=$(docker image inspect -f '{{.Id}}' "$DOCKERHUB_USERNAME/ai-trainer-frontend:latest")
+            if [ "$running" != "$latest" ]; then
+              echo "Ошибка: frontend работает на устаревшем образе"
+              exit 1
+            fi
             docker image prune -f
