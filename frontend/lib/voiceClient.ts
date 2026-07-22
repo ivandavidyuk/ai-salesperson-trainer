@@ -145,10 +145,12 @@ export class AudioPlayer {
   // appendBuffer мог уже выполняться в момент flush — после updateend нужно
   // перескочить за добавленный хвост отменённого ответа.
   private seekToBufferEndAfterUpdate = false;
-  // Когда плеер последний раз реально играл. Между предложениями ответа
-  // бывает короткая пауза (следующее ещё синтезируется) — без этой отметки
-  // индикатор «Говорит клиент» мигал бы на каждом стыке.
+  // Когда позиция воспроизведения последний раз реально сдвинулась. Между
+  // предложениями ответа бывает короткая пауза (следующее ещё синтезируется) —
+  // без этой отметки индикатор «Говорит клиент» мигал бы на каждом стыке.
   private lastActivePlaybackAt = 0;
+  // Позиция на прошлом timeupdate — чтобы отличить продвижение от застревания
+  private lastPlaybackTime = -1;
 
   // --- Фолбэк: сборка Blob по предложениям ---
   private pending: Uint8Array[] = [];
@@ -212,22 +214,27 @@ export class AudioPlayer {
 
   private _isActivelyPlaying(): boolean {
     if (this.useMse) {
-      const audio = this.audio;
-      if (!audio) return this.appendQueue.length > 0;
-      const sb = this.sourceBuffer;
-      if (!audio.paused && sb) {
-        for (let i = 0; i < sb.buffered.length; i++) {
-          if (
-            audio.currentTime >= sb.buffered.start(i) - 0.05 &&
-            audio.currentTime < sb.buffered.end(i) - 0.05
-          ) {
-            return true;
-          }
-        }
-      }
-      return this.appendQueue.length > 0 || Boolean(sb?.updating);
+      // По геометрии буфера судить нельзя: MediaSource не ставит элемент на
+      // паузу между ответами, а buffered.end понемногу уползает вперёд от
+      // реально доигранного — к середине разговора «ИИ говорит» залипало
+      // навсегда. Факт речи даёт только продвижение позиции (см. timeupdate),
+      // здесь остаётся начало ответа: звук ещё не пошёл, но чанки уже пришли.
+      return this.appendQueue.length > 0 || Boolean(this.sourceBuffer?.updating);
     }
     return this.playing || this.queue.length > 0 || this.pending.length > 0;
+  }
+
+  // Позиция сдвинулась — значит звук идёт на самом деле. Застрявшее
+  // воспроизведение timeupdate не шлёт, и грация спокойно истечёт.
+  private _notePlaybackProgress(): void {
+    const audio = this.audio;
+    // На паузе timeupdate приходит только от нашего же seek (flush после
+    // перебивания) — это не речь
+    if (!audio || audio.paused) return;
+    if (audio.currentTime > this.lastPlaybackTime) {
+      this.lastPlaybackTime = audio.currentTime;
+      this.lastActivePlaybackAt = performance.now();
+    }
   }
 
   /** Сервер подтвердил границу отменённого ответа — можно принимать следующий. */
@@ -278,6 +285,8 @@ export class AudioPlayer {
     this.destroyed = true;
     this.ignoreIncomingUntil = 0;
     this.seekToBufferEndAfterUpdate = false;
+    this.lastActivePlaybackAt = 0;
+    this.lastPlaybackTime = -1;
     // MSE-путь
     this.appendQueue = [];
     if (this.audio) {
@@ -309,6 +318,8 @@ export class AudioPlayer {
     this.mediaSource = new MediaSource();
     this.objectUrl = URL.createObjectURL(this.mediaSource);
     this.audio = new Audio(this.objectUrl);
+    // Единственный надёжный признак речи — что позиция реально растёт
+    this.audio.addEventListener("timeupdate", () => this._notePlaybackProgress());
 
     this.mediaSource.addEventListener("sourceopen", () => {
       if (this.destroyed || !this.mediaSource) return;
