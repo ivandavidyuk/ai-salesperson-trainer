@@ -1,0 +1,4 @@
+# Зависимости для разработки и тестов (в продакшен-образ не попадают).
+# Установка: pip install -r requirements.txt -r requirements-dev.txt
+
+pytest>=8.0

@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import CallAvatar from "@/app/components/CallAvatar";
 import Timer from "@/app/components/Timer";
 import Button from "@/app/components/Button";
-import { AudioPlayer, MicRecorder } from "@/app/lib/voiceClient";
+import { AudioPlayer, MicRecorder } from "@/lib/voiceClient";
 
 type ScreenState = "idle" | "active" | "paused";
 

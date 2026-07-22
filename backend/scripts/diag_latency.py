@@ -5,16 +5,25 @@
      ElevenLabs недоступен с RU IP — без VPN коннект не пройдёт.
   2. Чистую задержку LLM (OpenRouter) на одном промпте.
   3. Чистую задержку TTS (ElevenLabs, модель из настроек).
+
+Запуск из папки backend: python scripts/diag_latency.py
 """
 
 import asyncio
+import os
 import socket
+import sys
 import time
 
 import httpx
 
-from core.config import get_settings
-from services import llm
+# Скрипт лежит в подпапке, а импортирует пакеты бэкенда (core, services).
+# Python кладёт в sys.path каталог самого скрипта, поэтому добавляем корень
+# backend вручную — иначе импорты не разрешатся.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from core.config import get_settings  # noqa: E402
+from services import llm  # noqa: E402
 
 REPEATS = 3
 
