@@ -1,0 +1,70 @@
+# CI: проверки кода на каждый pull request и push в main.
+#
+# Зачем: main напрямую катится в продакшен (см. deploy.yml — сборка образов
+# и рестарт обоих серверов), поэтому тайпчек и тесты должны отработать ДО
+# выкатки. Этот workflow имеет смысл сделать обязательным status check
+# в правилах защиты ветки main.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Frontend — проверка типов
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Установка зависимостей
+        run: npm ci
+
+      - name: Генерация Prisma-клиента
+        # Без сгенерированного клиента tsc не увидит типы PrismaClient
+        # (его импортируют lib/db.ts и create-user.ts). Подключение к БД
+        # здесь не нужно — генерация читает только schema.prisma, но
+        # переменная должна быть определена.
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+      - name: Проверка типов
+        run: npx tsc --noEmit
+
+  backend:
+    name: Backend — тесты
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # 3.11–3.12 рекомендованы: на более новых у asyncpg может не быть wheel
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Установка зависимостей
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+
+      - name: Тесты
+        # Все настройки в core/config.py имеют значения по умолчанию,
+        # поэтому переменные окружения и .env для тестов не нужны.
+        run: pytest tests/ -q
