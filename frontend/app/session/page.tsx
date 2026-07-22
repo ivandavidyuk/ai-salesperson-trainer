@@ -8,8 +8,8 @@
 // Состояния: до старта · соединение · разговор (говорит клиент / слушаю вас)
 // · пауза · нет доступа к микрофону · завершение.
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import CallAvatar from "@/app/components/CallAvatar";
 import Logo from "@/app/components/Logo";
 import SpeakerPill from "@/app/components/SpeakerPill";
@@ -35,8 +35,23 @@ interface Patient {
 // чтобы индикатор переключался незаметно для глаза и не грузил страницу.
 const SPEAKER_POLL_MS = 250;
 
+// useSearchParams требует границы Suspense, иначе страница не соберётся
+// статически. Сам экран — во вложенном компоненте.
 export default function SessionPage() {
+  return (
+    <Suspense>
+      <SessionScreen />
+    </Suspense>
+  );
+}
+
+function SessionScreen() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Параметры из мастера настройки. Их может не быть: на /session можно
+  // зайти напрямую — тогда работает прежний путь с активным пациентом.
+  const chosenPatientId = searchParams.get("patient");
+  const chosenType = searchParams.get("type");
 
   const [screenState, setScreenState] = useState<ScreenState>("idle");
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -52,11 +67,22 @@ export default function SessionPage() {
   const recorderRef = useRef<MicRecorder | null>(null);
   const playerRef = useRef<AudioPlayer | null>(null);
 
-  // Пациент, с которым пойдёт разговор
+  // Пациент, с которым пойдёт разговор: либо выбранный в мастере,
+  // либо первый активный при прямом заходе на страницу
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        if (chosenPatientId) {
+          const res = await fetch("/api/patients");
+          if (!res.ok) return;
+          const list = (await res.json()) as Patient[];
+          const found = list.find((item) => item.id === chosenPatientId);
+          if (found && !cancelled) {
+            setPatient(found);
+            return;
+          }
+        }
         const res = await fetch("/api/patients/active");
         if (!res.ok) return;
         const data = (await res.json()) as Patient;
@@ -68,7 +94,7 @@ export default function SessionPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [chosenPatientId]);
 
   // Таймер идёт во время разговора; на паузе замирает, но не сбрасывается
   useEffect(() => {
@@ -116,9 +142,20 @@ export default function SessionPage() {
     setErrorMsg("");
     setScreenState("connecting");
     try {
-      const res = await fetch("/api/sessions/start", { method: "POST" });
+      const res = await fetch("/api/sessions/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: chosenPatientId ?? undefined,
+          trainingType: chosenType ?? undefined,
+        }),
+      });
       if (!res.ok) {
         if (res.status === 401) router.push("/login");
+        // 400 — выбранный пациент или тип недоступен: объясняем, а не молчим
+        if (res.status === 400) {
+          setErrorMsg("Этот вариант тренировки пока недоступен");
+        }
         setScreenState("idle");
         return;
       }
