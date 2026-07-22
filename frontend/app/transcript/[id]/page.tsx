@@ -1,36 +1,29 @@
 "use client";
 
-// Страница транскрипта завершённой сессии.
-// Загружает сообщения через GET /api/sessions/[id]/transcript и выводит
-// их в хронологическом порядке: реплики менеджера справа, клиента — слева.
+// Расшифровка завершённого разговора: диалог слева, разбор справа.
+// Открывается сразу после звонка и из списка разговоров на главной.
+// Своя топ-панель вместо бокового меню — как на экране звонка.
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import Alert from "@/app/components/Alert";
 import Button from "@/app/components/Button";
-
-interface TranscriptMessage {
-  role: "user" | "assistant";
-  text: string;
-  createdAt: string;
-}
-
-// Форматирует ISO-дату в строку времени HH:MM:SS
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
+import ReviewPanel from "@/app/components/ReviewPanel";
+import TranscriptMessage from "@/app/components/TranscriptMessage";
+import Spinner from "@/app/components/Spinner";
+import { formatConversationDate, formatDuration, initials } from "@/lib/format";
+import { messageOffsetSec, type TranscriptData } from "@/lib/transcript";
 
 export default function TranscriptPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const sessionId = params.id;
 
-  const [messages, setMessages] = useState<TranscriptMessage[]>([]);
+  const [data, setData] = useState<TranscriptData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Загружаем транскрипт при монтировании
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -41,13 +34,19 @@ export default function TranscriptPage() {
             router.push("/login");
             return;
           }
-          setError("Не удалось загрузить транскрипт");
+          if (!cancelled) {
+            setError(
+              res.status === 404
+                ? "Разговор не найден"
+                : "Не удалось загрузить расшифровку"
+            );
+          }
           return;
         }
-        const data = (await res.json()) as TranscriptMessage[];
-        if (!cancelled) setMessages(data);
+        const payload = (await res.json()) as TranscriptData;
+        if (!cancelled) setData(payload);
       } catch {
-        if (!cancelled) setError("Не удалось загрузить транскрипт");
+        if (!cancelled) setError("Не удалось загрузить расшифровку");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -57,70 +56,115 @@ export default function TranscriptPage() {
     };
   }, [sessionId, router]);
 
-  // Выход из аккаунта
-  async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-  }
+  const session = data?.session;
+  const managerName = data
+    ? `${data.manager.firstName} ${data.manager.lastName}`.trim() || null
+    : null;
+
+  // Пациент и тема в одну строку: у старых разговоров может не быть ни того,
+  // ни другого — тогда показываем нейтральный заголовок
+  const title =
+    [session?.patientName, session?.topic].filter(Boolean).join(" · ") ||
+    "Разговор";
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      {/* Верхняя панель с кнопками */}
-      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
-        <h1 className="text-lg font-semibold text-gray-900">Транскрипт разговора</h1>
-        <div className="flex gap-3">
+    <div className="flex h-screen flex-col bg-surface">
+      <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-10">
+        <div className="flex items-center gap-3.5">
+          <Link
+            href="/"
+            className="text-sm text-ink-muted transition-colors hover:text-brand-hover"
+          >
+            ← Назад
+          </Link>
+
+          {session && (
+            <>
+              <span className="h-5 w-px bg-line" aria-hidden="true" />
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand">
+                  {initials(session.patientName)}
+                </span>
+                <div>
+                  <div className="text-sm font-semibold leading-tight text-ink">
+                    {title}
+                  </div>
+                  <div className="text-xs text-ink-subtle">
+                    {formatConversationDate(session.startedAt)} ·{" "}
+                    {formatDuration(session.durationSec)}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex gap-2.5">
+          {/* Выгрузки пока нет — кнопка на месте по макету, но неактивна */}
           <Button
             variant="secondary"
-            onClick={() => router.push("/session")}
-            className="px-4 py-2 text-sm"
+            disabled
+            title="Скоро"
+            className="px-4 py-2 text-[13.5px]"
           >
-            Новый разговор
+            Скачать
           </Button>
           <Button
-            variant="secondary"
-            onClick={handleLogout}
-            className="px-4 py-2 text-sm"
+            onClick={() => router.push("/session")}
+            className="px-4 py-2 text-[13.5px]"
           >
-            Выйти
+            Ещё разговор
           </Button>
         </div>
       </header>
 
-      {/* Список сообщений */}
-      <div className="mx-auto max-w-2xl space-y-4 px-4 py-8">
-        {loading && (
-          <p className="text-center text-gray-500">Загрузка…</p>
-        )}
+      {loading && (
+        <div className="flex flex-1 items-center justify-center text-ink-muted">
+          <Spinner />
+        </div>
+      )}
 
-        {error && <p className="text-center text-red-600">{error}</p>}
+      {!loading && error && (
+        <div className="flex flex-1 items-start justify-center px-10 pt-16">
+          <Alert className="max-w-md">{error}</Alert>
+        </div>
+      )}
 
-        {!loading && !error && messages.length === 0 && (
-          <p className="text-center text-gray-500">В этой сессии пока нет сообщений.</p>
-        )}
-
-        {messages.map((msg, index) => {
-          const isManager = msg.role === "user";
-          return (
-            <div
-              key={index}
-              className={`flex flex-col ${isManager ? "items-end" : "items-start"}`}
-            >
-              <span className="mb-1 text-xs text-gray-500">
-                {isManager ? "Менеджер" : "Клиент"} · {formatTime(msg.createdAt)}
+      {!loading && !error && data && (
+        <div className="flex w-full min-h-0 max-w-[1440px] flex-1 self-center">
+          <div className="min-h-0 flex-[1.7] overflow-y-auto border-r border-line px-9 py-8">
+            <div className="mb-6 text-center">
+              <span className="rounded-full bg-surface-bubble px-3 py-1 font-mono text-[11px] tracking-wide text-ink-placeholder">
+                НАЧАЛО · 00:00
               </span>
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
-                  isManager
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-800 shadow-sm"
-                }`}
-              >
-                {msg.text}
-              </div>
             </div>
-          );
-        })}
-      </div>
-    </main>
+
+            {data.messages.length === 0 && (
+              <p className="text-center text-sm text-ink-muted">
+                В этом разговоре не осталось реплик.
+              </p>
+            )}
+
+            {data.messages.map((message, index) => {
+              const isManager = message.role === "user";
+              return (
+                <TranscriptMessage
+                  key={index}
+                  isManager={isManager}
+                  text={message.text}
+                  speakerName={isManager ? managerName : session?.patientName ?? null}
+                  offsetSec={messageOffsetSec(
+                    data.session.startedAt,
+                    message.createdAt
+                  )}
+                />
+              );
+            })}
+          </div>
+
+          <ReviewPanel review={data.review} />
+        </div>
+      )}
+    </div>
   );
 }
