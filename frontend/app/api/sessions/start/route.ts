@@ -19,10 +19,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Пациент, которого играет ИИ. Пока он один — берём первого активного;
+    // без этой привязки разговоры в истории остались бы без имени и темы.
+    const patient = await prisma.patient.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
     // Создаём запись сессии со статусом active
     const session = await prisma.session.create({
       data: {
         userId: user.sub,
+        patientId: patient?.id ?? null,
         status: "active",
       },
     });

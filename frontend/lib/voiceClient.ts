@@ -29,6 +29,10 @@ function base64ToBytes(base64: string): Uint8Array {
 // Целевая частота дискретизации, которую ждёт STT
 const TARGET_SAMPLE_RATE = 16000;
 
+// Пауза плеера между предложениями ответа, в течение которой ИИ всё ещё
+// считается говорящим (иначе индикатор мигал бы на каждом стыке)
+const PLAYBACK_GAP_GRACE_MS = 600;
+
 // --- Захват микрофона ------------------------------------------------------
 
 export class MicRecorder {
@@ -141,6 +145,10 @@ export class AudioPlayer {
   // appendBuffer мог уже выполняться в момент flush — после updateend нужно
   // перескочить за добавленный хвост отменённого ответа.
   private seekToBufferEndAfterUpdate = false;
+  // Когда плеер последний раз реально играл. Между предложениями ответа
+  // бывает короткая пауза (следующее ещё синтезируется) — без этой отметки
+  // индикатор «Говорит клиент» мигал бы на каждом стыке.
+  private lastActivePlaybackAt = 0;
 
   // --- Фолбэк: сборка Blob по предложениям ---
   private pending: Uint8Array[] = [];
@@ -189,6 +197,39 @@ export class AudioPlayer {
     this._flushPlayback();
   }
 
+  /** Звучит ли сейчас ответ ИИ — для индикатора на экране звонка. */
+  isPlaying(): boolean {
+    const now = performance.now();
+    if (now < this.ignoreIncomingUntil) return false;
+    if (this._isActivelyPlaying()) {
+      this.lastActivePlaybackAt = now;
+      return true;
+    }
+    // Грация на паузы между предложениями: буфер доигран, а следующее
+    // предложение ещё синтезируется — ИИ всё ещё «говорит»
+    return now - this.lastActivePlaybackAt <= PLAYBACK_GAP_GRACE_MS;
+  }
+
+  private _isActivelyPlaying(): boolean {
+    if (this.useMse) {
+      const audio = this.audio;
+      if (!audio) return this.appendQueue.length > 0;
+      const sb = this.sourceBuffer;
+      if (!audio.paused && sb) {
+        for (let i = 0; i < sb.buffered.length; i++) {
+          if (
+            audio.currentTime >= sb.buffered.start(i) - 0.05 &&
+            audio.currentTime < sb.buffered.end(i) - 0.05
+          ) {
+            return true;
+          }
+        }
+      }
+      return this.appendQueue.length > 0 || Boolean(sb?.updating);
+    }
+    return this.playing || this.queue.length > 0 || this.pending.length > 0;
+  }
+
   /** Сервер подтвердил границу отменённого ответа — можно принимать следующий. */
   confirmInterrupt(): void {
     this._flushPlayback();
@@ -199,6 +240,8 @@ export class AudioPlayer {
   private _flushPlayback(): void {
     this.appendQueue = [];
     this.pending = [];
+    // Обрыв ответа — ИИ больше не говорит, грацию не тянем
+    this.lastActivePlaybackAt = 0;
     if (this.useMse) {
       const sb = this.sourceBuffer;
       const audio = this.audio;

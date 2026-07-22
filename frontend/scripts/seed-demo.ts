@@ -23,10 +23,14 @@ const DEMO_FIRST_NAME = "Ирина";
 const DEMO_LAST_NAME = "Петрова";
 
 const PATIENT_NAME = "Тамара Михайловна";
-const PATIENT_DESCRIPTION =
-  "62 года, бывшая учительница. Пришла на диагностику зрения: очки -4 для дали, " +
-  "последние годы плохо видит вблизи. Год назад врач сказал — начальная катаракта. " +
-  "Мягкая, тактичная, крупные решения принимает вместе с мужем.";
+// Короткая строка под именем на экране звонка
+const PATIENT_DESCRIPTION = "62 года · диагностика зрения";
+// Анамнез — что менеджеру полезно знать до разговора
+const PATIENT_ANAMNESIS =
+  "Очки -4 для дали, последние пять лет трудно читает вблизи. Год назад " +
+  "офтальмолог поставил начальную катаракту и сказал, что операция пока не " +
+  "нужна. Сомневается, не пора ли уже. За диагностику заплатила, пришла сама. " +
+  "Крупные решения принимает вместе с мужем.";
 
 // Понедельник текущей недели, 00:00 — граница «этой недели» в статистике
 function startOfWeek(date: Date): Date {
@@ -217,15 +221,24 @@ function buildConversations(): DemoConversation[] {
 async function main() {
   console.log("=== Демо-данные ===\n");
 
-  // 1. Пациент (в схеме нет уникального поля — ищем по имени)
+  // 1. Пациент (в схеме нет уникального поля — ищем по имени).
+  // Существующего обновляем: описание и анамнез могли поменяться.
   let patient = await prisma.patient.findFirst({ where: { name: PATIENT_NAME } });
   if (!patient) {
     patient = await prisma.patient.create({
-      data: { name: PATIENT_NAME, description: PATIENT_DESCRIPTION },
+      data: {
+        name: PATIENT_NAME,
+        description: PATIENT_DESCRIPTION,
+        anamnesis: PATIENT_ANAMNESIS,
+      },
     });
     console.log(`Пациент создан: ${patient.name}`);
   } else {
-    console.log(`Пациент уже есть: ${patient.name}`);
+    patient = await prisma.patient.update({
+      where: { id: patient.id },
+      data: { description: PATIENT_DESCRIPTION, anamnesis: PATIENT_ANAMNESIS },
+    });
+    console.log(`Пациент обновлён: ${patient.name}`);
   }
 
   // 2. Демо-пользователь

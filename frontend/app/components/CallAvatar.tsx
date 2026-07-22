@@ -1,35 +1,57 @@
-// Аватар-заглушка собеседника по центру экрана.
-// При pulsing=true вокруг аватара показываются анимированные кольца —
-// визуальный индикатор того, что идёт разговор.
+// Аватар собеседника на экране звонка. Внешний вид зависит от того,
+// что происходит в разговоре: пульсирующие кольца, пока говорит клиент;
+// приглушённый круг, пока говорит менеджер; серый — на паузе.
+
+import { initials } from "@/lib/format";
+
+export type AvatarState = "idle" | "speaking" | "listening" | "paused";
 
 interface CallAvatarProps {
-  pulsing?: boolean;
+  name: string | null;
+  state: AvatarState;
+  /** Крупный вариант для активного разговора во весь экран. */
+  size?: "md" | "lg";
 }
 
-export default function CallAvatar({ pulsing = false }: CallAvatarProps) {
+const SIZES = {
+  md: { box: "h-[150px] w-[150px]", ring: "h-[120px] w-[120px]", face: "h-[110px] w-[110px] text-[34px]" },
+  lg: { box: "h-[230px] w-[230px]", ring: "h-[180px] w-[180px]", face: "h-[168px] w-[168px] text-[52px]" },
+} as const;
+
+// Оформление круга под состояние
+const FACE_TONE: Record<AvatarState, string> = {
+  idle: "bg-brand-soft border-[#BCD8D3] text-brand",
+  speaking: "bg-brand-soft border-brand text-brand",
+  listening: "bg-surface-bubble border-[#D6E2E0] text-[#7E9491]",
+  paused: "bg-surface-bubble border-line text-ink-placeholder",
+};
+
+export default function CallAvatar({
+  name,
+  state,
+  size = "md",
+}: CallAvatarProps) {
+  const scale = SIZES[size];
+
   return (
-    <div className="relative flex h-48 w-48 items-center justify-center">
-      {/* Пульсирующие кольца (только во время активного звонка) */}
-      {pulsing && (
+    <div className={`relative flex items-center justify-center ${scale.box}`}>
+      {/* Кольца расходятся, только когда говорит клиент */}
+      {state === "speaking" && (
         <>
-          <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400/40 animate-pulse-ring" />
           <span
-            className="absolute inline-flex h-full w-full rounded-full bg-blue-400/30 animate-pulse-ring"
-            style={{ animationDelay: "0.9s" }}
+            className={`absolute rounded-full border-2 border-brand ${scale.ring} animate-ringpulse`}
+          />
+          <span
+            className={`absolute rounded-full border-2 border-brand ${scale.ring} animate-ringpulse`}
+            style={{ animationDelay: "1.2s" }}
           />
         </>
       )}
 
-      {/* Сам аватар: серый круг с силуэтом человека */}
-      <div className="relative flex h-40 w-40 items-center justify-center rounded-full bg-gray-200 shadow-inner">
-        <svg
-          className="h-24 w-24 text-gray-400"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path d="M12 12c2.7 0 4.9-2.2 4.9-4.9S14.7 2.2 12 2.2 7.1 4.4 7.1 7.1 9.3 12 12 12zm0 2.4c-3.3 0-9.8 1.6-9.8 4.9v2.5h19.6v-2.5c0-3.3-6.5-4.9-9.8-4.9z" />
-        </svg>
+      <div
+        className={`flex items-center justify-center rounded-full border-2 font-semibold ${scale.face} ${FACE_TONE[state]}`}
+      >
+        {initials(name)}
       </div>
     </div>
   );
