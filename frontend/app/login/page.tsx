@@ -36,8 +36,8 @@ export default function LoginPage() {
       });
 
       if (res.ok) {
-        // Успешный вход — переходим на главный экран
-        router.push("/session");
+        // Успешный вход — переходим на главную
+        router.push("/");
         return;
       }
 

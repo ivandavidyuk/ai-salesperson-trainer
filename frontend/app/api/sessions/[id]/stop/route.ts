@@ -35,12 +35,21 @@ export async function POST(
       );
     }
 
-    // Меняем статус на completed и проставляем время завершения
+    // Меняем статус на completed, проставляем время завершения и
+    // длительность (её показывает главная и по ней считается средняя;
+    // хранить отдельно дешевле, чем каждый раз вычитать даты в агрегатах)
+    const endedAt = new Date();
+    const durationSec = Math.max(
+      0,
+      Math.round((endedAt.getTime() - session.startedAt.getTime()) / 1000)
+    );
+
     const updated = await prisma.session.update({
       where: { id: sessionId },
       data: {
         status: "completed",
-        endedAt: new Date(),
+        endedAt,
+        durationSec,
       },
     });
 

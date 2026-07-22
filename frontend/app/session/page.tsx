@@ -17,7 +17,8 @@ type ScreenState = "idle" | "active" | "paused";
 interface CurrentUser {
   id: string;
   email: string;
-  name: string;
+  firstName: string;
+  lastName: string;
 }
 
 export default function SessionPage() {
@@ -225,7 +226,7 @@ export default function SessionPage() {
       {/* Верхняя панель: имя пользователя */}
       <header className="flex items-center justify-between px-6 py-4">
         <span className="text-sm text-gray-600">
-          {user ? user.name : "Загрузка…"}
+          {user ? `${user.firstName} ${user.lastName}` : "Загрузка…"}
         </span>
         {screenState === "idle" && (
           <Button variant="secondary" onClick={handleLogout} className="px-4 py-2 text-sm">
