@@ -28,6 +28,13 @@ enum DailyContentKind {
   motivation
 }
 
+// Насколько тяжело продать этому пациенту — плашка в списке выбора
+enum PatientDifficulty {
+  easy
+  mid
+  hard
+}
+
 // Пользователь системы (менеджер по продажам)
 model User {
   id           String    @id @default(uuid())
@@ -52,6 +59,10 @@ model Patient {
   // Анамнез: что менеджеру полезно знать о пациенте до разговора.
   // Показывается отдельным блоком на экране звонка перед стартом.
   anamnesis   String?
+  // Сложность пациента в мастере настройки тренировки
+  difficulty  PatientDifficulty @default(mid)
+  // Пациенты, для которых ещё нет промпта, лежат неактивными: в мастере они
+  // видны, но выбрать их нельзя
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
 
@@ -66,6 +77,8 @@ model Session {
   status      SessionStatus @default(active)
   // Тема разговора: «катаракта», «очки для чтения»
   topic       String?
+  // Что тренировали: полный разговор или отдельный этап (id из lib/training)
+  trainingType String?
   // Длительность в секундах, проставляется при завершении.
   // Хранится отдельно, чтобы считать среднюю длину одним запросом.
   durationSec Int?

@@ -9,6 +9,7 @@
     "lint": "next lint",
     "create-user": "ts-node scripts/create-user.ts",
     "seed:content": "ts-node scripts/seed-content.ts",
+    "seed:patients": "ts-node scripts/seed-patients.ts",
     "seed:demo": "ts-node scripts/seed-demo.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"

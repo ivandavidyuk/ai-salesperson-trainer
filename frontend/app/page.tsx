@@ -11,6 +11,7 @@ import AppShell from "@/app/components/AppShell";
 import ConversationRow from "@/app/components/ConversationRow";
 import DailyCard from "@/app/components/DailyCard";
 import ProgressPanel from "@/app/components/ProgressPanel";
+import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import type { HomeData } from "@/lib/home";
 import { formatDuration, greeting } from "@/lib/format";
 
@@ -50,6 +51,8 @@ export default function HomePage() {
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState("");
   const [allOpen, setAllOpen] = useState(false);
+  // Мастер настройки тренировки — открывается кнопкой «Начать тренировку»
+  const [setupOpen, setSetupOpen] = useState(false);
   // Локальные переключения избранного, чтобы не перезапрашивать всю страницу
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
 
@@ -127,13 +130,14 @@ export default function HomePage() {
                     тренировки и пациента.
                   </div>
                 </div>
-                <Link
-                  href="/session"
+                <button
+                  type="button"
+                  onClick={() => setSetupOpen(true)}
                   className="mt-[18px] inline-flex max-w-[260px] items-center justify-center gap-2.5 self-start rounded-input bg-white px-[22px] py-3 text-[14.5px] font-semibold text-brand-hover transition-colors hover:bg-brand-panel-meta"
                 >
                   <span className="inline-block h-2 w-2 rounded-full bg-brand" />
                   Начать тренировку
-                </Link>
+                </button>
               </div>
 
               <div className="flex">
@@ -220,6 +224,8 @@ export default function HomePage() {
           overrides={favorites}
         />
       )}
+
+      {setupOpen && <TrainingSetupModal onClose={() => setSetupOpen(false)} />}
     </AppShell>
   );
 }

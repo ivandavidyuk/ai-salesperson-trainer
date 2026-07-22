@@ -39,6 +39,7 @@ lib/
 scripts/
   create-user.ts   интерактивное создание пользователя
   seed-content.ts  советы дня и мотивации (продовый контент)
+  seed-patients.ts пациенты для мастера тренировки
   seed-demo.ts     демо-аккаунт с историей разговоров и разборами
 prisma/schema.prisma
 middleware.ts     защита всех маршрутов кроме /login
@@ -51,6 +52,7 @@ npm install
 Copy-Item .env.example .env
 npx prisma migrate deploy
 npm run seed:content
+npm run seed:patients
 npm run create-user
 npm run dev
 ```
@@ -64,6 +66,7 @@ npm run dev
 | `npm run lint` | ESLint |
 | `npm run create-user` | создать пользователя |
 | `npm run seed:content` | налить советы дня и мотивации |
+| `npm run seed:patients` | налить пациентов для мастера тренировки |
 | `npm run seed:demo` | демо-аккаунт с заполненной главной |
 | `npm run prisma:migrate` | создать миграцию |
 

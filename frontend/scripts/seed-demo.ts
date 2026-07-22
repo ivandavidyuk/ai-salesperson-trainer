@@ -22,15 +22,8 @@ const DEMO_EMAIL = "demo@podhod.tech";
 const DEMO_FIRST_NAME = "Ирина";
 const DEMO_LAST_NAME = "Петрова";
 
+// Пациентов наливает seed-patients.ts — здесь только привязываем разговоры
 const PATIENT_NAME = "Тамара Михайловна";
-// Короткая строка под именем на экране звонка
-const PATIENT_DESCRIPTION = "62 года · диагностика зрения";
-// Анамнез — что менеджеру полезно знать до разговора
-const PATIENT_ANAMNESIS =
-  "Очки -4 для дали, последние пять лет трудно читает вблизи. Год назад " +
-  "офтальмолог поставил начальную катаракту и сказал, что операция пока не " +
-  "нужна. Сомневается, не пора ли уже. За диагностику заплатила, пришла сама. " +
-  "Крупные решения принимает вместе с мужем.";
 
 // Понедельник текущей недели, 00:00 — граница «этой недели» в статистике
 function startOfWeek(date: Date): Date {
@@ -221,25 +214,17 @@ function buildConversations(): DemoConversation[] {
 async function main() {
   console.log("=== Демо-данные ===\n");
 
-  // 1. Пациент (в схеме нет уникального поля — ищем по имени).
-  // Существующего обновляем: описание и анамнез могли поменяться.
-  let patient = await prisma.patient.findFirst({ where: { name: PATIENT_NAME } });
+  // 1. Пациент. Самих пациентов наливает seed-patients.ts — здесь только
+  // находим того, к кому привязать демо-разговоры.
+  const patient = await prisma.patient.findFirst({ where: { name: PATIENT_NAME } });
   if (!patient) {
-    patient = await prisma.patient.create({
-      data: {
-        name: PATIENT_NAME,
-        description: PATIENT_DESCRIPTION,
-        anamnesis: PATIENT_ANAMNESIS,
-      },
-    });
-    console.log(`Пациент создан: ${patient.name}`);
-  } else {
-    patient = await prisma.patient.update({
-      where: { id: patient.id },
-      data: { description: PATIENT_DESCRIPTION, anamnesis: PATIENT_ANAMNESIS },
-    });
-    console.log(`Пациент обновлён: ${patient.name}`);
+    console.error(
+      `Пациент «${PATIENT_NAME}» не найден.\n` +
+        "Сначала выполните: npm run seed:patients"
+    );
+    process.exit(1);
   }
+  console.log(`Пациент разговоров: ${patient.name}`);
 
   // 2. Демо-пользователь
   const existing = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
