@@ -3,10 +3,16 @@
 // Страница входа.
 // Форма email + пароль → POST /api/auth/login.
 // При успехе редирект на /session, при ошибке — сообщение.
+//
+// Оформление — макет «Вход» дизайн-системы podhod.tech (направление 1A):
+// слева брендовая панель, справа форма. Состояния: пустое / ошибка / загрузка.
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Alert from "@/app/components/Alert";
 import Button from "@/app/components/Button";
+import Field from "@/app/components/Field";
+import Logo from "@/app/components/Logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -45,50 +51,96 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-6 rounded-2xl bg-white p-8 shadow-sm"
-      >
-        <h1 className="text-center text-2xl font-semibold text-gray-900">
-          Вход
-        </h1>
+    // Full-bleed split: панель и форма делят экран целиком, без «плавающей»
+    // карточки — так макет одинаково держится и на 1440, и на широком мониторе.
+    <main className="flex min-h-screen">
+      {/* Брендовая панель. На узких экранах скрыта — мобильный макет
+          будет сделан отдельно, сейчас форма просто занимает всю ширину. */}
+      <aside className="hidden w-[40%] flex-col justify-between bg-brand px-12 py-14 text-white md:flex">
+        <Logo tone="on-brand" />
 
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm text-gray-600">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500"
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm text-gray-600">Пароль</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-blue-500"
-              placeholder="••••••••"
-            />
-          </div>
+        {/* Ограничиваем длину строк, чтобы текст не растягивался на всю панель */}
+        <div className="max-w-[440px]">
+          <p className="text-[28px] font-semibold leading-[1.25] tracking-[-0.01em]">
+            Тренируйте живой разговор с клиентом до звонка настоящему.
+          </p>
+          <p className="mt-4 text-[14.5px] leading-relaxed text-brand-panel-text">
+            Голосовой ИИ-тренажёр для менеджеров клиники. Контакт, потребность,
+            работа с возражениями — в безопасной репетиции.
+          </p>
         </div>
 
-        {/* Сообщение об ошибке */}
-        {error && (
-          <p className="text-center text-sm text-red-600">{error}</p>
-        )}
+        <p className="font-mono text-xs tracking-[0.04em] text-brand-panel-meta">
+          Инструмент обучения · внутренний доступ
+        </p>
+      </aside>
 
-        <Button type="submit" disabled={loading} className="w-full">
-          {loading ? "Вход…" : "Войти"}
-        </Button>
-      </form>
+      {/* Форма входа: центрируется в оставшейся части экрана */}
+      <div className="flex flex-1 items-center justify-center bg-surface-card px-6 py-12">
+        <form onSubmit={handleSubmit} className="w-full max-w-[440px]">
+          {/* Пока панель скрыта на узких экранах — показываем логотип здесь */}
+          <Logo className="mb-8 md:hidden" />
+
+          <h1 className="text-2xl font-semibold text-ink">Вход в аккаунт</h1>
+          <p className="mt-1.5 text-[14.5px] text-ink-muted">
+            Войдите рабочей почтой клиники.
+          </p>
+
+          {/* Сообщение об ошибке */}
+          {error && <Alert className="mt-5">{error}</Alert>}
+
+          <Field
+            label="Email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="manager@clinic.ru"
+            disabled={loading}
+            className="mt-[26px]"
+          />
+
+          <Field
+            label="Пароль"
+            type="password"
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            disabled={loading}
+            invalid={Boolean(error)}
+            aria-invalid={Boolean(error)}
+            className="mt-[18px]"
+          />
+
+          {/* Восстановления пароля пока нет — ссылка-заглушка, как в макете */}
+          <div className="mt-2 flex justify-end">
+            {loading ? (
+              <span className="text-[13px] text-ink-placeholder">
+                Забыли пароль?
+              </span>
+            ) : (
+              <a
+                href="#"
+                className="text-[13px] text-brand hover:text-brand-hover"
+              >
+                Забыли пароль?
+              </a>
+            )}
+          </div>
+
+          <Button
+            type="submit"
+            size="lg"
+            loading={loading}
+            className="mt-[22px] w-full"
+          >
+            {loading ? "Входим…" : "Войти"}
+          </Button>
+        </form>
+      </div>
     </main>
   );
 }

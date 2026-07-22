@@ -9,6 +9,16 @@ body {
   height: 100%;
 }
 
-body {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+/* База дизайн-системы podhod.tech: фон, цвет текста и основной шрифт.
+   Конкретные значения — в tailwind.config.ts (surface / ink / font-sans). */
+@layer base {
+  body {
+    @apply bg-surface font-sans text-ink;
+  }
+
+  /* Единый видимый фокус для доступности (клавиатурная навигация).
+     Кольцо цветом brand.soft — как в макетах полей ввода. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-surface;
+  }
 }
