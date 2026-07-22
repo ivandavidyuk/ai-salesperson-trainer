@@ -1,5 +1,4 @@
 // Prisma-схема для голосового ИИ-тренажёра по продажам.
-// Описывает три таблицы: users, sessions, messages.
 
 generator client {
   provider = "prisma-client-js"
@@ -23,31 +22,62 @@ enum MessageRole {
   assistant
 }
 
+// Вид ежедневного контента на главной
+enum DailyContentKind {
+  tip
+  motivation
+}
+
 // Пользователь системы (менеджер по продажам)
 model User {
   id           String    @id @default(uuid())
   email        String    @unique
   passwordHash String
-  name         String
+  firstName    String
+  lastName     String
   createdAt    DateTime  @default(now())
 
   // Связь: один пользователь — много сессий
   sessions     Session[]
 }
 
+// Пациент — персонаж, которого играет ИИ в разговоре.
+// Пока используется для подписи разговоров («Тамара Михайловна · катаракта»),
+// дальше — на странице «Пациенты» и при выборе сценария тренировки.
+model Patient {
+  id          String    @id @default(uuid())
+  name        String
+  // Краткая легенда персонажа (возраст, запрос, характер)
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  sessions    Session[]
+}
+
 // Сессия (один тренировочный разговор)
 model Session {
-  id        String        @id @default(uuid())
-  userId    String
-  status    SessionStatus @default(active)
-  startedAt DateTime      @default(now())
-  endedAt   DateTime?
+  id          String        @id @default(uuid())
+  userId      String
+  patientId   String?
+  status      SessionStatus @default(active)
+  // Тема разговора: «катаракта», «очки для чтения»
+  topic       String?
+  // Длительность в секундах, проставляется при завершении.
+  // Хранится отдельно, чтобы считать среднюю длину одним запросом.
+  durationSec Int?
+  isFavorite  Boolean       @default(false)
+  startedAt   DateTime      @default(now())
+  endedAt     DateTime?
 
-  // Связь с пользователем (внешний ключ)
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patient     Patient?      @relation(fields: [patientId], references: [id])
 
-  // Связь: одна сессия — много сообщений
-  messages  Message[]
+  messages    Message[]
+  review      SessionReview?
+
+  // Главная постоянно выбирает разговоры пользователя по дате
+  @@index([userId, startedAt])
 }
 
 // Сообщение внутри сессии (реплика менеджера или клиента-ИИ)
@@ -58,6 +88,46 @@ model Message {
   text      String
   createdAt DateTime    @default(now())
 
-  // Связь с сессией (внешний ключ)
   session   Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+// Разбор одного разговора: оценки по этапам сделки и текстовые выводы.
+// Связь 1:1 с сессией и необязательная — разбор появляется после разговора,
+// а у старых сессий его может не быть вовсе.
+model SessionReview {
+  id              String   @id @default(uuid())
+  sessionId       String   @unique
+
+  // Общая оценка разговора, 0–10
+  overallScore    Float
+  // Оценки по этапам сделки, 0–10 — из них считается недельный «Прогресс»
+  contactScore    Float
+  iceBreakerScore Float
+  needsScore      Float
+  objectionsScore Float
+
+  // Текстовые выводы разбора
+  strength        String
+  growthPoint     String
+
+  createdAt       DateTime @default(now())
+
+  session         Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+// «Совет дня» и «Мотивация» на главной.
+// Меняются раз в сутки: элемент выбирается по индексу дня
+// (день % количество), поэтому не нужен ни крон, ни поле с датой.
+model DailyContent {
+  id        String           @id @default(uuid())
+  kind      DailyContentKind
+  text      String
+  // Порядок ротации внутри своего вида.
+  // Уникальность пары защищает от дублей при массовой заливке списка
+  // и делает возможным upsert по (kind, position).
+  position  Int
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+
+  @@unique([kind, position])
 }

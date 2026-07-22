@@ -1,6 +1,6 @@
 // Скрипт создания пользователя.
 // Запуск: npx ts-node create-user.ts
-// Запрашивает email, пароль и имя в консоли,
+// Запрашивает email, пароль, имя и фамилию в консоли,
 // хэширует пароль через bcrypt и сохраняет пользователя в БД.
 
 import { PrismaClient } from "@prisma/client";
@@ -48,10 +48,11 @@ async function main() {
 
   const email = await ask("Email: ");
   const password = await ask("Пароль: ", true);
-  const name = await ask("Имя: ");
+  const firstName = await ask("Имя: ");
+  const lastName = await ask("Фамилия: ");
 
   // Простая валидация ввода
-  if (!email || !password || !name) {
+  if (!email || !password || !firstName || !lastName) {
     console.error("\nОшибка: все поля обязательны.");
     process.exit(1);
   }
@@ -75,14 +76,15 @@ async function main() {
     data: {
       email: normalizedEmail,
       passwordHash,
-      name,
+      firstName,
+      lastName,
     },
   });
 
   console.log(`\nПользователь создан успешно:`);
   console.log(`  id:    ${user.id}`);
   console.log(`  email: ${user.email}`);
-  console.log(`  name:  ${user.name}`);
+  console.log(`  имя:   ${user.firstName} ${user.lastName}`);
 }
 
 main()

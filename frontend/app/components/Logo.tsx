@@ -9,10 +9,10 @@ interface LogoProps {
 
 export default function Logo({ tone = "on-light", className = "" }: LogoProps) {
   // На тиловой панели — белый вордмарк и белая пилюля с тиловым текстом,
-  // на светлом фоне — наоборот.
-  const wordClass = tone === "on-brand" ? "text-white" : "text-ink";
+  // на светлом фоне — тёмно-тиловый вордмарк и яркая пилюля.
+  const wordClass = tone === "on-brand" ? "text-white" : "text-brand-deep";
   const pillClass =
-    tone === "on-brand" ? "bg-white text-brand" : "bg-brand text-white";
+    tone === "on-brand" ? "bg-white text-brand" : "bg-brand-bright text-white";
 
   return (
     <span

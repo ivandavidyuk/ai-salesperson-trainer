@@ -50,7 +50,8 @@ export async function POST(request: Request) {
     const token = await signToken({
       userId: user.id,
       email: user.email,
-      name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
     });
     await storeToken(token, user.id);
 
@@ -58,7 +59,8 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       id: user.id,
       email: user.email,
-      name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
     });
 
     response.cookies.set({

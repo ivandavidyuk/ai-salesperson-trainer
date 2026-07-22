@@ -1,6 +1,6 @@
 // GET /api/auth/me
 // Проверяет JWT из cookie (подпись + наличие в whitelist Redis)
-// и возвращает данные текущего пользователя { id, email, name }.
+// и возвращает данные текущего пользователя { id, email, firstName, lastName }.
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     // Загружаем актуальные данные пользователя из БД
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, name: true },
+      select: { id: true, email: true, firstName: true, lastName: true },
     });
 
     if (!user) {

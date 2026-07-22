@@ -20,7 +20,8 @@ export const WS_TOKEN_TTL = 30;
 export interface AuthTokenPayload extends JWTPayload {
   sub: string; // id пользователя
   email: string;
-  name: string;
+  firstName: string;
+  lastName: string;
 }
 
 // Возвращает секрет для подписи JWT в виде байтов.
@@ -66,13 +67,15 @@ function redisTokenKey(token: string): string {
 export async function signToken(payload: {
   userId: string;
   email: string;
-  name: string;
+  firstName: string;
+  lastName: string;
 }): Promise<string> {
   const expiresIn = process.env.JWT_EXPIRES_IN || "24h";
 
   const token = await new SignJWT({
     email: payload.email,
-    name: payload.name,
+    firstName: payload.firstName,
+    lastName: payload.lastName,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.userId)
