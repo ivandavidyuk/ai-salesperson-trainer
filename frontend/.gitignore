@@ -5,6 +5,9 @@
 /.next
 /out
 
+# кеш инкрементальной сборки TypeScript
+*.tsbuildinfo
+
 # переменные окружения
 .env
 .env.local
