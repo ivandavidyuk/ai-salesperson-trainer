@@ -1,6 +1,6 @@
 // GET /api/sessions/[id]/transcript
-// Возвращает все сообщения сессии в порядке возрастания createdAt
-// в формате [{ role, text, createdAt }].
+// Всё, что нужно странице расшифровки, одним запросом: шапка разговора,
+// реплики в хронологическом порядке и разбор (если он уже есть).
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
@@ -15,41 +15,67 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Проверяем авторизацию
     const user = await getAuthUser(request);
     if (!user) {
-      return NextResponse.json(
-        { error: "Не авторизован" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
     }
 
-    const sessionId = params.id;
-
-    // Проверяем, что сессия принадлежит пользователю
     const session = await prisma.session.findUnique({
-      where: { id: sessionId },
-    });
-
-    if (!session || session.userId !== user.sub) {
-      return NextResponse.json(
-        { error: "Сессия не найдена" },
-        { status: 404 }
-      );
-    }
-
-    // Загружаем сообщения в хронологическом порядке
-    const messages = await prisma.message.findMany({
-      where: { sessionId },
-      orderBy: { createdAt: "asc" },
+      where: { id: params.id },
       select: {
-        role: true,
-        text: true,
-        createdAt: true,
+        userId: true,
+        topic: true,
+        startedAt: true,
+        durationSec: true,
+        patient: { select: { name: true } },
+        review: {
+          select: {
+            overallScore: true,
+            contactScore: true,
+            iceBreakerScore: true,
+            needsScore: true,
+            objectionsScore: true,
+            strength: true,
+            growthPoint: true,
+          },
+        },
+        messages: {
+          orderBy: { createdAt: "asc" },
+          select: { role: true, text: true, createdAt: true },
+        },
       },
     });
 
-    return NextResponse.json(messages);
+    // Чужой разговор не отличаем от несуществующего — по ответу нельзя
+    // узнать, что сессия с таким id вообще есть
+    if (!session || session.userId !== user.sub) {
+      return NextResponse.json({ error: "Разговор не найден" }, { status: 404 });
+    }
+
+    // Инициалы в аватарах реплик менеджера
+    const manager = await prisma.user.findUnique({
+      where: { id: user.sub },
+      select: { firstName: true, lastName: true },
+    });
+
+    return NextResponse.json({
+      session: {
+        startedAt: session.startedAt.toISOString(),
+        durationSec: session.durationSec,
+        topic: session.topic,
+        patientName: session.patient?.name ?? null,
+      },
+      manager: {
+        firstName: manager?.firstName ?? "",
+        lastName: manager?.lastName ?? "",
+      },
+      messages: session.messages.map((message) => ({
+        role: message.role,
+        text: message.text,
+        createdAt: message.createdAt.toISOString(),
+      })),
+      review: session.review,
+    });
   } catch (error) {
     console.error("Ошибка в /api/sessions/[id]/transcript:", error);
     return NextResponse.json(

@@ -6,6 +6,7 @@
 
 import { DailyContentKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { STAGE_METRICS } from "@/lib/score";
 
 // Понедельник недели, к которой относится дата (00:00 локального времени).
 // «Эта неделя» в статистике считается от него.
@@ -65,13 +66,9 @@ export interface HomeData {
   };
 }
 
-// Этапы сделки в порядке отображения. Ключ совпадает с полем SessionReview.
-const PROGRESS_METRICS = [
-  { key: "contactScore", label: "Установка контакта" },
-  { key: "iceBreakerScore", label: "«Топка льда»" },
-  { key: "needsScore", label: "Выявление потребности" },
-  { key: "objectionsScore", label: "Отработка возражений" },
-] as const;
+// Этапы сделки берём из lib/score: те же метки и порядок нужны в разборе
+// разговора, а он рисуется на клиенте — сюда Prisma тянуть нельзя
+const PROGRESS_METRICS = STAGE_METRICS;
 
 // Завершённые разговоры пользователя, свежие сверху.
 // limit не задан — вернём все (для модалки «Все разговоры»).
