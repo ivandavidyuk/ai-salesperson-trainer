@@ -11,7 +11,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import Logo from "@/app/components/Logo";
 
 // Ширины меню из макета
-const NAV_WIDTH_OPEN = 210;
+const NAV_WIDTH_OPEN = 248;
 const NAV_WIDTH_CLOSED = 66;
 
 interface NavItem {
@@ -105,7 +105,9 @@ export default function AppShell({ title, children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [navOpen, setNavOpen] = useState(true);
+  // Меню по умолчанию свёрнуто: оно разворачивается поверх контента,
+  // и открытое на старте перекрывало бы страницу при каждом заходе
+  const [navOpen, setNavOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [user, setUser] = useState<{ firstName: string; lastName: string } | null>(
     null
@@ -140,14 +142,18 @@ export default function AppShell({ title, children }: AppShellProps) {
     : "";
 
   return (
-    <div className="relative flex min-h-screen">
+    // h-screen (а не min-h-screen): нижний ряд главной должен растягиваться
+    // на всю оставшуюся высоту, а список внутри — скроллиться
+    <div className="relative flex h-screen">
       {/* Полоса под меню: не даёт контенту сдвигаться при разворачивании */}
       <div style={{ width: NAV_WIDTH_CLOSED }} className="shrink-0" />
 
-      {/* Клик мимо развёрнутого меню — сворачиваем */}
+      {/* Затемнение контента при развёрнутом меню; клик — сворачивает.
+          Начинается после рейки, чтобы само меню не затемнялось. */}
       {navOpen && (
         <div
-          className="fixed inset-0 z-10"
+          style={{ left: NAV_WIDTH_CLOSED }}
+          className="fixed inset-y-0 right-0 z-10 bg-[rgba(12,26,24,.42)]"
           onClick={() => setNavOpen(false)}
           aria-hidden="true"
         />
@@ -158,7 +164,7 @@ export default function AppShell({ title, children }: AppShellProps) {
           width: navOpen ? NAV_WIDTH_OPEN : NAV_WIDTH_CLOSED,
           boxShadow: navOpen ? "14px 0 40px -12px rgba(20,40,38,.75)" : "none",
         }}
-        className="fixed inset-y-0 left-0 z-20 flex flex-col gap-[3px] overflow-hidden border-r border-line bg-surface-card px-2.5 py-3 transition-[width] duration-[260ms] ease-out"
+        className="fixed inset-y-0 left-0 z-20 flex flex-col gap-1 overflow-hidden border-r border-line bg-surface-card px-2.5 py-3.5 transition-[width] duration-[260ms] ease-out"
       >
         <button
           type="button"
@@ -213,7 +219,7 @@ export default function AppShell({ title, children }: AppShellProps) {
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[60px] items-center justify-between border-b border-line bg-surface-card px-7">
+        <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7">
           <div className="text-[15px] font-semibold text-ink">{title}</div>
 
           <div className="relative">
@@ -302,7 +308,11 @@ export default function AppShell({ title, children }: AppShellProps) {
           </div>
         </header>
 
-        <main className="min-w-0 flex-1">{children}</main>
+        {/* min-h-0 обязателен: без него flex-1 у нижнего ряда не сможет
+            сжаться и список разговоров вылезет за экран вместо скролла */}
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+          {children}
+        </main>
       </div>
     </div>
   );

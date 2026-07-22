@@ -40,7 +40,7 @@ export default function ProgressPanel({
         <div className="text-xs text-ink-subtle">неделя к неделе</div>
       </div>
 
-      <div className="flex-1 rounded-[14px] border border-line bg-surface-card px-5 py-[18px]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[14px] border border-line bg-surface-card px-5 py-[18px]">
         {!hasData && (
           <p className="text-[13.5px] leading-normal text-ink-muted">
             Оценки появятся после разбора разговоров — проведите первую
@@ -74,7 +74,8 @@ export default function ProgressPanel({
 
         {(strength || growthPoint) && (
           <>
-            <div className="my-[11px] h-px bg-line-soft" />
+            {/* mt-auto прижимает выводы к низу панели, как в макете */}
+            <div className="mt-auto mb-3.5 h-px shrink-0 bg-line-soft" />
 
             {strength && (
               <div className="mb-2">

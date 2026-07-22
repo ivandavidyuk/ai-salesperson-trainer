@@ -102,14 +102,22 @@ export default function HomePage() {
 
       {data && (
         <>
-          <div className="px-7 pb-1 pt-[22px]">
-            <div className="mb-3.5 text-[21px] font-semibold tracking-[-.01em] text-ink">
-              {greeting()}, {data.user.firstName}
+          {/* Контент ограничен 1440px и центрируется: на 1680/1920 растут
+              только боковые поля, колонки не расползаются */}
+          <div className="mx-auto w-full max-w-[1440px] shrink-0 px-10 pb-1 pt-[26px]">
+            <div className="mb-[22px]">
+              <div className="text-[28px] font-bold tracking-[-.02em] text-ink">
+                {greeting()}, {data.user.firstName}
+              </div>
+              <div className="mt-1 text-sm text-ink-subtle">
+                Менеджер по продажам
+              </div>
             </div>
 
-            <div className="flex items-stretch gap-4">
+            {/* Пропорции по содержимому: старт шире, метрики фиксированы */}
+            <div className="grid items-stretch gap-[18px] [grid-template-columns:minmax(320px,1.15fr)_minmax(300px,1fr)_380px]">
               {/* Запуск тренировки */}
-              <div className="flex min-h-[132px] flex-1 flex-col justify-between rounded-card bg-brand px-5 py-[18px] text-white">
+              <div className="flex min-h-[150px] flex-col justify-between rounded-card bg-brand px-6 py-[22px] text-white">
                 <div>
                   <div className="text-[19px] font-semibold tracking-[-.01em]">
                     Готовы начать подход?
@@ -121,18 +129,18 @@ export default function HomePage() {
                 </div>
                 <Link
                   href="/session"
-                  className="mt-3.5 inline-flex items-center justify-center gap-2.5 self-stretch rounded-input bg-white px-5 py-[11px] text-[14.5px] font-semibold text-brand-hover transition-colors hover:bg-brand-panel-meta"
+                  className="mt-[18px] inline-flex max-w-[260px] items-center justify-center gap-2.5 self-start rounded-input bg-white px-[22px] py-3 text-[14.5px] font-semibold text-brand-hover transition-colors hover:bg-brand-panel-meta"
                 >
                   <span className="inline-block h-2 w-2 rounded-full bg-brand" />
                   Начать тренировку
                 </Link>
               </div>
 
-              <div className="flex flex-1">
+              <div className="flex">
                 <DailyCard tip={data.daily.tip} motivation={data.daily.motivation} />
               </div>
 
-              <div className="grid flex-1 grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <StatCard value={String(data.stats.total)} label="разговоров всего" />
                 <StatCard value={String(data.stats.thisWeek)} label="на этой неделе" />
                 <StatCard
@@ -148,7 +156,9 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="flex items-stretch gap-6 px-7 pb-6 pt-4">
+          {/* Нижний ряд растягивается на всю оставшуюся высоту — под ним
+              не остаётся пустоты, список скроллится внутри себя */}
+          <div className="mx-auto flex w-full min-h-0 max-w-[1440px] flex-1 items-stretch gap-6 px-10 pb-8 pt-4">
             {/* Прошлые разговоры */}
             <div className="flex flex-[2] flex-col">
               <div className="mb-2.5 flex items-center justify-between">
@@ -166,7 +176,7 @@ export default function HomePage() {
                 )}
               </div>
 
-              <div className="max-h-[352px] flex-1 overflow-y-auto rounded-[14px] border border-line bg-surface-card">
+              <div className="min-h-0 flex-1 overflow-y-auto rounded-[14px] border border-line bg-surface-card">
                 {data.recent.length === 0 ? (
                   <div className="flex h-full min-h-[180px] flex-col items-center justify-center px-6 text-center">
                     <div className="text-2xl">🎧</div>
