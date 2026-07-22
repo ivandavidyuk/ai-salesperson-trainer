@@ -35,6 +35,13 @@ enum PatientDifficulty {
   hard
 }
 
+// Раздел мастера, в который попадает тип тренировки
+enum TrainingGroup {
+  full
+  stage
+  special
+}
+
 // Пользователь системы (менеджер по продажам)
 model User {
   id           String    @id @default(uuid())
@@ -59,12 +66,34 @@ model Patient {
   // Анамнез: что менеджеру полезно знать о пациенте до разговора.
   // Показывается отдельным блоком на экране звонка перед стартом.
   anamnesis   String?
+  // Роль для LLM: кого играет ИИ в разговоре. Backend собирает системный
+  // промпт из этого текста и промпта выбранного типа тренировки.
+  prompt      String?
   // Сложность пациента в мастере настройки тренировки
   difficulty  PatientDifficulty @default(mid)
   // Пациенты, для которых ещё нет промпта, лежат неактивными: в мастере они
   // видны, но выбрать их нельзя
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
+
+  sessions    Session[]
+}
+
+// Тип тренировки: полный разговор, отдельный этап сделки или спецнавык.
+// Для LLM это добавка к промпту пациента — «ты сейчас на этапе …».
+model TrainingType {
+  // Слаг («full», «s1», «intercept») — стабильный идентификатор,
+  // на него ссылаются сессии и мастер настройки
+  id          String        @id
+  title       String
+  description String
+  group       TrainingGroup
+  // Инструкция этапа для LLM
+  prompt      String
+  // Порядок внутри группы в мастере
+  position    Int
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
 
   sessions    Session[]
 }
@@ -77,8 +106,8 @@ model Session {
   status      SessionStatus @default(active)
   // Тема разговора: «катаракта», «очки для чтения»
   topic       String?
-  // Что тренировали: полный разговор или отдельный этап (id из lib/training)
-  trainingType String?
+  // Что тренировали: полный разговор или отдельный этап
+  trainingTypeId String?
   // Длительность в секундах, проставляется при завершении.
   // Хранится отдельно, чтобы считать среднюю длину одним запросом.
   durationSec Int?
@@ -86,8 +115,9 @@ model Session {
   startedAt   DateTime      @default(now())
   endedAt     DateTime?
 
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  patient     Patient?      @relation(fields: [patientId], references: [id])
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patient      Patient?      @relation(fields: [patientId], references: [id])
+  trainingType TrainingType? @relation(fields: [trainingTypeId], references: [id])
 
   messages    Message[]
   review      SessionReview?

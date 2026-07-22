@@ -1,86 +1,36 @@
-// Типы тренировки для мастера настройки.
+// Оформление мастера настройки тренировки.
 //
-// Работает пока только «Полный разговор»: backend играет захардкоженную роль
-// (SYSTEM_PROMPT в backend/services/llm.py) и про этапы ничего не знает.
-// Остальные типы показываем заблокированными — чтобы было видно, куда идём,
-// но нельзя выбрать то, что ничего не изменит.
+// Сами типы тренировки живут в БД (модель TrainingType) — вместе с промптами,
+// которые backend подмешивает в системный промпт. Здесь остаётся только то,
+// что нужно интерфейсу: подписи групп и палитра сложности.
 //
 // Файл без Prisma: его импортирует клиентский компонент мастера.
 
 export type TrainingGroup = "full" | "stage" | "special";
 
-export interface TrainingType {
+/** Тип тренировки в мастере — то, что отдаёт GET /api/training-types */
+export interface WizardTrainingType {
   id: string;
   title: string;
-  desc: string;
+  description: string;
   group: TrainingGroup;
   /** false — карточка видна, но выбрать нельзя */
-  enabled: boolean;
+  isActive: boolean;
 }
 
-export const TRAINING_TYPES: TrainingType[] = [
-  {
-    id: "full",
-    title: "Полный разговор",
-    desc: "Все четыре этапа подряд — от приветствия до закрытия",
-    group: "full",
-    enabled: true,
-  },
-  {
-    id: "s1",
-    title: "Установка контакта",
-    desc: "Приветствие, представление, цель",
-    group: "stage",
-    enabled: false,
-  },
-  {
-    id: "s2",
-    title: "Растопить лёд",
-    desc: "Снять напряжение, тёплый тон",
-    group: "stage",
-    enabled: false,
-  },
-  {
-    id: "s3",
-    title: "Выявление потребности",
-    desc: "Вопросы и активное слушание",
-    group: "stage",
-    enabled: false,
-  },
-  {
-    id: "s4",
-    title: "Отработка возражений",
-    desc: "Ответы на сомнения клиента",
-    group: "stage",
-    enabled: false,
-  },
-  {
-    id: "intercept",
-    title: "Перехват инициативы",
-    desc: "Мягко вернуть управление беседой и удержать структуру",
-    group: "special",
-    enabled: false,
-  },
-];
-
-// Заголовки групп в мастере и плашка группы на шаге «Обзор»
+// Заголовки групп в мастере
 export const GROUP_LABELS: Record<TrainingGroup, string> = {
   full: "Полный сценарий",
   stage: "Отдельный этап разговора",
   special: "Спецнавык",
 };
 
-// Короткая версия для плашки рядом с выбранным типом
+// Короткая версия для плашки рядом с выбранным типом на шаге «Обзор»
 export const GROUP_SHORT: Record<TrainingGroup, string> = {
   full: "Полный сценарий",
   stage: "Отдельный этап",
   special: "Спецнавык",
 };
-
-export function findTrainingType(id: string | null): TrainingType | null {
-  if (!id) return null;
-  return TRAINING_TYPES.find((type) => type.id === id) ?? null;
-}
 
 // Оформление плашки сложности пациента — общее для мастера и карточки
 export const DIFFICULTY = {

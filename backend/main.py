@@ -212,10 +212,19 @@ class TurnManager:
       обрывает ответ, клиент сбрасывает буфер воспроизведения.
     """
 
-    def __init__(self, ws: WebSocket, session_id: str, tts_stream: "tts.TtsWsStream") -> None:
+    def __init__(
+        self,
+        ws: WebSocket,
+        session_id: str,
+        tts_stream: "tts.TtsWsStream",
+        system_prompt: str,
+    ) -> None:
         self.ws = ws
         self.session_id = session_id
         self.tts_stream = tts_stream
+        # Роль пациента вместе с инструкцией этапа: загружается один раз
+        # при подключении и не меняется в течение разговора
+        self.system_prompt = system_prompt
         # Проставляется после создания ElevenLabsSTT (нужен seconds_since_voice)
         self.stt: Optional[ElevenLabsSTT] = None
         self.barge_in_enabled = get_settings().barge_in_enabled
@@ -551,7 +560,7 @@ class TurnManager:
                 buffer = ""
                 full_reply = ""
                 try:
-                    async for delta in llm.stream_reply(history):
+                    async for delta in llm.stream_reply(history, self.system_prompt):
                         buffer += delta
                         full_reply += delta
                         # Вырезаем из буфера готовые предложения
@@ -709,6 +718,20 @@ async def session_ws(ws: WebSocket, session_id: str):
         await ws.close(code=1008)
         return
 
+    # Роль, которую играет ИИ. Без промпта разговор не начинаем: молча играть
+    # непонятно кого хуже, чем честно сказать, что персонаж не настроен.
+    system_prompt = await store.get_system_prompt(session_id)
+    if not system_prompt:
+        await safe_send(
+            ws,
+            {
+                "type": "error",
+                "message": "Для этого пациента ещё не настроен промпт",
+            },
+        )
+        await ws.close(code=1008)
+        return
+
     logger.info(
         "Сессия %s: подключение установлено (user=%s)", session_id, user_id
     )
@@ -725,7 +748,12 @@ async def session_ws(ws: WebSocket, session_id: str):
 
     # 3. Менеджер ходов: получает STT-коммиты, фильтрует фантомы, запускает
     # отменяемый пайплайн LLM -> TTS (склейка разрезанных фраз, barge-in).
-    manager = TurnManager(ws=ws, session_id=session_id, tts_stream=tts_stream)
+    manager = TurnManager(
+        ws=ws,
+        session_id=session_id,
+        tts_stream=tts_stream,
+        system_prompt=system_prompt,
+    )
 
     # 4. Инициализируем STT (ElevenLabs Realtime)
     api_key = get_settings().elevenlabs_api_key

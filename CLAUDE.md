@@ -27,7 +27,8 @@ npm run lint                          # ESLint
 npx prisma migrate deploy             # применить миграции
 npm run prisma:migrate                # создать миграцию
 npm run seed:content                  # советы дня и мотивации
-npm run seed:patients                 # пациенты для мастера тренировки
+npm run seed:patients                 # пациенты и их промпты
+npm run seed:training                 # типы тренировки и их промпты
 npm run seed:demo                     # демо-аккаунт (после seed:patients)
 npm run create-user                   # интерактивно (ввод — за пользователем)
 

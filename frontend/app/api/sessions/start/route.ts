@@ -8,7 +8,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
-import { findTrainingType } from "@/lib/training";
 
 export const runtime = "nodejs";
 
@@ -36,18 +35,21 @@ export async function POST(request: NextRequest) {
       // пустое или неразбираемое тело — идём по старому пути
     }
 
-    // Тип тренировки сверяем со справочником: доступен пока только один,
-    // и принимать на веру идентификатор от клиента нельзя
-    let trainingType: string | null = null;
+    // Тип тренировки сверяем с базой: принимать на веру идентификатор
+    // от клиента нельзя, а неактивные типы в мастере видны
+    let trainingTypeId: string | null = null;
     if (body.trainingType) {
-      const type = findTrainingType(body.trainingType);
-      if (!type || !type.enabled) {
+      const type = await prisma.trainingType.findUnique({
+        where: { id: body.trainingType },
+        select: { id: true, isActive: true },
+      });
+      if (!type || !type.isActive) {
         return NextResponse.json(
           { error: "Этот тип тренировки пока недоступен" },
           { status: 400 }
         );
       }
-      trainingType = type.id;
+      trainingTypeId = type.id;
     }
 
     // Пациент, которого играет ИИ. Проверяем на сервере, что он активен:
@@ -81,7 +83,7 @@ export async function POST(request: NextRequest) {
       data: {
         userId: user.sub,
         patientId,
-        trainingType,
+        trainingTypeId,
         status: "active",
       },
     });

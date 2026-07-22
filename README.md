@@ -51,7 +51,8 @@ npm install
 Copy-Item .env.example .env
 npx prisma migrate deploy     # применить миграции
 npm run seed:content          # советы дня и мотивации (иначе блок пустой)
-npm run seed:patients         # пациенты для мастера тренировки
+npm run seed:patients         # пациенты и их промпты
+npm run seed:training         # типы тренировки и их промпты
 npm run create-user           # создать пользователя (email, пароль, имя, фамилия)
 npm run dev
 ```

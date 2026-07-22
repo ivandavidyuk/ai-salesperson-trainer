@@ -15,11 +15,10 @@ import {
   DIFFICULTY,
   GROUP_LABELS,
   GROUP_SHORT,
-  TRAINING_TYPES,
   type DifficultyKey,
   type TrainingGroup,
-  type TrainingType,
   type WizardPatient,
+  type WizardTrainingType,
 } from "@/lib/training";
 
 interface TrainingSetupModalProps {
@@ -108,6 +107,7 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
   const [typeId, setTypeId] = useState<string | null>(null);
   const [patientId, setPatientId] = useState<string | null>(null);
 
+  const [types, setTypes] = useState<WizardTrainingType[] | null>(null);
   const [patients, setPatients] = useState<WizardPatient[] | null>(null);
   const [loadError, setLoadError] = useState("");
   const [query, setQuery] = useState("");
@@ -116,16 +116,29 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
   const [infoPatient, setInfoPatient] = useState<WizardPatient | null>(null);
   const [starting, setStarting] = useState(false);
 
+  // Типы и пациенты приходят из базы: там же лежат их промпты, которыми
+  // backend собирает роль ИИ
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/patients");
-        if (!res.ok) throw new Error("request failed");
-        const data = (await res.json()) as WizardPatient[];
-        if (!cancelled) setPatients(data);
+        const [typesRes, patientsRes] = await Promise.all([
+          fetch("/api/training-types"),
+          fetch("/api/patients"),
+        ]);
+        if (!typesRes.ok || !patientsRes.ok) throw new Error("request failed");
+        const [typesData, patientsData] = await Promise.all([
+          typesRes.json() as Promise<WizardTrainingType[]>,
+          patientsRes.json() as Promise<WizardPatient[]>,
+        ]);
+        if (!cancelled) {
+          setTypes(typesData);
+          setPatients(patientsData);
+        }
       } catch {
-        if (!cancelled) setLoadError("Не удалось загрузить список пациентов");
+        if (!cancelled) {
+          setLoadError("Не удалось загрузить типы тренировки и пациентов");
+        }
       }
     })();
     return () => {
@@ -144,8 +157,8 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
   }, [onClose]);
 
   const selectedType = useMemo(
-    () => TRAINING_TYPES.find((type) => type.id === typeId) ?? null,
-    [typeId]
+    () => types?.find((type) => type.id === typeId) ?? null,
+    [types, typeId]
   );
   const selectedPatient = useMemo(
     () => patients?.find((patient) => patient.id === patientId) ?? null,
@@ -179,20 +192,20 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
 
   // Ярлык «выбери за меня»: берёт только доступное и прыгает сразу на обзор
   function handleRandom() {
-    const types = TRAINING_TYPES.filter((type) => type.enabled);
+    const availableTypes = (types ?? []).filter((type) => type.isActive);
     const available = (patients ?? []).filter((patient) => patient.isActive);
-    if (types.length === 0 || available.length === 0) return;
-    setTypeId(types[Math.floor(Math.random() * types.length)].id);
+    if (availableTypes.length === 0 || available.length === 0) return;
+    setTypeId(availableTypes[Math.floor(Math.random() * availableTypes.length)].id);
     setPatientId(available[Math.floor(Math.random() * available.length)].id);
     setStep(2);
   }
 
   const typesByGroup = (group: TrainingGroup) =>
-    TRAINING_TYPES.filter((type) => type.group === group);
+    (types ?? []).filter((type) => type.group === group);
 
-  function renderTypeCard(type: TrainingType) {
+  function renderTypeCard(type: WizardTrainingType) {
     const selected = typeId === type.id;
-    const disabled = !type.enabled;
+    const disabled = !type.isActive;
     return (
       <button
         key={type.id}
@@ -207,7 +220,7 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
             {type.title}
           </span>
           <span className="mt-0.5 block text-pretty text-[12.5px] text-ink-muted">
-            {type.desc}
+            {type.description}
           </span>
         </span>
         {disabled && <SoonBadge />}
@@ -296,7 +309,17 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
 
         {/* Тело шага */}
         <div className="flex min-h-0 flex-1 flex-col gap-[22px] overflow-y-auto px-6 py-[22px]">
-          {step === 0 && (
+          {step === 0 && !types && !loadError && (
+            <div className="flex justify-center py-9 text-ink-muted">
+              <Spinner />
+            </div>
+          )}
+
+          {step === 0 && loadError && (
+            <p className="py-9 text-center text-sm text-danger-text">{loadError}</p>
+          )}
+
+          {step === 0 && types && (
             <>
               <div>
                 <GroupTitle>{GROUP_LABELS.full}</GroupTitle>
@@ -479,7 +502,7 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
                       {selectedType.title}
                     </span>
                     <span className="mt-0.5 block text-[13px] text-ink-muted">
-                      {selectedType.desc}
+                      {selectedType.description}
                     </span>
                   </span>
                   <span className="shrink-0 whitespace-nowrap rounded-full border border-line-accent bg-surface-card px-2.5 py-1 text-[10.5px] font-semibold text-brand-hover">
