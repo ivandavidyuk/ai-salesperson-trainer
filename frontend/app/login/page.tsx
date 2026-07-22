@@ -56,54 +56,58 @@ export default function LoginPage() {
     <main className="flex min-h-screen">
       {/* Брендовая панель. На узких экранах скрыта — мобильный макет
           будет сделан отдельно, сейчас форма просто занимает всю ширину. */}
-      <aside className="hidden w-[40%] flex-col justify-between bg-brand px-12 py-14 text-white md:flex">
-        <Logo tone="on-brand" />
+      <aside className="hidden w-[46%] flex-col justify-between bg-brand px-20 py-[72px] text-white md:flex">
+        <Logo tone="on-brand" size="lg" />
 
         {/* Ограничиваем длину строк, чтобы текст не растягивался на всю панель */}
-        <div className="max-w-[440px]">
-          <p className="text-[28px] font-semibold leading-[1.25] tracking-[-0.01em]">
+        <div>
+          <p className="max-w-[620px] text-[46px] font-semibold leading-[1.18] tracking-[-0.01em]">
             Тренируйте живой разговор с клиентом до звонка настоящему.
           </p>
-          <p className="mt-4 text-[14.5px] leading-relaxed text-brand-panel-text">
+          <p className="mt-6 max-w-[540px] text-lg leading-relaxed text-brand-panel-text">
             Голосовой ИИ-тренажёр для менеджеров клиники. Контакт, потребность,
             работа с возражениями — в безопасной репетиции.
           </p>
         </div>
 
-        <p className="font-mono text-xs tracking-[0.04em] text-brand-panel-meta">
+        <p className="font-mono text-[13px] tracking-[0.04em] text-brand-panel-meta">
           Инструмент обучения · внутренний доступ
         </p>
       </aside>
 
       {/* Форма входа: центрируется в оставшейся части экрана */}
-      <div className="flex flex-1 items-center justify-center bg-surface-card px-6 py-12">
-        <form onSubmit={handleSubmit} className="w-full max-w-[440px]">
+      <div className="flex flex-1 items-center justify-center bg-surface-card p-6 md:p-[60px]">
+        <form onSubmit={handleSubmit} className="w-full max-w-[420px]">
           {/* Пока панель скрыта на узких экранах — показываем логотип здесь */}
           <Logo className="mb-8 md:hidden" />
 
-          <h1 className="text-2xl font-semibold text-ink">Вход в аккаунт</h1>
-          <p className="mt-1.5 text-[14.5px] text-ink-muted">
+          <h1 className="text-[32px] font-semibold tracking-[-0.01em] text-ink">
+            Вход в аккаунт
+          </h1>
+          <p className="mt-2 text-base text-ink-muted">
             Войдите рабочей почтой клиники.
           </p>
 
           {/* Сообщение об ошибке */}
-          {error && <Alert className="mt-5">{error}</Alert>}
+          {error && <Alert className="mt-6">{error}</Alert>}
 
           <Field
             label="Email"
             type="email"
+            size="lg"
             required
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="manager@clinic.ru"
             disabled={loading}
-            className="mt-[26px]"
+            className="mt-8"
           />
 
           <Field
             label="Пароль"
             type="password"
+            size="lg"
             required
             autoComplete="current-password"
             value={password}
@@ -112,19 +116,19 @@ export default function LoginPage() {
             disabled={loading}
             invalid={Boolean(error)}
             aria-invalid={Boolean(error)}
-            className="mt-[18px]"
+            className="mt-5"
           />
 
           {/* Восстановления пароля пока нет — ссылка-заглушка, как в макете */}
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2.5 flex justify-end">
             {loading ? (
-              <span className="text-[13px] text-ink-placeholder">
+              <span className="text-[13.5px] text-ink-placeholder">
                 Забыли пароль?
               </span>
             ) : (
               <a
                 href="#"
-                className="text-[13px] text-brand hover:text-brand-hover"
+                className="text-[13.5px] text-brand hover:text-brand-hover"
               >
                 Забыли пароль?
               </a>
@@ -135,7 +139,7 @@ export default function LoginPage() {
             type="submit"
             size="lg"
             loading={loading}
-            className="mt-[22px] w-full"
+            className="mt-[26px] w-full"
           >
             {loading ? "Входим…" : "Войти"}
           </Button>

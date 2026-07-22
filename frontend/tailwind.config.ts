@@ -101,6 +101,7 @@ const config: Config = {
       },
       borderRadius: {
         input: "10px", // поля ввода и кнопки
+        "input-lg": "11px", // крупный масштаб (экран входа)
         card: "16px",
       },
       boxShadow: {
