@@ -191,7 +191,7 @@ export default function AppShell({ title, children }: AppShellProps) {
               <path d="M4 17.5h16" />
             </svg>
           </span>
-          {navOpen && <Logo className="whitespace-nowrap [&>span:first-child]:text-lg" />}
+          {navOpen && <Logo size="sm" className="whitespace-nowrap" />}
         </button>
 
         {NAV_ITEMS.map((item) => {

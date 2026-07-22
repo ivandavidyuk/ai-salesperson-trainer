@@ -20,10 +20,11 @@ const variantClasses: Record<Variant, string> = {
   danger: "bg-danger text-white hover:bg-danger/90",
 };
 
-// Размеры: md — кнопки экранов, lg — крупная кнопка формы
+// Размеры: md — кнопки экранов, lg — крупная кнопка формы входа
+// (у lg свой радиус: на входе весь масштаб крупнее)
 const sizeClasses: Record<Size, string> = {
-  md: "px-5 py-[11px] text-[15px]",
-  lg: "px-5 py-[14px] text-base",
+  md: "rounded-input px-5 py-[11px] text-[15px]",
+  lg: "rounded-input-lg px-5 py-4 text-[17px]",
 };
 
 export default function Button({
@@ -46,7 +47,7 @@ export default function Button({
   return (
     <button
       disabled={isBlocked}
-      className={`inline-flex items-center justify-center gap-2.5 rounded-input font-semibold transition-colors disabled:cursor-not-allowed ${
+      className={`inline-flex items-center justify-center gap-2.5 font-semibold transition-colors disabled:cursor-not-allowed ${
         sizeClasses[size]
       } ${isBlocked ? blockedClasses : variantClasses[variant]} ${className}`}
       {...props}
