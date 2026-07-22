@@ -154,8 +154,10 @@ systemctl status docker-user-firewall.service
 # 1. Советы дня и мотивации — ОБЯЗАТЕЛЬНО, иначе блок на главной пуст
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:content
 
-# 2. Пациенты для мастера тренировки — ОБЯЗАТЕЛЬНО, иначе выбирать некого
+# 2. Пациенты и типы тренировки — ОБЯЗАТЕЛЬНО: в них лежат промпты,
+#    без которых backend откажется начинать разговор
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:patients
+docker compose -f docker-compose.prod.yml exec frontend npm run seed:training
 
 # 3. Пользователь (email, пароль, имя, фамилия)
 docker compose -f docker-compose.prod.yml exec frontend npm run create-user
@@ -166,6 +168,11 @@ docker compose -f docker-compose.prod.yml exec frontend npm run seed:demo
 
 `seed:demo` привязывает разговоры к пациенту из `seed:patients`, поэтому
 порядок менять нельзя — без пациентов он завершится с ошибкой.
+
+Промпты пациентов и типов тренировки живут в коде сидов (`frontend/scripts/`),
+а не в базе: источник правды — репозиторий. Оба скрипта **перезаписывают**
+промпты при каждом запуске, поэтому править их напрямую в БД бесполезно —
+изменения потеряются на следующем сиде.
 
 `seed:demo` печатает сгенерированный пароль один раз. Чтобы задать свой:
 `... exec -e DEMO_PASSWORD=... frontend npm run seed:demo`. Скрипт идемпотентный

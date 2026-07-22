@@ -3,6 +3,7 @@
 Состояние живёт в Redis:
     session:{id}:status    -> "active" | "paused" | "completed"
     session:{id}:messages  -> JSON-список сообщений (контекст для LLM)
+    session:{id}:prompt    -> системный промпт (роль пациента + этап)
 
 Кроме того, каждое сообщение диалога сохраняется в PostgreSQL (таблица
 "Message"), созданную миграцией Prisma из Next.js приложения.
@@ -21,6 +22,7 @@ import asyncpg
 import redis.asyncio as aioredis
 
 from core.config import get_settings
+from services import llm
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,10 @@ def _status_key(session_id: str) -> str:
 
 def _messages_key(session_id: str) -> str:
     return f"session:{session_id}:messages"
+
+
+def _prompt_key(session_id: str) -> str:
+    return f"session:{session_id}:prompt"
 
 
 class SessionStore:
@@ -196,11 +202,62 @@ class SessionStore:
             )
 
 
+    # --- Системный промпт ------------------------------------------------
+
+    async def get_system_prompt(self, session_id: str) -> Optional[str]:
+        """Собирает системный промпт сессии: роль пациента + этап тренировки.
+
+        Возвращает None, если у пациента нет промпта — играть непонятно кого
+        хуже, чем честно отказаться начинать разговор.
+
+        Результат кэшируется в Redis: переподключение к живой сессии не ходит
+        в Postgres второй раз.
+        """
+        assert self._redis is not None and self._pool is not None
+
+        cached = await self._redis.get(_prompt_key(session_id))
+        if cached is not None:
+            return cached or None
+
+        row = await self._pool.fetchrow(
+            'SELECT p."prompt" AS patient_prompt, p."name" AS patient_name, '
+            't."prompt" AS type_prompt, t."title" AS type_title '
+            'FROM "Session" s '
+            'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
+            'LEFT JOIN "TrainingType" t ON t."id" = s."trainingTypeId" '
+            'WHERE s."id" = $1',
+            session_id,
+        )
+        if row is None:
+            return None
+
+        # Проверяем именно роль пациента, а не итоговую склейку: с одним лишь
+        # промптом этапа ИИ играл бы непонятно кого, а строка была бы непустой
+        if not (row["patient_prompt"] or "").strip():
+            logger.error(
+                "Сессия %s: у пациента «%s» не заполнен промпт",
+                session_id,
+                row["patient_name"] or "не задан",
+            )
+            return None
+
+        prompt = llm.build_system_prompt(row["patient_prompt"], row["type_prompt"])
+
+        logger.info(
+            "Сессия %s: промпт собран — пациент «%s», тип «%s», %d символов",
+            session_id,
+            row["patient_name"],
+            row["type_title"] or "не задан",
+            len(prompt),
+        )
+        await self._redis.set(_prompt_key(session_id), prompt)
+        return prompt
+
     # --- Очистка ---------------------------------------------------------
 
     async def clear_session(self, session_id: str) -> None:
         """Удаляет онлайн-данные сессии из Redis (история в БД сохраняется)."""
         assert self._redis is not None
         await self._redis.delete(
-            _status_key(session_id), _messages_key(session_id)
+            _status_key(session_id), _messages_key(session_id), _prompt_key(session_id)
         )
