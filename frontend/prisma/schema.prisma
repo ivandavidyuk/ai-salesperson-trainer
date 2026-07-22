@@ -47,8 +47,11 @@ model User {
 model Patient {
   id          String    @id @default(uuid())
   name        String
-  // Краткая легенда персонажа (возраст, запрос, характер)
+  // Короткая строка под именем на экране звонка: «62 года · диагностика зрения»
   description String?
+  // Анамнез: что менеджеру полезно знать о пациенте до разговора.
+  // Показывается отдельным блоком на экране звонка перед стартом.
+  anamnesis   String?
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
 
