@@ -35,6 +35,11 @@ interface TrainingSetupModalProps {
    * шаги «Тип» и «Обзор».
    */
   presetPatient?: WizardPatient;
+  /**
+   * Тип выбран заранее (запуск из раздела «Тренировка») — остаются
+   * шаги «Пациент» и «Обзор».
+   */
+  presetType?: WizardTrainingType;
 }
 
 type StepKey = "type" | "patient" | "review";
@@ -116,6 +121,7 @@ export default function TrainingSetupModal({
   onClose,
   assignment,
   presetPatient,
+  presetType,
 }: TrainingSetupModalProps) {
   const router = useRouter();
 
@@ -124,11 +130,13 @@ export default function TrainingSetupModal({
     ? ["review"]
     : presetPatient
       ? ["type", "review"]
-      : ["type", "patient", "review"];
+      : presetType
+        ? ["patient", "review"]
+        : ["type", "patient", "review"];
 
   const [step, setStep] = useState(0);
   const [typeId, setTypeId] = useState<string | null>(
-    assignment?.trainingType.id ?? null
+    assignment?.trainingType.id ?? presetType?.id ?? null
   );
   const [patientId, setPatientId] = useState<string | null>(
     assignment?.patient.id ?? presetPatient?.id ?? null
@@ -186,12 +194,12 @@ export default function TrainingSetupModal({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  // Тип берём из справочника даже в режиме задания: в самом задании нет
-  // описания и группы, а «Обзор» их показывает
-  const selectedType = useMemo(
-    () => types?.find((type) => type.id === typeId) ?? null,
-    [types, typeId]
-  );
+  // Заранее выбранный тип приходит целиком; в задании его нет — там только
+  // id и заголовок, поэтому для «Обзора» тип берётся из справочника
+  const selectedType = useMemo(() => {
+    if (presetType) return presetType;
+    return types?.find((type) => type.id === typeId) ?? null;
+  }, [presetType, types, typeId]);
 
   // Заранее выбранный пациент приходит целиком — справочника ждать не нужно
   const selectedPatient = useMemo(() => {
@@ -234,11 +242,13 @@ export default function TrainingSetupModal({
   }
 
   // Ярлык «выбери за меня»: берёт только доступное и прыгает сразу на обзор.
-  // Заранее выбранного пациента не трогает — его выбрали осознанно.
+  // Заранее выбранное не трогает — это выбрали осознанно.
   function handleRandom() {
-    const availableTypes = (types ?? []).filter((type) => type.isActive);
-    if (availableTypes.length === 0) return;
-    setTypeId(availableTypes[Math.floor(Math.random() * availableTypes.length)].id);
+    if (!presetType) {
+      const availableTypes = (types ?? []).filter((type) => type.isActive);
+      if (availableTypes.length === 0) return;
+      setTypeId(availableTypes[Math.floor(Math.random() * availableTypes.length)].id);
+    }
 
     if (!presetPatient) {
       const available = (patients ?? []).filter((patient) => patient.isActive);
