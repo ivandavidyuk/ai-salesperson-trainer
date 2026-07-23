@@ -63,10 +63,13 @@ flowchart LR
 |---|---|
 | `DOCKERHUB_USERNAME` | логин Docker Hub |
 | `DOCKERHUB_TOKEN` | access token Docker Hub (Read & Write) |
-| `RU_HOST`, `RU_SSH_PASSWORD` | IP и root-пароль RU-сервера |
-| `DE_HOST`, `DE_SSH_PASSWORD` | IP и root-пароль DE-сервера |
+| `RU_HOST` | IP RU-сервера |
+| `DE_HOST` | IP DE-сервера |
+| `DEPLOY_SSH_KEY` | приватный ключ для входа на оба сервера |
 
-SSH-аутентификация — по паролю (`appleboy/ssh-action`). Значения секретов
+SSH-аутентификация — **по ключу** (`appleboy/ssh-action`, поле `key`); парольный
+вход на серверах отключён. Ключ отдельный от людских: в `authorized_keys` он
+подписан `github-actions-deploy` и отзывается независимо. Значения секретов
 зашифрованы и маскируются в логах workflow.
 
 ---
@@ -81,10 +84,23 @@ SSH-аутентификация — по паролю (`appleboy/ssh-action`). 
 
 ```
 ~/ai-trainer/
-├── docker-compose.yml   # копия deploy/docker-compose.de.yml
+├── docker-compose.yml   # РУЧНАЯ копия deploy/docker-compose.de.yml
 ├── .env                 # DOCKERHUB_USER, REDIS_PASSWORD
 └── backend.env          # секреты backend (см. backend/.env.production.example)
 ```
+
+> **Правки `deploy/docker-compose.de.yml` на DE сами не приезжают.** В отличие
+> от RU, где деплой делает `git pull`, здесь `~/ai-trainer` — не репозиторий, и
+> workflow только дёргает `docker compose pull && up -d`. Изменил compose —
+> скопируй руками, иначе изменение уедет в git и молча не подействует:
+>
+> ```bash
+> scp deploy/docker-compose.de.yml de:~/ai-trainer/docker-compose.yml
+> ```
+>
+> Контейнеры пересоздадутся на ближайшей выкатке: `up -d` увидит, что
+> конфигурация изменилась. Отдельный рестарт не нужен — он бы оборвал
+> активные голосовые сессии.
 
 `backend.env` — по шаблону [backend/.env.production.example](backend/.env.production.example):
 ключи `LLM_*` и `ELEVENLABS_*`; `DATABASE_URL` — публичный IP RU (Postgres);
@@ -149,6 +165,90 @@ journalctl --disk-usage   # проверка
 Ротацию логов контейнеров задавать не нужно — она в самих compose-файлах
 (якорь `x-logging`, 10 МБ × 3 файла на сервис). Правило применяется при
 пересоздании контейнера, то есть на ближайшей выкатке.
+
+---
+
+## Доступ к серверам: только по SSH-ключу
+
+Парольный вход отключён на обоих серверах (2026-07-23). До этого боты
+перебирали пароль ~12 000 раз в сутки; подобрать его достаточно один раз, а
+дальше это полный root-доступ к базе и ключам ElevenLabs/OpenRouter.
+
+Настройки лежат в `/etc/ssh/sshd_config.d/01-hardening.conf`:
+
+```
+PasswordAuthentication no
+KbdInteractiveAuthentication no   # иначе PAM спросит пароль в обход
+PermitRootLogin prohibit-password # root по ключу можно, по паролю нельзя
+```
+
+> **Префикс `01-` обязателен, и это не косметика.** `sshd` подключает
+> `sshd_config.d/*.conf` в начале конфига, читает файлы по алфавиту и для
+> большинства ключей берёт **первое** встреченное значение, а не последнее.
+> Рядом лежит `50-cloud-init.conf` с `PasswordAuthentication yes`, поэтому
+> привычный `99-hardening.conf` был бы прочитан позже и **молча не
+> подействовал**: выглядело бы как «закрыто», а сервер стоял бы нараспашку.
+
+Отсюда правило проверки: смотреть не на наличие файла, а на итог —
+
+```bash
+sshd -t                       # синтаксис; упало — конфиг не применять
+sshd -T | grep -E 'passwordauthentication|kbdinteractive|permitrootlogin'
+```
+
+### Как менять настройки SSH и не запереть себя снаружи
+
+Перед правкой ставим автооткат: не отменим за 10 минут — сервер вернёт всё сам.
+
+```bash
+systemd-run --on-active=600 --unit=ssh-rollback \
+  /bin/sh -c 'rm -f /etc/ssh/sshd_config.d/01-hardening.conf; systemctl restart ssh'
+# ... правим, проверяем sshd -t и sshd -T, перезапускаем ssh ...
+# ... из ОТДЕЛЬНОГО соединения убеждаемся, что вход работает ...
+systemctl stop ssh-rollback.timer   # только теперь снимаем страховку
+```
+
+Перезапуск: на RU `systemctl restart ssh`; на DE (Ubuntu 24.04, socket-активация)
+ещё и `ssh.socket`, иначе настройки подхватятся не сразу.
+
+Последний рубеж — **веб-консоль хостера**: она работает мимо SSH, и пароль root
+там продолжает действовать даже при `PasswordAuthentication no`.
+
+### Добавить доступ новому человеку
+
+Он генерирует пару у себя (`ssh-keygen -t ed25519`) и присылает **публичную**
+часть — `.pub`. Приватную не передаёт никому.
+
+```bash
+ssh ru "echo 'ssh-ed25519 AAAA... имя@машина' >> ~/.ssh/authorized_keys"
+ssh de "echo 'ssh-ed25519 AAAA... имя@машина' >> ~/.ssh/authorized_keys"
+```
+
+Отозвать — удалить строку из `~/.ssh/authorized_keys` на обоих серверах.
+Ключ CI подписан `github-actions-deploy`; он отдельный от людских специально,
+чтобы отзывался независимо.
+
+### fail2ban
+
+Банит адреса, долбящиеся в SSH, на час после 5 неудач за 10 минут. После
+перехода на ключи это **не защита от взлома** (угадывать нечего), а разгрузка
+логов и CPU. Конфиг — `/etc/fail2ban/jail.local`, различия серверов:
+
+| | RU (22.04) | DE (24.04) |
+|---|---|---|
+| источник | `/var/log/auth.log` | журнал systemd, нужен `backend = systemd` |
+| чем банит | iptables | nftables (`nft list ruleset`) |
+
+На DE файла `auth.log` нет вовсе: без явного `backend` джейл запустится и будет
+молчать. Обеим машинам задан `mode = aggressive` — после отключения паролей
+боты дают `Connection closed by authenticating user ... [preauth]`, а обычный
+режим ловит только `Failed password` и `Invalid user`.
+
+Проверять результатом, а не статусом сервиса:
+
+```bash
+fail2ban-client status sshd   # счётчик Total failed должен расти
+```
 
 ---
 
@@ -221,6 +321,10 @@ docker compose -f docker-compose.prod.yml down
 
 ## Чек-лист безопасности
 
+- Вход по SSH — **только по ключу**, на обоих серверах; fail2ban включён и
+  в автозапуске (`systemctl is-enabled fail2ban`). Подробности — в разделе
+  «Доступ к серверам».
+- Деплой ходит на серверы по ключу `DEPLOY_SSH_KEY`, не по паролю.
 - `.env`, `frontend/.env`, `backend.env` **не** коммитятся.
 - `JWT_SECRET`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD` — длинные случайные.
 - 5432 на RU открыт **только** для IP DE-сервера (iptables `DOCKER-USER`).
