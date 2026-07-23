@@ -82,6 +82,22 @@ const config: Config = {
           text: "#5A3C00",
           from: "#F4D67E",
           to: "#E3B23C",
+          // Медаль «золотого» достижения на странице достижений
+          medal: "#B8860B",
+          "medal-deep": "#9A6B08",
+        },
+        // Шуточные достижения за курьёзы в разговоре
+        merry: {
+          DEFAULT: "#9C4368",
+          surface: "#F3E4EA",
+        },
+        // Закрытое достижение: приглушённая карточка с замком
+        locked: {
+          surface: "#F4F6F6",
+          border: "#E9EDEC",
+          medal: "#EAEDEC",
+          icon: "#A9B4B2",
+          text: "#A2ABA9",
         },
         // Звезда «в избранном»
         star: {

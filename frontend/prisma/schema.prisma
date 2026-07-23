@@ -55,6 +55,14 @@ enum AssignmentStatus {
   done
 }
 
+// Оформление бейджа достижения: навык, «золотое» достижение
+// или шуточное за курьёз в разговоре
+enum AchievementTone {
+  skill
+  gold
+  fun
+}
+
 // Пользователь системы: менеджер по продажам или его руководитель
 model User {
   id           String    @id @default(uuid())
@@ -71,6 +79,38 @@ model User {
   // Задания: полученные менеджером и выданные руководителем
   assignments        Assignment[] @relation("AssignmentTarget")
   createdAssignments Assignment[] @relation("AssignmentAuthor")
+
+  achievements       UserAchievement[]
+}
+
+// Игровой бейдж за прогресс в тренировках. Сам список — общий для всех,
+// у кого он получен, хранится в UserAchievement.
+model Achievement {
+  // Слаг («first-contact», «closer») — стабильный идентификатор
+  id          String          @id
+  name        String
+  description String
+  // Ключ иконки: сами SVG живут на фронте
+  icon        String
+  tone        AchievementTone
+  // Порядок в сетке на странице
+  position    Int
+  createdAt   DateTime        @default(now())
+
+  users       UserAchievement[]
+}
+
+// Полученное достижение. Механизма выдачи пока нет — связи проставляет сид.
+model UserAchievement {
+  userId        String
+  achievementId String
+  unlockedAt    DateTime    @default(now())
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  // Составной ключ: одно достижение выдаётся пользователю ровно один раз
+  @@id([userId, achievementId])
 }
 
 // Задание от руководителя: предустановленная тренировка с комментарием.

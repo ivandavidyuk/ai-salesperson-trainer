@@ -32,6 +32,24 @@ const HEAD_LAST_NAME = "Волков";
 // Пациентов наливает seed-patients.ts — здесь только привязываем разговоры
 const PATIENT_NAME = "Тамара Михайловна";
 
+// Достижения демо-аккаунта: те же, что отмечены полученными в макете.
+// daysAgo — когда получено, чтобы даты выглядели правдоподобно.
+// Сами достижения наливает seed-achievements.ts.
+const UNLOCKED_ACHIEVEMENTS = [
+  { id: "first-contact", daysAgo: 24 },
+  { id: "closer", daysAgo: 21 },
+  { id: "scriptolog", daysAgo: 18 },
+  { id: "no-lunch", daysAgo: 15 },
+  { id: "detective", daysAgo: 12 },
+  { id: "chatterbox", daysAgo: 11 },
+  { id: "deaf", daysAgo: 10 },
+  { id: "quickdraw", daysAgo: 8 },
+  { id: "door-is-there", daysAgo: 6 },
+  { id: "seller", daysAgo: 4 },
+  { id: "triple-kill", daysAgo: 2 },
+  { id: "fearless", daysAgo: 1 },
+];
+
 // Задания от руководителя: те же три, что в макете «Задания».
 // dueInDays — срок относительно сегодняшнего дня, чтобы карточки не
 // протухали при каждом запуске сида.
@@ -377,6 +395,31 @@ async function main() {
     createdAssignments += 1;
   }
   console.log(`Создано заданий: ${createdAssignments} (автор — ${head.firstName} ${head.lastName})`);
+
+  // 5. Полученные достижения. Механизма выдачи нет — проставляем сидом.
+  await prisma.userAchievement.deleteMany({ where: { userId: user.id } });
+
+  let unlocked = 0;
+  for (const item of UNLOCKED_ACHIEVEMENTS) {
+    const achievement = await prisma.achievement.findUnique({
+      where: { id: item.id },
+    });
+    if (!achievement) {
+      console.error(
+        `Достижение «${item.id}» не найдено.\n` +
+          "Сначала выполните: npm run seed:achievements"
+      );
+      process.exit(1);
+    }
+    const unlockedAt = new Date();
+    unlockedAt.setDate(unlockedAt.getDate() - item.daysAgo);
+    await prisma.userAchievement.create({
+      data: { userId: user.id, achievementId: achievement.id, unlockedAt },
+    });
+    unlocked += 1;
+  }
+  const totalAchievements = await prisma.achievement.count();
+  console.log(`Выдано достижений: ${unlocked} из ${totalAchievements}`);
 
   console.log("\nВход в демо-аккаунт:");
   console.log(`  email:  ${DEMO_EMAIL}`);
