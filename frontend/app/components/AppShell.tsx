@@ -129,6 +129,7 @@ export default function AppShell({ title, children }: AppShellProps) {
     id: string;
     firstName: string;
     lastName: string;
+    role: string;
     avatarUpdatedAt: string | null;
   } | null>(null);
 
@@ -281,7 +282,16 @@ export default function AppShell({ title, children }: AppShellProps) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7">
-          <div className="text-[15px] font-semibold text-ink">{title}</div>
+          <div className="flex items-center gap-2.5">
+            <div className="text-[15px] font-semibold text-ink">{title}</div>
+            {/* У руководителя те же разделы, но наполнение другое —
+                плашка объясняет, почему страница выглядит иначе */}
+            {user?.role === "head" && (
+              <span className="rounded-full bg-brand-soft px-2.5 py-[3px] text-[10.5px] font-bold uppercase tracking-[.06em] text-brand-hover">
+                Режим РОП
+              </span>
+            )}
+          </div>
 
           <div className="relative">
             <button

@@ -12,6 +12,25 @@ interface PatientInfoModalProps {
   onClose: () => void;
 }
 
+function SectionTitle({ children }: { children: string }) {
+  return (
+    <div className="font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+      {children}
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: string }) {
+  return (
+    <div>
+      <SectionTitle>{title}</SectionTitle>
+      <p className="mt-1.5 text-pretty text-[13.5px] leading-normal text-ink-body">
+        {children}
+      </p>
+    </div>
+  );
+}
+
 export default function PatientInfoModal({
   patient,
   onClose,
@@ -87,6 +106,61 @@ export default function PatientInfoModal({
               {difficulty.label}
             </span>
           </div>
+
+          {/* Разбор приходит только руководителю: у менеджера этих полей
+              в ответе API нет, и блоки просто не рисуются */}
+          {patient.character && (
+            <Section title="Характер">{patient.character}</Section>
+          )}
+
+          {patient.objections && patient.objections.length > 0 && (
+            <div>
+              <SectionTitle>Особые возражения</SectionTitle>
+              <div className="mt-2 flex flex-col gap-2">
+                {patient.objections.map((objection) => (
+                  <div key={objection} className="flex items-start gap-2.5">
+                    <span className="mt-[7px] inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-danger-strong" />
+                    <span className="text-pretty text-[13.5px] leading-normal text-ink-body">
+                      {objection}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {patient.decisionMaker && (
+            <Section title="ЛПР · кто принимает решение">
+              {patient.decisionMaker}
+            </Section>
+          )}
+
+          {patient.approach && (
+            <div className="rounded-xl border border-line-accent bg-surface-accent px-4 py-3.5">
+              <div className="flex items-center gap-[7px] font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="8" cy="15" r="4" />
+                  <path d="M10.5 12.5L19 4" />
+                  <path d="M16 7l2 2" />
+                  <path d="M18 5l2 2" />
+                </svg>
+                Подход · как выиграть клиента
+              </div>
+              <p className="mt-[7px] text-pretty text-sm font-medium leading-normal text-ink">
+                {patient.approach}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -22,9 +22,9 @@ const DEMO_EMAIL = "demo@podhod.tech";
 const DEMO_FIRST_NAME = "Ирина";
 const DEMO_LAST_NAME = "Петрова";
 
-// Руководитель, от имени которого выданы задания демо-аккаунта.
-// Своих страниц у роли пока нет, поэтому аккаунт нужен только как автор:
-// заходить под ним некуда, пароль случайный и никуда не выводится.
+// Руководитель: автор заданий и владелец режима РОП.
+// Пароль берётся из HEAD_PASSWORD либо генерируется и печатается один раз —
+// так же, как у демо-аккаунта.
 const HEAD_EMAIL = "head@podhod.tech";
 const HEAD_FIRST_NAME = "Сергей";
 const HEAD_LAST_NAME = "Волков";
@@ -80,6 +80,29 @@ const ASSIGNMENTS = [
     comment:
       "Контрольный прогон целиком. Свяжи всё, что тренировали, " +
       "в один спокойный разговор.",
+  },
+];
+
+// Задания остальным менеджерам. Нужны, чтобы у руководителя в списке
+// были разные адресаты — у демо-аккаунта при этом остаются свои три.
+const TEAM_ASSIGNMENTS = [
+  {
+    title: "Знакомство без спешки",
+    trainingTypeId: "s1",
+    dueInDays: 2,
+    isPriority: false,
+    comment:
+      "Начало разговора сейчас скомканное. Представься спокойно и назови " +
+      "цель звонка — дальше будет проще.",
+  },
+  {
+    title: "Мягкий перехват в затянувшемся разговоре",
+    trainingTypeId: "intercept",
+    dueInDays: 4,
+    isPriority: true,
+    comment:
+      "Клиент уводит тему, а ты идёшь следом. Потренируй, как вернуть " +
+      "разговор к делу и не показаться грубым.",
   },
 ];
 
@@ -346,27 +369,54 @@ async function main() {
 
   console.log(`Создано разговоров: ${conversations.length}`);
 
-  // 4. Задания от руководителя. Аккаунт руководителя нужен только как автор:
-  // своих страниц у роли пока нет, поэтому пароль случайный и не выводится.
+  // 4. Задания от руководителя
+  const headPassword =
+    process.env.HEAD_PASSWORD || randomBytes(9).toString("base64url");
   const head = await prisma.user.upsert({
     where: { email: HEAD_EMAIL },
-    update: { firstName: HEAD_FIRST_NAME, lastName: HEAD_LAST_NAME, role: "head" },
-    create: {
-      email: HEAD_EMAIL,
-      passwordHash: await bcrypt.hash(randomBytes(24).toString("base64url"), 10),
+    update: {
       firstName: HEAD_FIRST_NAME,
       lastName: HEAD_LAST_NAME,
       role: "head",
+      passwordHash: await bcrypt.hash(headPassword, 10),
+    },
+    create: {
+      email: HEAD_EMAIL,
+      passwordHash: await bcrypt.hash(headPassword, 10),
+      firstName: HEAD_FIRST_NAME,
+      lastName: HEAD_LAST_NAME,
+      role: "head",
+      jobTitle: "Руководитель отдела продаж",
     },
   });
 
-  // Пересоздаём: сроки заданий отсчитываются от сегодняшнего дня
-  await prisma.assignment.deleteMany({ where: { userId: user.id } });
+  // Остальные менеджеры — для заданий из TEAM_ASSIGNMENTS. У руководителя
+  // в списке должны быть разные адресаты, а не один демо-аккаунт.
+  const others = await prisma.user.findMany({
+    where: { role: "manager", id: { not: user.id } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+
+  // Пересоздаём: сроки заданий отсчитываются от сегодняшнего дня.
+  // Чистим всё, что выдал этот руководитель, а не только задания демо —
+  // иначе при повторном запуске у остальных менеджеров копились бы дубли.
+  await prisma.assignment.deleteMany({ where: { createdById: head.id } });
 
   const midnight = new Date();
   midnight.setHours(23, 59, 59, 0);
-  let createdAssignments = 0;
-  for (const item of ASSIGNMENTS) {
+
+  // Кому какое задание: свои три демо-аккаунту, остальные — по кругу
+  // на прочих менеджеров
+  const queue = [
+    ...ASSIGNMENTS.map((item) => ({ item, userId: user.id })),
+    ...TEAM_ASSIGNMENTS.map((item, index) => ({
+      item,
+      userId: others.length > 0 ? others[index % others.length].id : user.id,
+    })),
+  ];
+
+  for (const { item, userId } of queue) {
     // Тип тренировки должен существовать — иначе внешний ключ не встанет
     const type = await prisma.trainingType.findUnique({
       where: { id: item.trainingTypeId },
@@ -382,7 +432,7 @@ async function main() {
     dueAt.setDate(dueAt.getDate() + item.dueInDays);
     await prisma.assignment.create({
       data: {
-        userId: user.id,
+        userId,
         createdById: head.id,
         patientId: patient.id,
         trainingTypeId: type.id,
@@ -392,9 +442,11 @@ async function main() {
         isPriority: item.isPriority,
       },
     });
-    createdAssignments += 1;
   }
-  console.log(`Создано заданий: ${createdAssignments} (автор — ${head.firstName} ${head.lastName})`);
+  console.log(
+    `Создано заданий: ${queue.length} — ${ASSIGNMENTS.length} демо-аккаунту, ` +
+      `${TEAM_ASSIGNMENTS.length} остальным (автор — ${head.firstName} ${head.lastName})`
+  );
 
   // 5. Полученные достижения. Механизма выдачи нет — проставляем сидом.
   await prisma.userAchievement.deleteMany({ where: { userId: user.id } });
@@ -421,14 +473,25 @@ async function main() {
   const totalAchievements = await prisma.achievement.count();
   console.log(`Выдано достижений: ${unlocked} из ${totalAchievements}`);
 
-  console.log("\nВход в демо-аккаунт:");
+  console.log("\nВход в демо-аккаунт (менеджер):");
   console.log(`  email:  ${DEMO_EMAIL}`);
   if (process.env.DEMO_PASSWORD) {
     console.log("  пароль: (из переменной окружения DEMO_PASSWORD)");
   } else {
     console.log(`  пароль: ${password}`);
-    console.log("\nПароль сгенерирован случайно и показан один раз — сохраните его.");
-    console.log("Чтобы задать свой: DEMO_PASSWORD=... npm run seed:demo");
+  }
+
+  console.log("\nВход под руководителем (режим РОП):");
+  console.log(`  email:  ${HEAD_EMAIL}`);
+  if (process.env.HEAD_PASSWORD) {
+    console.log("  пароль: (из переменной окружения HEAD_PASSWORD)");
+  } else {
+    console.log(`  пароль: ${headPassword}`);
+  }
+
+  if (!process.env.DEMO_PASSWORD || !process.env.HEAD_PASSWORD) {
+    console.log("\nСлучайные пароли показаны один раз — сохраните их.");
+    console.log("Чтобы задать свои: DEMO_PASSWORD=... HEAD_PASSWORD=... npm run seed:demo");
   }
 }
 
