@@ -14,6 +14,13 @@ import Logo from "@/app/components/Logo";
 const NAV_WIDTH_OPEN = 248;
 const NAV_WIDTH_CLOSED = 66;
 
+/**
+ * Профиль сохранён — топбару пора перечитать имя и фото.
+ * Событие вместо общего состояния: обновиться нужно ровно одному
+ * компоненту и ровно в двух местах, контекст ради этого избыточен.
+ */
+export const PROFILE_UPDATED_EVENT = "podhod:profile-updated";
+
 interface NavItem {
   href: string;
   label: string;
@@ -118,17 +125,23 @@ export default function AppShell({ title, children }: AppShellProps) {
   // и открытое на старте перекрывало бы страницу при каждом заходе
   const [navOpen, setNavOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [user, setUser] = useState<{ firstName: string; lastName: string } | null>(
-    null
-  );
+  const [user, setUser] = useState<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    avatarUpdatedAt: string | null;
+  } | null>(null);
 
   // Число активных заданий для бейджа в меню
   const [taskCount, setTaskCount] = useState(0);
 
-  // Имя для топбара берём из того же эндпоинта, что и остальные экраны
+  // Имя и фото для топбара. Перечитываем при переходе между страницами
+  // и по событию из профиля: без него шапка показывала бы старое фото
+  // и имя до первого перехода.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+
+    async function load() {
       try {
         const res = await fetch("/api/auth/me");
         if (!res.ok) return;
@@ -137,11 +150,15 @@ export default function AppShell({ title, children }: AppShellProps) {
       } catch {
         // молча: топбар не критичен для работы страницы
       }
-    })();
+    }
+
+    void load();
+    window.addEventListener(PROFILE_UPDATED_EVENT, load);
     return () => {
       cancelled = true;
+      window.removeEventListener(PROFILE_UPDATED_EVENT, load);
     };
-  }, []);
+  }, [pathname]);
 
   // Бейдж заданий: pathname в зависимостях — после запуска задания со
   // страницы «Задания» счётчик должен обновиться
@@ -272,8 +289,19 @@ export default function AppShell({ title, children }: AppShellProps) {
               onClick={() => setUserMenuOpen((open) => !open)}
               className="flex items-center gap-2.5 rounded-input py-[5px] pl-1.5 pr-2.5 transition-colors hover:bg-surface-bubble"
             >
-              <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
-                {user ? `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}` : ""}
+              <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
+                {user?.avatarUpdatedAt ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/api/users/${user.id}/avatar?v=${encodeURIComponent(user.avatarUpdatedAt)}`}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <>
+                    {user ? `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}` : ""}
+                  </>
+                )}
               </span>
               <span className="text-sm text-ink-muted">{shortName || "…"}</span>
               <svg

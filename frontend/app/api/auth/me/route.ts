@@ -43,10 +43,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Загружаем актуальные данные пользователя из БД
+    // Загружаем актуальные данные пользователя из БД.
+    // Байты аватара сюда не кладём: роут дёргает каждая страница через
+    // AppShell, и таскать за собой десятки килобайт незачем — картинка
+    // приходит отдельным запросом по avatarUpdatedAt.
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, firstName: true, lastName: true },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        jobTitle: true,
+        clinic: true,
+        avatarUpdatedAt: true,
+      },
     });
 
     if (!user) {
@@ -56,7 +68,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(user);
+    return NextResponse.json({
+      ...user,
+      avatarUpdatedAt: user.avatarUpdatedAt?.toISOString() ?? null,
+    });
   } catch (error) {
     console.error("Ошибка в /api/auth/me:", error);
     return NextResponse.json(
