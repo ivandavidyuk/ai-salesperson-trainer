@@ -53,6 +53,15 @@ export async function POST(
       },
     });
 
+    // Разговор по заданию закрывает это задание. updateMany с userId
+    // в условии: чужое задание не должно закрыться даже теоретически.
+    if (session.assignmentId) {
+      await prisma.assignment.updateMany({
+        where: { id: session.assignmentId, userId: user.sub, status: "active" },
+        data: { status: "done", completedAt: endedAt },
+      });
+    }
+
     return NextResponse.json({
       sessionId: updated.id,
       status: updated.status,

@@ -41,6 +41,20 @@ export const DIFFICULTY = {
 
 export type DifficultyKey = keyof typeof DIFFICULTY;
 
+/** Задание от руководителя — то, что отдаёт GET /api/assignments */
+export interface Assignment {
+  id: string;
+  title: string;
+  comment: string;
+  /** ISO-дата или null, если срок не задан */
+  dueAt: string | null;
+  isPriority: boolean;
+  patient: WizardPatient;
+  trainingType: { id: string; title: string; isActive: boolean };
+  /** Имя руководителя, выдавшего задание */
+  author: string;
+}
+
 /** Пациент в мастере — то, что отдаёт GET /api/patients */
 export interface WizardPatient {
   id: string;

@@ -52,6 +52,8 @@ function SessionScreen() {
   // зайти напрямую — тогда работает прежний путь с активным пациентом.
   const chosenPatientId = searchParams.get("patient");
   const chosenType = searchParams.get("type");
+  // Задание, по которому запущен разговор: закроется при завершении
+  const assignmentId = searchParams.get("assignment");
 
   const [screenState, setScreenState] = useState<ScreenState>("idle");
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -148,6 +150,7 @@ function SessionScreen() {
         body: JSON.stringify({
           patientId: chosenPatientId ?? undefined,
           trainingType: chosenType ?? undefined,
+          assignmentId: assignmentId ?? undefined,
         }),
       });
       if (!res.ok) {

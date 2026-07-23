@@ -47,6 +47,44 @@ export function formatConversationDate(iso: string, now: Date = new Date()): str
   return `${day}${year}, ${time}`;
 }
 
+// Срок задания: «до 22 июля» · «до завтра» · «сегодня» · «просрочено».
+// Ближние сроки называем словами — так виднее, что горит.
+export function formatDueDate(iso: string | null, now: Date = new Date()): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+
+  const startOfDay = (value: Date) =>
+    new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+
+  const daysLeft = Math.round((startOfDay(date) - startOfDay(now)) / 86_400_000);
+
+  if (daysLeft < 0) return "просрочено";
+  if (daysLeft === 0) return "сегодня";
+  if (daysLeft === 1) return "до завтра";
+
+  const day = `${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]}`;
+  const year = date.getFullYear() !== now.getFullYear() ? ` ${date.getFullYear()}` : "";
+  return `до ${day}${year}`;
+}
+
+// Просрочено ли задание — срок раньше сегодняшнего дня
+export function isOverdue(iso: string | null, now: Date = new Date()): boolean {
+  if (!iso) return false;
+  const date = new Date(iso);
+  const startOfDay = (value: Date) =>
+    new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  return startOfDay(date) < startOfDay(now);
+}
+
+// Склонение существительного по числу: 1 задание, 2 задания, 5 заданий
+export function plural(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
 // Инициалы для аватара: «Тамара Михайловна» → «ТМ»
 export function initials(fullName: string | null): string {
   if (!fullName) return "—";

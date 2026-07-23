@@ -22,8 +22,48 @@ const DEMO_EMAIL = "demo@podhod.tech";
 const DEMO_FIRST_NAME = "Ирина";
 const DEMO_LAST_NAME = "Петрова";
 
+// Руководитель, от имени которого выданы задания демо-аккаунта.
+// Своих страниц у роли пока нет, поэтому аккаунт нужен только как автор:
+// заходить под ним некуда, пароль случайный и никуда не выводится.
+const HEAD_EMAIL = "head@podhod.tech";
+const HEAD_FIRST_NAME = "Сергей";
+const HEAD_LAST_NAME = "Волков";
+
 // Пациентов наливает seed-patients.ts — здесь только привязываем разговоры
 const PATIENT_NAME = "Тамара Михайловна";
+
+// Задания от руководителя: те же три, что в макете «Задания».
+// dueInDays — срок относительно сегодняшнего дня, чтобы карточки не
+// протухали при каждом запуске сида.
+const ASSIGNMENTS = [
+  {
+    title: "Возражение по цене операции",
+    trainingTypeId: "s4",
+    dueInDays: 1,
+    isPriority: true,
+    comment:
+      "Ирина, в трёх последних разговорах теряешь клиента на цене. " +
+      "Отработай — отвечай выгодой, а не оправданием.",
+  },
+  {
+    title: "Уточняющие вопросы на первой консультации",
+    trainingTypeId: "s3",
+    dueInDays: 3,
+    isPriority: false,
+    comment:
+      "Больше открытых вопросов в начале — дай клиенту рассказать, " +
+      "что его действительно беспокоит.",
+  },
+  {
+    title: "Разговор от приветствия до записи на приём",
+    trainingTypeId: "full",
+    dueInDays: 5,
+    isPriority: false,
+    comment:
+      "Контрольный прогон целиком. Свяжи всё, что тренировали, " +
+      "в один спокойный разговор.",
+  },
+];
 
 // Понедельник текущей недели, 00:00 — граница «этой недели» в статистике
 function startOfWeek(date: Date): Date {
@@ -287,6 +327,57 @@ async function main() {
   }
 
   console.log(`Создано разговоров: ${conversations.length}`);
+
+  // 4. Задания от руководителя. Аккаунт руководителя нужен только как автор:
+  // своих страниц у роли пока нет, поэтому пароль случайный и не выводится.
+  const head = await prisma.user.upsert({
+    where: { email: HEAD_EMAIL },
+    update: { firstName: HEAD_FIRST_NAME, lastName: HEAD_LAST_NAME, role: "head" },
+    create: {
+      email: HEAD_EMAIL,
+      passwordHash: await bcrypt.hash(randomBytes(24).toString("base64url"), 10),
+      firstName: HEAD_FIRST_NAME,
+      lastName: HEAD_LAST_NAME,
+      role: "head",
+    },
+  });
+
+  // Пересоздаём: сроки заданий отсчитываются от сегодняшнего дня
+  await prisma.assignment.deleteMany({ where: { userId: user.id } });
+
+  const midnight = new Date();
+  midnight.setHours(23, 59, 59, 0);
+  let createdAssignments = 0;
+  for (const item of ASSIGNMENTS) {
+    // Тип тренировки должен существовать — иначе внешний ключ не встанет
+    const type = await prisma.trainingType.findUnique({
+      where: { id: item.trainingTypeId },
+    });
+    if (!type) {
+      console.error(
+        `Тип тренировки «${item.trainingTypeId}» не найден.\n` +
+          "Сначала выполните: npm run seed:training"
+      );
+      process.exit(1);
+    }
+    const dueAt = new Date(midnight);
+    dueAt.setDate(dueAt.getDate() + item.dueInDays);
+    await prisma.assignment.create({
+      data: {
+        userId: user.id,
+        createdById: head.id,
+        patientId: patient.id,
+        trainingTypeId: type.id,
+        title: item.title,
+        comment: item.comment,
+        dueAt,
+        isPriority: item.isPriority,
+      },
+    });
+    createdAssignments += 1;
+  }
+  console.log(`Создано заданий: ${createdAssignments} (автор — ${head.firstName} ${head.lastName})`);
+
   console.log("\nВход в демо-аккаунт:");
   console.log(`  email:  ${DEMO_EMAIL}`);
   if (process.env.DEMO_PASSWORD) {
