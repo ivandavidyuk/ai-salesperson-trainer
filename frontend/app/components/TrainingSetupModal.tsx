@@ -30,15 +30,20 @@ interface TrainingSetupModalProps {
    * комментарий и начать.
    */
   assignment?: Assignment;
+  /**
+   * Пациент выбран заранее (запуск из раздела «Пациенты») — остаются
+   * шаги «Тип» и «Обзор».
+   */
+  presetPatient?: WizardPatient;
 }
 
-const STEPS = ["Тип", "Пациент", "Обзор"] as const;
+type StepKey = "type" | "patient" | "review";
 
-const STEP_HINTS = [
-  "Выберите тип тренировки",
-  "Выберите пациента",
-  "Проверьте параметры и начните",
-];
+const STEP_META: Record<StepKey, { label: string; hint: string }> = {
+  type: { label: "Тип", hint: "Выберите тип тренировки" },
+  patient: { label: "Пациент", hint: "Выберите пациента" },
+  review: { label: "Обзор", hint: "Проверьте параметры и начните" },
+};
 
 const FILTERS: { key: "all" | DifficultyKey; label: string }[] = [
   { key: "all", label: "Все" },
@@ -110,19 +115,27 @@ function DifficultyPill({ difficulty }: { difficulty: DifficultyKey }) {
 export default function TrainingSetupModal({
   onClose,
   assignment,
+  presetPatient,
 }: TrainingSetupModalProps) {
   const router = useRouter();
 
-  // В режиме задания шагов выбора нет — сразу «Обзор»
-  const isAssigned = Boolean(assignment);
+  // Набор шагов зависит от того, что уже выбрано за менеджера
+  const steps: StepKey[] = assignment
+    ? ["review"]
+    : presetPatient
+      ? ["type", "review"]
+      : ["type", "patient", "review"];
 
-  const [step, setStep] = useState(isAssigned ? 2 : 0);
+  const [step, setStep] = useState(0);
   const [typeId, setTypeId] = useState<string | null>(
     assignment?.trainingType.id ?? null
   );
   const [patientId, setPatientId] = useState<string | null>(
-    assignment?.patient.id ?? null
+    assignment?.patient.id ?? presetPatient?.id ?? null
   );
+
+  const currentStep = steps[step];
+  const isLastStep = step === steps.length - 1;
 
   const [types, setTypes] = useState<WizardTrainingType[] | null>(null);
   const [patients, setPatients] = useState<WizardPatient[] | null>(null);
@@ -180,11 +193,12 @@ export default function TrainingSetupModal({
     [types, typeId]
   );
 
-  // Пациент в задании приходит целиком — справочника ждать не нужно
+  // Заранее выбранный пациент приходит целиком — справочника ждать не нужно
   const selectedPatient = useMemo(() => {
     if (assignment) return assignment.patient;
+    if (presetPatient) return presetPatient;
     return patients?.find((patient) => patient.id === patientId) ?? null;
-  }, [assignment, patients, patientId]);
+  }, [assignment, presetPatient, patients, patientId]);
 
   // Поиск идёт и по анамнезу: в макете так и задумано
   const visiblePatients = useMemo(() => {
@@ -201,7 +215,11 @@ export default function TrainingSetupModal({
   }, [patients, query, filter]);
 
   const canNext =
-    step === 0 ? selectedType !== null : step === 1 ? selectedPatient !== null : true;
+    currentStep === "type"
+      ? selectedType !== null
+      : currentStep === "patient"
+        ? selectedPatient !== null
+        : true;
 
   function handleStart() {
     if (!selectedType || !selectedPatient) return;
@@ -215,14 +233,19 @@ export default function TrainingSetupModal({
     router.push(`/session?${params.toString()}`);
   }
 
-  // Ярлык «выбери за меня»: берёт только доступное и прыгает сразу на обзор
+  // Ярлык «выбери за меня»: берёт только доступное и прыгает сразу на обзор.
+  // Заранее выбранного пациента не трогает — его выбрали осознанно.
   function handleRandom() {
     const availableTypes = (types ?? []).filter((type) => type.isActive);
-    const available = (patients ?? []).filter((patient) => patient.isActive);
-    if (availableTypes.length === 0 || available.length === 0) return;
+    if (availableTypes.length === 0) return;
     setTypeId(availableTypes[Math.floor(Math.random() * availableTypes.length)].id);
-    setPatientId(available[Math.floor(Math.random() * available.length)].id);
-    setStep(2);
+
+    if (!presetPatient) {
+      const available = (patients ?? []).filter((patient) => patient.isActive);
+      if (available.length === 0) return;
+      setPatientId(available[Math.floor(Math.random() * available.length)].id);
+    }
+    setStep(steps.length - 1);
   }
 
   const typesByGroup = (group: TrainingGroup) =>
@@ -275,7 +298,7 @@ export default function TrainingSetupModal({
               <div className="mt-[3px] text-pretty text-[13.5px] text-ink-muted">
                 {assignment
                   ? `Задание: ${assignment.title}`
-                  : `Шаг ${step + 1} из ${STEPS.length} · ${STEP_HINTS[step]}`}
+                  : `Шаг ${step + 1} из ${steps.length} · ${STEP_META[currentStep].hint}`}
               </div>
             </div>
             <button
@@ -289,16 +312,16 @@ export default function TrainingSetupModal({
             </button>
           </div>
 
-          {/* Шаги скрыты в режиме задания: выбирать нечего */}
-          {!assignment && (
+          {/* Один шаг — показывать нечего (режим задания) */}
+          {steps.length > 1 && (
           <div className="mt-[18px] flex items-center">
-            {STEPS.map((label, index) => {
+            {steps.map((key, index) => {
               const done = index < step;
               const active = index === step;
-              const last = index === STEPS.length - 1;
+              const last = index === steps.length - 1;
               return (
                 <div
-                  key={label}
+                  key={key}
                   className={`flex items-center ${last ? "flex-none" : "min-w-0 flex-1"}`}
                 >
                   <span
@@ -319,7 +342,7 @@ export default function TrainingSetupModal({
                           : "font-medium text-ink-placeholder"
                     }`}
                   >
-                    {label}
+                    {STEP_META[key].label}
                   </span>
                   {!last && (
                     <span
@@ -339,17 +362,17 @@ export default function TrainingSetupModal({
 
         {/* Тело шага */}
         <div className="flex min-h-0 flex-1 flex-col gap-[22px] overflow-y-auto px-6 py-[22px]">
-          {step === 0 && !types && !loadError && (
+          {currentStep === "type" && !types && !loadError && (
             <div className="flex justify-center py-9 text-ink-muted">
               <Spinner />
             </div>
           )}
 
-          {step === 0 && loadError && (
+          {currentStep === "type" && loadError && (
             <p className="py-9 text-center text-sm text-danger-text">{loadError}</p>
           )}
 
-          {step === 0 && types && (
+          {currentStep === "type" && types && (
             <>
               <div>
                 <GroupTitle>{GROUP_LABELS.full}</GroupTitle>
@@ -368,7 +391,7 @@ export default function TrainingSetupModal({
             </>
           )}
 
-          {step === 1 && (
+          {currentStep === "patient" && (
             <div>
               <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-line-strong bg-surface-card px-3.5 py-2.5">
                 <svg
@@ -508,17 +531,17 @@ export default function TrainingSetupModal({
 
           {/* В режиме задания «Обзор» — первый экран, справочник типов
               ещё может грузиться */}
-          {step === 2 && !selectedType && !loadError && (
+          {currentStep === "review" && !selectedType && !loadError && (
             <div className="flex justify-center py-9 text-ink-muted">
               <Spinner />
             </div>
           )}
 
-          {step === 2 && loadError && (
+          {currentStep === "review" && loadError && (
             <p className="py-9 text-center text-sm text-danger-text">{loadError}</p>
           )}
 
-          {step === 2 && selectedType && selectedPatient && (
+          {currentStep === "review" && selectedType && selectedPatient && (
             <>
               <div>
                 <div className="mb-2.5 font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
@@ -628,8 +651,8 @@ export default function TrainingSetupModal({
 
         {/* Футер */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-t border-line bg-surface-card px-6 py-[15px]">
-          {/* В режиме задания возвращаться некуда — только отмена */}
-          {step === 0 || assignment ? (
+          {/* На первом шаге возвращаться некуда — только отмена */}
+          {step === 0 ? (
             <button
               type="button"
               onClick={onClose}
@@ -648,7 +671,7 @@ export default function TrainingSetupModal({
           )}
 
           <div className="flex items-center gap-2.5">
-            {step < 2 && (
+            {!isLastStep && (
               <button
                 type="button"
                 onClick={handleRandom}
@@ -676,7 +699,7 @@ export default function TrainingSetupModal({
               </button>
             )}
 
-            {step < 2 ? (
+            {!isLastStep ? (
               <button
                 type="button"
                 disabled={!canNext}
