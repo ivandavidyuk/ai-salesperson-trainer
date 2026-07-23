@@ -71,6 +71,17 @@ model User {
   firstName    String
   lastName     String
   role         UserRole  @default(manager)
+  // Заполняются в профиле. Клиника пока свободный текст — переедет
+  // в связь, когда появятся организации.
+  jobTitle     String?
+  clinic       String?
+  // Фото профиля: JPEG после сжатия на клиенте, лежит прямо в базе.
+  // Файловая система контейнера не переживает деплой, а том ради
+  // сорока килобайт на пользователя заводить незачем.
+  avatar       Bytes?
+  avatarMime   String?
+  // И признак «фото есть», и версия для сброса кеша в URL картинки
+  avatarUpdatedAt DateTime?
   createdAt    DateTime  @default(now())
 
   // Связь: один пользователь — много сессий
