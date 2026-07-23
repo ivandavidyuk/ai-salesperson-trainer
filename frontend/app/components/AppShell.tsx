@@ -27,6 +27,8 @@ interface NavItem {
   icon: ReactNode;
   /** Показывать ли счётчик активных заданий */
   badge?: boolean;
+  /** Пункт виден только руководителю */
+  headOnly?: boolean;
 }
 
 // Иконки — тонкие контурные, 21px, наследуют цвет пункта
@@ -78,6 +80,14 @@ const icons = {
       <path d="M5.5 20a6.5 6.5 0 0113 0" />
     </>
   ),
+  stats: (
+    <>
+      <path d="M4 20h17" />
+      <path d="M6 20V11" />
+      <path d="M12 20V4" />
+      <path d="M18 20v-6" />
+    </>
+  ),
 };
 
 function Icon({ children }: { children: ReactNode }) {
@@ -100,6 +110,12 @@ function Icon({ children }: { children: ReactNode }) {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Главная", icon: <Icon>{icons.home}</Icon> },
+  {
+    href: "/stats",
+    label: "Статистика",
+    icon: <Icon>{icons.stats}</Icon>,
+    headOnly: true,
+  },
   { href: "/tasks", label: "Задания", icon: <Icon>{icons.tasks}</Icon>, badge: true },
   { href: "/patients", label: "Пациенты", icon: <Icon>{icons.patients}</Icon> },
   { href: "/training", label: "Тренировка", icon: <Icon>{icons.training}</Icon> },
@@ -243,7 +259,11 @@ export default function AppShell({ title, children }: AppShellProps) {
           {navOpen && <Logo size="sm" className="whitespace-nowrap" />}
         </button>
 
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter(
+          // Пока роль не загружена, пункт руководителя не показываем:
+          // мелькнуть и исчезнуть хуже, чем появиться с задержкой
+          (item) => !item.headOnly || user?.role === "head"
+        ).map((item) => {
           const active = pathname === item.href;
           const badge = item.badge && taskCount > 0 ? taskCount : null;
           return (

@@ -42,6 +42,7 @@ scripts/
   seed-patients.ts пациенты, их анамнез и промпты
   seed-training-types.ts типы тренировки и их промпты
   seed-achievements.ts достижения (кто что получил — в seed-demo)
+  seed-team.ts     три демо-менеджера с разговорами и оценками
   seed-demo.ts     демо-аккаунт с историей разговоров и разборами
 prisma/schema.prisma
 middleware.ts     защита всех маршрутов кроме /login
@@ -73,6 +74,7 @@ npm run dev
 | `npm run seed:patients` | налить пациентов и их промпты |
 | `npm run seed:training` | налить типы тренировки и их промпты |
 | `npm run seed:achievements` | налить достижения |
+| `npm run seed:team` | три демо-менеджера для статистики РОПа |
 | `npm run seed:demo` | демо-аккаунт с заполненной главной |
 | `npm run prisma:migrate` | создать миграцию |
 

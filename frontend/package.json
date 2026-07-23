@@ -12,6 +12,7 @@
     "seed:patients": "ts-node scripts/seed-patients.ts",
     "seed:training": "ts-node scripts/seed-training-types.ts",
     "seed:achievements": "ts-node scripts/seed-achievements.ts",
+    "seed:team": "ts-node scripts/seed-team.ts",
     "seed:demo": "ts-node scripts/seed-demo.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
