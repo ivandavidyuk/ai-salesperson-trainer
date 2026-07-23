@@ -159,6 +159,7 @@ docker compose -f docker-compose.prod.yml exec frontend npm run seed:content
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:patients
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:training
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:achievements
+docker compose -f docker-compose.prod.yml exec -e TEAM_PASSWORD=... frontend npm run seed:team
 
 # 3. Пользователь (email, пароль, имя, фамилия)
 docker compose -f docker-compose.prod.yml exec frontend npm run create-user

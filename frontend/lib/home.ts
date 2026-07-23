@@ -25,8 +25,9 @@ function dayNumber(date: Date): number {
   return Math.floor(date.getTime() / 86_400_000);
 }
 
-// Округление до одного знака — оценки показываются как «7.4»
-function round1(value: number | null): number | null {
+// Округление до одного знака — оценки показываются как «7.4».
+// Экспортируется: тем же округляется статистика отдела.
+export function round1(value: number | null): number | null {
   return value === null ? null : Math.round(value * 10) / 10;
 }
 
@@ -116,7 +117,9 @@ async function pickDaily(kind: DailyContentKind, day: number): Promise<string | 
 }
 
 // Средние оценки по этапам за интервал. null, если разборов в нём нет.
-async function averageScores(userId: string, from: Date, to: Date) {
+// Средние оценки по этапам за период. Экспортируется: тем же считается
+// статистика отдела у руководителя.
+export async function averageScores(userId: string, from: Date, to: Date) {
   const result = await prisma.sessionReview.aggregate({
     where: { session: { userId, startedAt: { gte: from, lt: to } } },
     _avg: {

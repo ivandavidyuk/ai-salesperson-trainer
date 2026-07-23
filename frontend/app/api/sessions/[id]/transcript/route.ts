@@ -3,8 +3,9 @@
 // реплики в хронологическом порядке и разбор (если он уже есть).
 
 import { NextRequest, NextResponse } from "next/server";
+import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { getAuthUser } from "@/lib/auth";
+import { getUserWithRole } from "@/lib/access";
 
 export const runtime = "nodejs";
 // Роут читает cookie запроса — рендерится только динамически
@@ -15,7 +16,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getAuthUser(request);
+    const user = await getUserWithRole(request);
     if (!user) {
       return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
     }
@@ -46,15 +47,21 @@ export async function GET(
       },
     });
 
+    // Свой разговор видит менеджер, любой — руководитель: со страницы
+    // статистики он открывает разборы подчинённых, ради этого она и нужна.
     // Чужой разговор не отличаем от несуществующего — по ответу нельзя
-    // узнать, что сессия с таким id вообще есть
-    if (!session || session.userId !== user.sub) {
+    // узнать, что сессия с таким id вообще есть.
+    const canRead =
+      session &&
+      (session.userId === user.id || user.role === UserRole.head);
+    if (!session || !canRead) {
       return NextResponse.json({ error: "Разговор не найден" }, { status: 404 });
     }
 
-    // Инициалы в аватарах реплик менеджера
+    // Инициалы в аватарах реплик — того, кто вёл разговор, а не того,
+    // кто читает: у руководителя иначе стояли бы его собственные
     const manager = await prisma.user.findUnique({
-      where: { id: user.sub },
+      where: { id: session.userId },
       select: { firstName: true, lastName: true },
     });
 
