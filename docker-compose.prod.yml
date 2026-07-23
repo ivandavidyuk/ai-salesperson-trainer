@@ -14,11 +14,23 @@
 # Порт 5432 опубликован для backend на зарубежном VPS.
 # ОБЯЗАТЕЛЬНО ограничить доступ файрволом (только IP backend-сервера).
 
+# Ротация логов контейнеров. По умолчанию драйвер json-file пишет без
+# ограничений, и долгоживущий контейнер (Caddy и PostgreSQL не пересоздаются
+# при выкатке) может незаметно занять весь диск. Якорь, чтобы правило
+# не пришлось дублировать в каждом сервисе.
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   # PostgreSQL — данные пользователей, сессий, сообщений
   postgres:
     image: postgres:16
     restart: unless-stopped
+    <<: *logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -39,6 +51,7 @@ services:
   frontend:
     image: ${DOCKERHUB_USER}/ai-trainer-frontend:latest
     restart: unless-stopped
+    <<: *logging
     env_file: ./frontend/.env
     depends_on:
       postgres:
@@ -49,6 +62,7 @@ services:
   caddy:
     image: caddy:2
     restart: unless-stopped
+    <<: *logging
     ports:
       - "80:80"
       - "443:443"
