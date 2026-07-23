@@ -40,25 +40,32 @@ const icons = {
   patients: (
     <>
       <circle cx="9" cy="8" r="3.2" />
-      <path d="M3.5 20a5.5 5.5 0 0111 0" />
-      <path d="M16 6.5a3 3 0 010 6" />
-      <path d="M17.5 20a5.5 5.5 0 00-2-4.2" />
+      <path d="M3.5 20c0-3.3 2.4-5.5 5.5-5.5s5.5 2.2 5.5 5.5" />
+      <path d="M16 5.3A2.8 2.8 0 0119 8a2.8 2.8 0 01-1.2 2.3" />
+      <path d="M20.5 20c0-2.4-1.2-4.2-3-5" />
     </>
   ),
-  training: (
-    <>
-      <path d="M12 3v12" />
-      <path d="M8 7l4-4 4 4" />
-      <rect x="4" y="15" width="16" height="6" rx="2" />
-    </>
-  ),
+  // Треугольник «play» — как на карточке полного разговора
+  training: <path d="M8 5.5l11 6.5-11 6.5z" />,
+  // Кубок, тот же что в сводке на странице достижений
   achievements: (
     <>
-      <circle cx="12" cy="9" r="5.5" />
-      <path d="M8.5 13.5L7 21l5-2.5L17 21l-1.5-7.5" />
+      <path d="M7 4h10v4a5 5 0 01-10 0z" />
+      <path d="M7 6H4v1a3 3 0 003 3" />
+      <path d="M17 6h3v1a3 3 0 01-3 3" />
+      <path d="M9 20h6" />
+      <path d="M12 13v7" />
     </>
   ),
+  // В меню — человек в круге, в выпадающем меню профиля — без круга
   profile: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="10" r="3" />
+      <path d="M6.4 18.5a6 6 0 0111.2 0" />
+    </>
+  ),
+  profileMenu: (
     <>
       <circle cx="12" cy="8.5" r="3.4" />
       <path d="M5.5 20a6.5 6.5 0 0113 0" />
@@ -312,7 +319,7 @@ export default function AppShell({ title, children }: AppShellProps) {
                         className="text-ink-muted"
                         aria-hidden="true"
                       >
-                        {icons.profile}
+                        {icons.profileMenu}
                       </svg>
                       Мой профиль
                     </Link>
