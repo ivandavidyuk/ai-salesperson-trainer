@@ -50,6 +50,15 @@ export default function PatientInfoModal({
 
   const difficulty = DIFFICULTY[patient.difficulty];
 
+  // Разбор приходит только руководителю: API не отдаёт эти поля менеджеру,
+  // поэтому их наличие и есть признак роли — отдельный проп не нужен
+  const hasBriefing = Boolean(
+    patient.character ||
+      patient.decisionMaker ||
+      patient.approach ||
+      (patient.objections?.length ?? 0) > 0
+  );
+
   return (
     <div
       className="absolute inset-0 z-10 flex items-center justify-center bg-[rgba(12,26,24,.5)] p-6"
@@ -59,7 +68,9 @@ export default function PatientInfoModal({
       aria-label={`О пациенте: ${patient.name}`}
     >
       <div
-        className="flex max-h-full w-[440px] max-w-full flex-col overflow-hidden rounded-2xl bg-surface-card shadow-[0_30px_80px_-30px_rgba(12,26,24,.7)]"
+        className={`flex max-h-full max-w-full flex-col overflow-hidden rounded-2xl bg-surface-card shadow-[0_30px_80px_-30px_rgba(12,26,24,.7)] ${
+          hasBriefing ? "w-[470px]" : "w-[440px]"
+        }`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-3.5 border-b border-line-soft px-6 py-[22px]">
@@ -74,6 +85,17 @@ export default function PatientInfoModal({
               </div>
             )}
           </div>
+          {/* В досье руководителя сложность стоит в шапке: тело и так
+              длинное, отдельным блоком она бы просто отодвигала разбор */}
+          {hasBriefing && (
+            <span
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${difficulty.pill}`}
+            >
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${difficulty.dot}`} />
+              {difficulty.label}
+            </span>
+          )}
+
           <button
             type="button"
             onClick={onClose}
@@ -95,17 +117,21 @@ export default function PatientInfoModal({
             </p>
           </div>
 
-          <div>
-            <div className="font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
-              Уровень сложности
+          {/* У менеджера сложность живёт здесь: в шапке её нет, а блоков
+              в теле всего два */}
+          {!hasBriefing && (
+            <div>
+              <div className="font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+                Уровень сложности
+              </div>
+              <span
+                className={`mt-2 inline-flex items-center gap-[7px] rounded-full px-3 py-[5px] text-xs font-semibold ${difficulty.pill}`}
+              >
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${difficulty.dot}`} />
+                {difficulty.label}
+              </span>
             </div>
-            <span
-              className={`mt-2 inline-flex items-center gap-[7px] rounded-full px-3 py-[5px] text-xs font-semibold ${difficulty.pill}`}
-            >
-              <span className={`inline-block h-1.5 w-1.5 rounded-full ${difficulty.dot}`} />
-              {difficulty.label}
-            </span>
-          </div>
+          )}
 
           {/* Разбор приходит только руководителю: у менеджера этих полей
               в ответе API нет, и блоки просто не рисуются */}

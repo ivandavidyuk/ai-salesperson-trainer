@@ -21,6 +21,7 @@ const FILTERS: { key: "all" | DifficultyKey; label: string }[] = [
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState<WizardPatient[] | null>(null);
+  const [isHead, setIsHead] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | DifficultyKey>("all");
@@ -32,7 +33,16 @@ export default function PatientsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/patients");
+        // Роль решает, показывать ли кнопку «Подробнее»: разбор пациента
+        // API отдаёт только руководителю
+        const [meRes, res] = await Promise.all([
+          fetch("/api/auth/me"),
+          fetch("/api/patients"),
+        ]);
+        if (meRes.ok && !cancelled) {
+          const me = (await meRes.json()) as { role?: string };
+          setIsHead(me.role === "head");
+        }
         if (!res.ok) throw new Error("request failed");
         const data = (await res.json()) as WizardPatient[];
         if (!cancelled) setPatients(data);
@@ -148,6 +158,7 @@ export default function PatientsPage() {
             <PatientCard
               key={patient.id}
               patient={patient}
+              isHead={isHead}
               onOpenInfo={() => setInfoPatient(patient)}
               onStart={() => setStarted(patient)}
             />
@@ -185,11 +196,18 @@ export default function PatientsPage() {
 
 interface PatientCardProps {
   patient: WizardPatient;
+  /** У руководителя рядом с «Начать» появляется «Подробнее» */
+  isHead: boolean;
   onOpenInfo: () => void;
   onStart: () => void;
 }
 
-function PatientCard({ patient, onOpenInfo, onStart }: PatientCardProps) {
+function PatientCard({
+  patient,
+  isHead,
+  onOpenInfo,
+  onStart,
+}: PatientCardProps) {
   const difficulty = DIFFICULTY[patient.difficulty];
   // Промпта ещё нет — тренировку не начать, backend всё равно откажет
   const blocked = !patient.isActive;
@@ -248,26 +266,56 @@ function PatientCard({ patient, onOpenInfo, onStart }: PatientCardProps) {
         </p>
       </div>
 
-      <button
-        type="button"
-        onClick={onStart}
-        disabled={blocked}
-        title={blocked ? "Для этого пациента ещё не готов промпт" : undefined}
-        className={`mt-[18px] flex items-center justify-center gap-2 rounded-input py-3 text-[15px] font-semibold text-white transition-colors ${
-          blocked
-            ? "cursor-not-allowed bg-disabled"
-            : "bg-brand hover:bg-brand-hover"
-        }`}
-      >
-        {blocked ? (
-          "Скоро"
-        ) : (
-          <>
-            <span className="inline-block h-2 w-2 rounded-full bg-white" />
-            Начать
-          </>
+      <div className="mt-[18px] flex gap-2">
+        {/* Досье с разбором — только у руководителя */}
+        {isHead && (
+          <button
+            type="button"
+            onClick={onOpenInfo}
+            title="Подробнее о пациенте"
+            className="flex flex-1 items-center justify-center gap-[7px] rounded-input border-[length:1.5px] border-brand bg-surface-accent px-2 py-3 text-sm font-semibold text-brand-hover transition-colors hover:bg-[#DCEDE9]"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2h-2" />
+              <rect x="9" y="2" width="6" height="4" rx="1" />
+              <path d="M8.5 11.5h7" />
+              <path d="M8.5 15.5h4" />
+            </svg>
+            Подробнее
+          </button>
         )}
-      </button>
+
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={blocked}
+          title={blocked ? "Для этого пациента ещё не готов промпт" : undefined}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-input px-2 py-3 text-[15px] font-semibold text-white transition-colors ${
+            blocked
+              ? "cursor-not-allowed bg-disabled"
+              : "bg-brand hover:bg-brand-hover"
+          }`}
+        >
+          {blocked ? (
+            "Скоро"
+          ) : (
+            <>
+              <span className="inline-block h-2 w-2 rounded-full bg-white" />
+              Начать
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
