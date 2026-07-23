@@ -2,8 +2,12 @@
 #
 # Секреты репозитория (Settings → Secrets and variables → Actions):
 #   DOCKERHUB_USERNAME, DOCKERHUB_TOKEN — доступ к Docker Hub
-#   RU_HOST, RU_SSH_PASSWORD          — RU-сервер (frontend + БД + Caddy)
-#   DE_HOST, DE_SSH_PASSWORD          — DE-сервер (голосовой backend)
+#   RU_HOST, DE_HOST                  — адреса серверов
+#   DEPLOY_SSH_KEY                    — приватный ключ для входа на оба сервера
+#
+# Вход только по ключу: парольная аутентификация на серверах отключена.
+# Ключ отдельный от личного (комментарий github-actions-deploy в
+# authorized_keys), чтобы его можно было отозвать, не трогая доступ людей.
 
 name: Deploy
 
@@ -57,7 +61,7 @@ jobs:
         with:
           host: ${{ secrets.DE_HOST }}
           username: root
-          password: ${{ secrets.DE_SSH_PASSWORD }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
           envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
           script: |
@@ -93,7 +97,7 @@ jobs:
         with:
           host: ${{ secrets.RU_HOST }}
           username: root
-          password: ${{ secrets.RU_SSH_PASSWORD }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
           envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
           script: |
