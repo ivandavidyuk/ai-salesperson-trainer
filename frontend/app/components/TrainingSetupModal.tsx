@@ -15,6 +15,7 @@ import {
   DIFFICULTY,
   GROUP_LABELS,
   GROUP_SHORT,
+  type Assignment,
   type DifficultyKey,
   type TrainingGroup,
   type WizardPatient,
@@ -23,6 +24,12 @@ import {
 
 interface TrainingSetupModalProps {
   onClose: () => void;
+  /**
+   * Задание от руководителя. Тип и пациент уже выбраны им, поэтому мастер
+   * сжимается до одного шага «Обзор» — менеджеру остаётся прочитать
+   * комментарий и начать.
+   */
+  assignment?: Assignment;
 }
 
 const STEPS = ["Тип", "Пациент", "Обзор"] as const;
@@ -100,12 +107,22 @@ function DifficultyPill({ difficulty }: { difficulty: DifficultyKey }) {
   );
 }
 
-export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps) {
+export default function TrainingSetupModal({
+  onClose,
+  assignment,
+}: TrainingSetupModalProps) {
   const router = useRouter();
 
-  const [step, setStep] = useState(0);
-  const [typeId, setTypeId] = useState<string | null>(null);
-  const [patientId, setPatientId] = useState<string | null>(null);
+  // В режиме задания шагов выбора нет — сразу «Обзор»
+  const isAssigned = Boolean(assignment);
+
+  const [step, setStep] = useState(isAssigned ? 2 : 0);
+  const [typeId, setTypeId] = useState<string | null>(
+    assignment?.trainingType.id ?? null
+  );
+  const [patientId, setPatientId] = useState<string | null>(
+    assignment?.patient.id ?? null
+  );
 
   const [types, setTypes] = useState<WizardTrainingType[] | null>(null);
   const [patients, setPatients] = useState<WizardPatient[] | null>(null);
@@ -156,14 +173,18 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
+  // Тип берём из справочника даже в режиме задания: в самом задании нет
+  // описания и группы, а «Обзор» их показывает
   const selectedType = useMemo(
     () => types?.find((type) => type.id === typeId) ?? null,
     [types, typeId]
   );
-  const selectedPatient = useMemo(
-    () => patients?.find((patient) => patient.id === patientId) ?? null,
-    [patients, patientId]
-  );
+
+  // Пациент в задании приходит целиком — справочника ждать не нужно
+  const selectedPatient = useMemo(() => {
+    if (assignment) return assignment.patient;
+    return patients?.find((patient) => patient.id === patientId) ?? null;
+  }, [assignment, patients, patientId]);
 
   // Поиск идёт и по анамнезу: в макете так и задумано
   const visiblePatients = useMemo(() => {
@@ -185,9 +206,13 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
   function handleStart() {
     if (!selectedType || !selectedPatient) return;
     setStarting(true);
-    router.push(
-      `/session?patient=${encodeURIComponent(selectedPatient.id)}&type=${encodeURIComponent(selectedType.id)}`
-    );
+    const params = new URLSearchParams({
+      patient: selectedPatient.id,
+      type: selectedType.id,
+    });
+    // По заданию разговор привязывается к нему — чтобы отметить выполненным
+    if (assignment) params.set("assignment", assignment.id);
+    router.push(`/session?${params.toString()}`);
   }
 
   // Ярлык «выбери за меня»: берёт только доступное и прыгает сразу на обзор
@@ -248,7 +273,9 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
                 Настройка тренировки
               </div>
               <div className="mt-[3px] text-pretty text-[13.5px] text-ink-muted">
-                Шаг {step + 1} из {STEPS.length} · {STEP_HINTS[step]}
+                {assignment
+                  ? `Задание: ${assignment.title}`
+                  : `Шаг ${step + 1} из ${STEPS.length} · ${STEP_HINTS[step]}`}
               </div>
             </div>
             <button
@@ -262,6 +289,8 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
             </button>
           </div>
 
+          {/* Шаги скрыты в режиме задания: выбирать нечего */}
+          {!assignment && (
           <div className="mt-[18px] flex items-center">
             {STEPS.map((label, index) => {
               const done = index < step;
@@ -303,6 +332,7 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
               );
             })}
           </div>
+          )}
 
           <div className="mt-[18px] h-px bg-line" />
         </div>
@@ -476,6 +506,18 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
             </div>
           )}
 
+          {/* В режиме задания «Обзор» — первый экран, справочник типов
+              ещё может грузиться */}
+          {step === 2 && !selectedType && !loadError && (
+            <div className="flex justify-center py-9 text-ink-muted">
+              <Spinner />
+            </div>
+          )}
+
+          {step === 2 && loadError && (
+            <p className="py-9 text-center text-sm text-danger-text">{loadError}</p>
+          )}
+
           {step === 2 && selectedType && selectedPatient && (
             <>
               <div>
@@ -561,13 +603,33 @@ export default function TrainingSetupModal({ onClose }: TrainingSetupModalProps)
                   )}
                 </div>
               </div>
+
+              {assignment && (
+                <div>
+                  <div className="mb-2.5 font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+                    Комментарий руководителя
+                  </div>
+                  <div className="rounded-xl border border-line bg-surface-card px-4 py-3.5">
+                    <div className="flex items-center gap-[7px] text-xs text-ink-subtle">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[9px] font-semibold text-brand">
+                        {initials(assignment.author)}
+                      </span>
+                      {assignment.author} · Руководитель
+                    </div>
+                    <p className="mt-[7px] text-pretty text-[13.5px] leading-normal text-ink-body">
+                      {assignment.comment}
+                    </p>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
 
         {/* Футер */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-t border-line bg-surface-card px-6 py-[15px]">
-          {step === 0 ? (
+          {/* В режиме задания возвращаться некуда — только отмена */}
+          {step === 0 || assignment ? (
             <button
               type="button"
               onClick={onClose}

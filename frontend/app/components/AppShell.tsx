@@ -18,6 +18,8 @@ interface NavItem {
   href: string;
   label: string;
   icon: ReactNode;
+  /** Показывать ли счётчик активных заданий */
+  badge?: boolean;
 }
 
 // Иконки — тонкие контурные, 21px, наследуют цвет пункта
@@ -84,7 +86,7 @@ function Icon({ children }: { children: ReactNode }) {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Главная", icon: <Icon>{icons.home}</Icon> },
-  { href: "/tasks", label: "Задания", icon: <Icon>{icons.tasks}</Icon> },
+  { href: "/tasks", label: "Задания", icon: <Icon>{icons.tasks}</Icon>, badge: true },
   { href: "/patients", label: "Пациенты", icon: <Icon>{icons.patients}</Icon> },
   { href: "/training", label: "Тренировка", icon: <Icon>{icons.training}</Icon> },
   {
@@ -113,6 +115,9 @@ export default function AppShell({ title, children }: AppShellProps) {
     null
   );
 
+  // Число активных заданий для бейджа в меню
+  const [taskCount, setTaskCount] = useState(0);
+
   // Имя для топбара берём из того же эндпоинта, что и остальные экраны
   useEffect(() => {
     let cancelled = false;
@@ -130,6 +135,25 @@ export default function AppShell({ title, children }: AppShellProps) {
       cancelled = true;
     };
   }, []);
+
+  // Бейдж заданий: pathname в зависимостях — после запуска задания со
+  // страницы «Задания» счётчик должен обновиться
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/assignments/count");
+        if (!res.ok) return;
+        const data = (await res.json()) as { count: number };
+        if (!cancelled) setTaskCount(data.count);
+      } catch {
+        // молча: без бейджа меню остаётся рабочим
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -196,6 +220,7 @@ export default function AppShell({ title, children }: AppShellProps) {
 
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href;
+          const badge = item.badge && taskCount > 0 ? taskCount : null;
           return (
             <Link
               key={item.href}
@@ -209,10 +234,22 @@ export default function AppShell({ title, children }: AppShellProps) {
                   : "font-medium text-ink-muted hover:bg-surface-bubble"
               }`}
             >
-              <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center">
+              <span className="relative inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center">
                 {item.icon}
+                {/* В свёрнутом меню счётчик висит на иконке, в развёрнутом
+                    уходит вправо — места для подписи там уже хватает */}
+                {badge !== null && !navOpen && (
+                  <span className="absolute -right-[5px] -top-1 inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-full border-[length:1.5px] border-surface-card bg-brand px-[3px] text-[9px] font-bold text-white">
+                    {badge}
+                  </span>
+                )}
               </span>
               {navOpen && <span className="whitespace-nowrap">{item.label}</span>}
+              {badge !== null && navOpen && (
+                <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-bold text-white">
+                  {badge}
+                </span>
+              )}
             </Link>
           );
         })}

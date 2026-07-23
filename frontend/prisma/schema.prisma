@@ -42,17 +42,68 @@ enum TrainingGroup {
   special
 }
 
-// Пользователь системы (менеджер по продажам)
+// Роль пользователя. head — руководитель отдела продаж (РОП):
+// назначает задания и видит статистику команды.
+enum UserRole {
+  manager
+  head
+}
+
+// Состояние задания от руководителя
+enum AssignmentStatus {
+  active
+  done
+}
+
+// Пользователь системы: менеджер по продажам или его руководитель
 model User {
   id           String    @id @default(uuid())
   email        String    @unique
   passwordHash String
   firstName    String
   lastName     String
+  role         UserRole  @default(manager)
   createdAt    DateTime  @default(now())
 
   // Связь: один пользователь — много сессий
   sessions     Session[]
+
+  // Задания: полученные менеджером и выданные руководителем
+  assignments        Assignment[] @relation("AssignmentTarget")
+  createdAssignments Assignment[] @relation("AssignmentAuthor")
+}
+
+// Задание от руководителя: предустановленная тренировка с комментарием.
+// Менеджер видит их в разделе «Задания» и запускает кнопкой «Начать».
+model Assignment {
+  id             String           @id @default(uuid())
+  // Кому назначено и кто назначил
+  userId         String
+  createdById    String
+  // Что тренировать
+  patientId      String
+  trainingTypeId String
+  // «Возражение по цене операции» — заголовок карточки
+  title          String
+  // Комментарий руководителя: зачем это задание
+  comment        String
+  // Срок и признак срочности — из них складывается плашка «Приоритет»
+  dueAt          DateTime?
+  isPriority     Boolean          @default(false)
+  status         AssignmentStatus @default(active)
+  createdAt      DateTime         @default(now())
+  // Разговор, которым задание закрыли
+  completedAt    DateTime?
+
+  user         User         @relation("AssignmentTarget", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("AssignmentAuthor", fields: [createdById], references: [id])
+  patient      Patient      @relation(fields: [patientId], references: [id])
+  trainingType TrainingType @relation(fields: [trainingTypeId], references: [id])
+
+  sessions     Session[]
+
+  // Страница заданий выбирает активные задания пользователя
+  @@index([userId, status])
 }
 
 // Пациент — персонаж, которого играет ИИ в разговоре.
@@ -77,6 +128,7 @@ model Patient {
   createdAt   DateTime  @default(now())
 
   sessions    Session[]
+  assignments Assignment[]
 }
 
 // Тип тренировки: полный разговор, отдельный этап сделки или спецнавык.
@@ -96,6 +148,7 @@ model TrainingType {
   createdAt   DateTime      @default(now())
 
   sessions    Session[]
+  assignments Assignment[]
 }
 
 // Сессия (один тренировочный разговор)
@@ -108,6 +161,8 @@ model Session {
   topic       String?
   // Что тренировали: полный разговор или отдельный этап
   trainingTypeId String?
+  // Задание, по которому запущен разговор (если запускали из «Заданий»)
+  assignmentId   String?
   // Длительность в секундах, проставляется при завершении.
   // Хранится отдельно, чтобы считать среднюю длину одним запросом.
   durationSec Int?
@@ -118,6 +173,7 @@ model Session {
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   patient      Patient?      @relation(fields: [patientId], references: [id])
   trainingType TrainingType? @relation(fields: [trainingTypeId], references: [id])
+  assignment   Assignment?   @relation(fields: [assignmentId], references: [id])
 
   messages    Message[]
   review      SessionReview?

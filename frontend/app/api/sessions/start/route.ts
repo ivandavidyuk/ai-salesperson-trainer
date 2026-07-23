@@ -14,6 +14,7 @@ export const runtime = "nodejs";
 interface StartBody {
   patientId?: string;
   trainingType?: string;
+  assignmentId?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -78,12 +79,30 @@ export async function POST(request: NextRequest) {
       patientId = fallback?.id ?? null;
     }
 
+    // Задание, по которому запущен разговор. Владельца проверяем прямо
+    // в условии запроса: чужое задание не должно находиться.
+    let assignmentId: string | null = null;
+    if (body.assignmentId) {
+      const assignment = await prisma.assignment.findFirst({
+        where: { id: body.assignmentId, userId: user.sub, status: "active" },
+        select: { id: true },
+      });
+      if (!assignment) {
+        return NextResponse.json(
+          { error: "Задание не найдено" },
+          { status: 404 }
+        );
+      }
+      assignmentId = assignment.id;
+    }
+
     // Создаём запись сессии со статусом active
     const session = await prisma.session.create({
       data: {
         userId: user.sub,
         patientId,
         trainingTypeId,
+        assignmentId,
         status: "active",
       },
     });
