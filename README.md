@@ -137,7 +137,9 @@ docker compose up -d
 | GET | `/api/sessions/[id]/transcript` | расшифровка и разбор |
 | GET | `/api/patients` | список пациентов для мастера и раздела «Пациенты» |
 | GET | `/api/training-types` | типы тренировки |
-| GET | `/api/assignments` | активные задания от руководителя |
+| GET | `/api/assignments` | задания: менеджеру полученные, руководителю выданные |
+| POST | `/api/assignments` | создать задание (только руководитель) |
+| GET | `/api/users/managers` | список менеджеров (только руководитель) |
 | GET | `/api/assignments/count` | счётчик заданий для бейджа в меню |
 | GET | `/api/achievements` | достижения с отметкой полученных |
 | PATCH | `/api/profile` | личные данные |

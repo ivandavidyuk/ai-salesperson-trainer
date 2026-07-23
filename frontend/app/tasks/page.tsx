@@ -4,7 +4,7 @@
 // Каждое задание — готовая пара «тип + пациент» с комментарием и сроком;
 // «Начать» открывает мастер настройки сразу на шаге «Обзор».
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/app/components/AppShell";
 import PatientInfoModal from "@/app/components/PatientInfoModal";
 import Spinner from "@/app/components/Spinner";
@@ -14,46 +14,82 @@ import type { Assignment, WizardPatient } from "@/lib/training";
 
 export default function TasksPage() {
   const [assignments, setAssignments] = useState<Assignment[] | null>(null);
+  const [isHead, setIsHead] = useState(false);
   const [error, setError] = useState("");
   const [infoPatient, setInfoPatient] = useState<WizardPatient | null>(null);
   const [started, setStarted] = useState<Assignment | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  // Роль решает, что показывать: руководитель задания выставляет,
+  // менеджер — получает
+  const load = useCallback(async () => {
+    try {
+      const [meRes, res] = await Promise.all([
+        fetch("/api/auth/me"),
+        fetch("/api/assignments"),
+      ]);
+      if (meRes.ok) {
+        const me = (await meRes.json()) as { role?: string };
+        setIsHead(me.role === "head");
+      }
+      if (!res.ok) throw new Error("request failed");
+      setAssignments((await res.json()) as Assignment[]);
+    } catch {
+      setError("Не удалось загрузить задания");
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/assignments");
-        if (!res.ok) throw new Error("request failed");
-        const data = (await res.json()) as Assignment[];
-        if (!cancelled) setAssignments(data);
-      } catch {
-        if (!cancelled) setError("Не удалось загрузить задания");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void load();
+  }, [load]);
 
   const count = assignments?.length ?? 0;
 
   return (
     <AppShell title="Задания">
-      <div className="mx-auto w-full max-w-[980px] px-10 pb-11 pt-[26px]">
-        <div className="mb-1.5 flex items-baseline justify-between gap-4">
-          <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink">
-            От вашего руководителя
-          </h1>
-          {assignments && count > 0 && (
-            <div className="shrink-0 text-[13px] text-ink-subtle">
-              {count}{" "}
-              {plural(count, "активное задание", "активных задания", "активных заданий")}
-            </div>
+      <div className="mx-auto w-full max-w-[1080px] px-10 pb-11 pt-[26px]">
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink">
+              {isHead ? "Выставленные задания" : "От вашего руководителя"}
+            </h1>
+            <p className="mt-1 text-sm text-ink-muted">
+              {isHead
+                ? "Тренировки, которые вы назначили менеджерам"
+                : "Руководитель назначил тренировки на основе ваших разговоров"}
+              {assignments && count > 0 && (
+                <>
+                  {" · "}
+                  {count}{" "}
+                  {plural(count, "активное", "активных", "активных")}
+                </>
+              )}
+            </p>
+          </div>
+
+          {isHead && (
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-brand px-[22px] py-3 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+              Создать
+            </button>
           )}
         </div>
-        <p className="mb-5 text-sm text-ink-muted">
-          Руководитель назначил тренировки на основе ваших разговоров
-        </p>
 
         {!assignments && !error && (
           <div className="flex justify-center py-16 text-ink-muted">
@@ -71,8 +107,9 @@ export default function TasksPage() {
               Заданий пока нет
             </div>
             <p className="mx-auto mt-2 max-w-[420px] text-[13.5px] leading-normal text-ink-muted">
-              Когда руководитель назначит тренировку, она появится здесь.
-              А пока можно начать разговор самостоятельно с главной.
+              {isHead
+                ? "Нажмите «Создать», чтобы назначить менеджеру тренировку."
+                : "Когда руководитель назначит тренировку, она появится здесь. А пока можно начать разговор самостоятельно с главной."}
             </p>
           </div>
         )}
@@ -82,6 +119,7 @@ export default function TasksPage() {
             <AssignmentCard
               key={item.id}
               assignment={item}
+              isHead={isHead}
               onOpenPatient={() => setInfoPatient(item.patient)}
               onStart={() => setStarted(item)}
             />
@@ -102,18 +140,29 @@ export default function TasksPage() {
           onClose={() => setStarted(null)}
         />
       )}
+
+      {creating && (
+        <TrainingSetupModal
+          createMode
+          onClose={() => setCreating(false)}
+          onCreated={load}
+        />
+      )}
     </AppShell>
   );
 }
 
 interface AssignmentCardProps {
   assignment: Assignment;
+  /** У руководителя вместо кнопки «Начать» — плашка «Кому» */
+  isHead: boolean;
   onOpenPatient: () => void;
   onStart: () => void;
 }
 
 function AssignmentCard({
   assignment,
+  isHead,
   onOpenPatient,
   onStart,
 }: AssignmentCardProps) {
@@ -192,6 +241,32 @@ function AssignmentCard({
             <span className="rounded-full bg-brand-soft px-[11px] py-1 text-[13px] font-semibold text-brand-hover">
               {assignment.trainingType.title}
             </span>
+
+            {/* Кому назначено — только у руководителя, у менеджера это он сам */}
+            {isHead && assignment.assignee && (
+              <span className="ml-auto inline-flex items-center gap-2.5 rounded-full border border-line-accent bg-surface-accent py-[5px] pl-1.5 pr-3.5">
+                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[11.5px] font-semibold text-brand">
+                  {assignment.assignee.avatarUpdatedAt ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`/api/users/${assignment.assignee.id}/avatar?v=${encodeURIComponent(assignment.assignee.avatarUpdatedAt)}`}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    initials(assignment.assignee.name)
+                  )}
+                </span>
+                <span className="flex flex-col leading-[1.15]">
+                  <span className="font-mono text-[8.5px] uppercase tracking-[.12em] text-brand-score-label">
+                    Кому
+                  </span>
+                  <span className="text-[13.5px] font-semibold text-brand-hover">
+                    {assignment.assignee.name}
+                  </span>
+                </span>
+              </span>
+            )}
           </div>
 
           <div className="mt-3.5 rounded-[10px] bg-surface px-3.5 py-3">
@@ -207,23 +282,26 @@ function AssignmentCard({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onStart}
-          disabled={blocked}
-          title={
-            blocked
-              ? "Пациент или тип тренировки пока недоступен"
-              : "Начать тренировку"
-          }
-          className={`shrink-0 self-stretch px-[34px] text-base font-semibold text-white transition-colors ${
-            blocked
-              ? "cursor-not-allowed bg-disabled"
-              : "bg-brand hover:bg-brand-hover"
-          }`}
-        >
-          Начать
-        </button>
+        {/* Руководитель задания не проходит — кнопки у него нет */}
+        {!isHead && (
+          <button
+            type="button"
+            onClick={onStart}
+            disabled={blocked}
+            title={
+              blocked
+                ? "Пациент или тип тренировки пока недоступен"
+                : "Начать тренировку"
+            }
+            className={`shrink-0 self-stretch px-[34px] text-base font-semibold text-white transition-colors ${
+              blocked
+                ? "cursor-not-allowed bg-disabled"
+                : "bg-brand hover:bg-brand-hover"
+            }`}
+          >
+            Начать
+          </button>
+        )}
       </div>
     </div>
   );

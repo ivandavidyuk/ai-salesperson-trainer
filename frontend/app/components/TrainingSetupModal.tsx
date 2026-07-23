@@ -1,22 +1,27 @@
 "use client";
 
-// Мастер настройки тренировки: Тип → Пациент → Обзор.
-//
-// Доступен пока только «Полный разговор» с Тамарой Михайловной: backend
-// играет её роль захардкоженным промптом и про этапы не знает. Остальные
-// варианты показаны заблокированными — видно, куда идём, но выбрать нельзя.
+// Мастер настройки тренировки. Набор шагов зависит от того, что уже
+// выбрано за пользователя:
+//   с главной          — Тип → Пациент → Обзор
+//   из задания         — только Обзор
+//   из карточки пациента — Тип → Обзор
+//   из формата         — Пациент → Обзор
+//   у руководителя     — Кому → Тип → Пациент → Обзор, в конце «Создать»
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Alert from "@/app/components/Alert";
+import Field from "@/app/components/Field";
 import PatientInfoModal from "@/app/components/PatientInfoModal";
 import Spinner from "@/app/components/Spinner";
-import { initials } from "@/lib/format";
+import { formatDueDate, initials } from "@/lib/format";
 import {
   DIFFICULTY,
   GROUP_LABELS,
   GROUP_SHORT,
   type Assignment,
   type DifficultyKey,
+  type ManagerOption,
   type TrainingGroup,
   type WizardPatient,
   type WizardTrainingType,
@@ -40,11 +45,19 @@ interface TrainingSetupModalProps {
    * шаги «Пациент» и «Обзор».
    */
   presetType?: WizardTrainingType;
+  /**
+   * Режим руководителя: он не запускает тренировку, а назначает её
+   * менеджеру. Добавляется шаг «Кому», в конце — «Создать».
+   */
+  createMode?: boolean;
+  /** Задание создано — списку пора обновиться */
+  onCreated?: () => void;
 }
 
-type StepKey = "type" | "patient" | "review";
+type StepKey = "assign" | "type" | "patient" | "review";
 
 const STEP_META: Record<StepKey, { label: string; hint: string }> = {
+  assign: { label: "Кому", hint: "Выберите менеджера и опишите задание" },
   type: { label: "Тип", hint: "Выберите тип тренировки" },
   patient: { label: "Пациент", hint: "Выберите пациента" },
   review: { label: "Обзор", hint: "Проверьте параметры и начните" },
@@ -122,17 +135,21 @@ export default function TrainingSetupModal({
   assignment,
   presetPatient,
   presetType,
+  createMode = false,
+  onCreated,
 }: TrainingSetupModalProps) {
   const router = useRouter();
 
   // Набор шагов зависит от того, что уже выбрано за менеджера
-  const steps: StepKey[] = assignment
-    ? ["review"]
-    : presetPatient
-      ? ["type", "review"]
-      : presetType
-        ? ["patient", "review"]
-        : ["type", "patient", "review"];
+  const steps: StepKey[] = createMode
+    ? ["assign", "type", "patient", "review"]
+    : assignment
+      ? ["review"]
+      : presetPatient
+        ? ["type", "review"]
+        : presetType
+          ? ["patient", "review"]
+          : ["type", "patient", "review"];
 
   const [step, setStep] = useState(0);
   const [typeId, setTypeId] = useState<string | null>(
@@ -153,6 +170,33 @@ export default function TrainingSetupModal({
 
   const [infoPatient, setInfoPatient] = useState<WizardPatient | null>(null);
   const [starting, setStarting] = useState(false);
+
+  // Поля шага «Кому» — только в режиме руководителя
+  const [managers, setManagers] = useState<ManagerOption[] | null>(null);
+  const [managerId, setManagerId] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [comment, setComment] = useState("");
+  const [dueAt, setDueAt] = useState("");
+  const [isPriority, setIsPriority] = useState(false);
+  const [createError, setCreateError] = useState("");
+
+  useEffect(() => {
+    if (!createMode) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/users/managers");
+        if (!res.ok) throw new Error("request failed");
+        const data = (await res.json()) as ManagerOption[];
+        if (!cancelled) setManagers(data);
+      } catch {
+        if (!cancelled) setLoadError("Не удалось загрузить список менеджеров");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [createMode]);
 
   // Типы и пациенты приходят из базы: там же лежат их промпты, которыми
   // backend собирает роль ИИ
@@ -222,12 +266,50 @@ export default function TrainingSetupModal({
     });
   }, [patients, query, filter]);
 
+  const selectedManager =
+    managers?.find((manager) => manager.id === managerId) ?? null;
+
   const canNext =
     currentStep === "type"
       ? selectedType !== null
       : currentStep === "patient"
         ? selectedPatient !== null
-        : true;
+        : currentStep === "assign"
+          ? selectedManager !== null && title.trim() !== ""
+          : true;
+
+  // Руководитель не запускает разговор, а создаёт задание
+  async function handleCreate() {
+    if (!selectedType || !selectedPatient || !selectedManager) return;
+    setCreateError("");
+    setStarting(true);
+    try {
+      const res = await fetch("/api/assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedManager.id,
+          patientId: selectedPatient.id,
+          trainingTypeId: selectedType.id,
+          title: title.trim(),
+          comment: comment.trim(),
+          dueAt: dueAt || null,
+          isPriority,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setCreateError(data.error ?? "Не удалось создать задание");
+        return;
+      }
+      onCreated?.();
+      onClose();
+    } catch {
+      setCreateError("Не удалось создать задание");
+    } finally {
+      setStarting(false);
+    }
+  }
 
   function handleStart() {
     if (!selectedType || !selectedPatient) return;
@@ -372,6 +454,102 @@ export default function TrainingSetupModal({
 
         {/* Тело шага */}
         <div className="flex min-h-0 flex-1 flex-col gap-[22px] overflow-y-auto px-6 py-[22px]">
+          {currentStep === "assign" && (
+            <>
+              <div>
+                <GroupTitle>Кому назначить</GroupTitle>
+
+                {!managers && !loadError && (
+                  <div className="flex justify-center py-6 text-ink-muted">
+                    <Spinner />
+                  </div>
+                )}
+
+                {managers?.length === 0 && (
+                  <p className="py-6 text-center text-sm text-ink-muted">
+                    Менеджеров пока нет — задание назначить некому.
+                  </p>
+                )}
+
+                <div className="flex flex-col gap-2">
+                  {managers?.map((manager) => {
+                    const selected = managerId === manager.id;
+                    return (
+                      <button
+                        key={manager.id}
+                        type="button"
+                        onClick={() => setManagerId(manager.id)}
+                        className={cardClasses(selected, false)}
+                      >
+                        <Radio selected={selected} disabled={false} />
+                        <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-sm font-semibold text-brand">
+                          {manager.avatarUpdatedAt ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={`/api/users/${manager.id}/avatar?v=${encodeURIComponent(manager.avatarUpdatedAt)}`}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            initials(manager.name)
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[14.5px] font-semibold text-ink">
+                            {manager.name}
+                          </span>
+                          <span className="mt-px block text-[12.5px] text-ink-subtle">
+                            {manager.jobTitle}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <GroupTitle>Задание</GroupTitle>
+                <Field
+                  label="Название"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Возражение по цене операции"
+                />
+
+                <div className="mt-3.5 grid grid-cols-2 gap-4">
+                  <Field
+                    label="Срок"
+                    type="date"
+                    value={dueAt}
+                    onChange={(event) => setDueAt(event.target.value)}
+                  />
+                  <label className="flex cursor-pointer items-end gap-2.5 pb-3">
+                    <input
+                      type="checkbox"
+                      checked={isPriority}
+                      onChange={(event) => setIsPriority(event.target.checked)}
+                      className="h-[18px] w-[18px] accent-brand"
+                    />
+                    <span className="text-sm text-ink-body">
+                      Приоритетное задание
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <GroupTitle>Комментарий</GroupTitle>
+                <textarea
+                  value={comment}
+                  onChange={(event) => setComment(event.target.value)}
+                  placeholder="Например: отвечай выгодой клиента, а не оправданием цены"
+                  className="min-h-[96px] w-full resize-y rounded-xl border-[length:1.5px] border-line bg-surface-card px-3.5 py-3 text-sm leading-normal text-ink outline-none transition-colors placeholder:text-ink-placeholder focus:border-brand"
+                />
+              </div>
+            </>
+          )}
+
           {currentStep === "type" && !types && !loadError && (
             <div className="flex justify-center py-9 text-ink-muted">
               <Spinner />
@@ -655,6 +833,66 @@ export default function TrainingSetupModal({
                   </div>
                 </div>
               )}
+
+              {createMode && selectedManager && (
+                <>
+                  <div>
+                    <div className="mb-2.5 font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+                      Кому назначено
+                    </div>
+                    <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-card px-4 py-3.5">
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[15px] font-semibold text-brand">
+                        {selectedManager.avatarUpdatedAt ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={`/api/users/${selectedManager.id}/avatar?v=${encodeURIComponent(selectedManager.avatarUpdatedAt)}`}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          initials(selectedManager.name)
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[15px] font-semibold text-ink">
+                          {selectedManager.name}
+                        </span>
+                        <span className="mt-px block text-[12.5px] text-ink-subtle">
+                          {selectedManager.jobTitle}
+                        </span>
+                      </span>
+                      {isPriority && (
+                        <span className="shrink-0 rounded-full bg-danger-soft px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[.06em] text-danger-strong">
+                          Приоритет
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mb-2.5 font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+                      Задание
+                    </div>
+                    <div className="rounded-xl border border-line bg-surface-card px-4 py-3.5">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <div className="text-[15px] font-semibold text-ink">
+                          {title.trim()}
+                        </div>
+                        {dueAt && (
+                          <span className="shrink-0 whitespace-nowrap text-xs text-ink-subtle">
+                            {formatDueDate(new Date(dueAt).toISOString())}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-[7px] text-pretty text-[13.5px] leading-normal text-ink-body">
+                        {comment.trim() || "Без комментария"}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {createError && <Alert>{createError}</Alert>}
             </>
           )}
         </div>
@@ -721,6 +959,32 @@ export default function TrainingSetupModal({
                 }`}
               >
                 Далее ›
+              </button>
+            ) : createMode ? (
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={starting || !selectedManager || !selectedType || !selectedPatient}
+                className="inline-flex items-center gap-2 rounded-input bg-brand px-[26px] py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
+              >
+                {starting ? (
+                  <Spinner />
+                ) : (
+                  <svg
+                    width="17"
+                    height="17"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 5v14" />
+                    <path d="M5 12h14" />
+                  </svg>
+                )}
+                Создать
               </button>
             ) : (
               <button

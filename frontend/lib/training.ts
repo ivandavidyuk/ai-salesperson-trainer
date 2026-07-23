@@ -53,6 +53,12 @@ export interface Assignment {
   trainingType: { id: string; title: string; isActive: boolean };
   /** Имя руководителя, выдавшего задание */
   author: string;
+  /** Кому назначено — приходит только руководителю */
+  assignee: {
+    id: string;
+    name: string;
+    avatarUpdatedAt: string | null;
+  } | null;
 }
 
 /** Пациент в мастере — то, что отдаёт GET /api/patients */
@@ -64,4 +70,18 @@ export interface WizardPatient {
   difficulty: DifficultyKey;
   /** false — промпта для этого пациента ещё нет, выбрать нельзя */
   isActive: boolean;
+  // Разбор пациента приходит только руководителю — у менеджера этих
+  // полей в ответе нет вовсе
+  character?: string | null;
+  objections?: string[];
+  decisionMaker?: string | null;
+  approach?: string | null;
+}
+
+/** Менеджер в шаге «Кому» — то, что отдаёт GET /api/users/managers */
+export interface ManagerOption {
+  id: string;
+  name: string;
+  jobTitle: string;
+  avatarUpdatedAt: string | null;
 }

@@ -176,7 +176,9 @@ docker compose -f docker-compose.prod.yml exec frontend npm run seed:demo
 изменения потеряются на следующем сиде.
 
 `seed:demo` печатает сгенерированный пароль один раз. Чтобы задать свой:
-`... exec -e DEMO_PASSWORD=... frontend npm run seed:demo`. Скрипт идемпотентный
+`... exec -e DEMO_PASSWORD=... -e HEAD_PASSWORD=... frontend npm run seed:demo`.
+Второй пароль — от аккаунта руководителя (`head@podhod.tech`, режим РОП).
+Скрипт идемпотентный
 и трогает только демо-аккаунт.
 
 > Разбора разговоров пока нет, поэтому у настоящих разговоров не будет оценок —
