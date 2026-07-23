@@ -41,6 +41,7 @@ scripts/
   seed-content.ts  советы дня и мотивации (продовый контент)
   seed-patients.ts пациенты, их анамнез и промпты
   seed-training-types.ts типы тренировки и их промпты
+  seed-achievements.ts достижения (кто что получил — в seed-demo)
   seed-demo.ts     демо-аккаунт с историей разговоров и разборами
 prisma/schema.prisma
 middleware.ts     защита всех маршрутов кроме /login
@@ -55,6 +56,7 @@ npx prisma migrate deploy
 npm run seed:content
 npm run seed:patients
 npm run seed:training
+npm run seed:achievements
 npm run create-user
 npm run dev
 ```
@@ -70,6 +72,7 @@ npm run dev
 | `npm run seed:content` | налить советы дня и мотивации |
 | `npm run seed:patients` | налить пациентов и их промпты |
 | `npm run seed:training` | налить типы тренировки и их промпты |
+| `npm run seed:achievements` | налить достижения |
 | `npm run seed:demo` | демо-аккаунт с заполненной главной |
 | `npm run prisma:migrate` | создать миграцию |
 

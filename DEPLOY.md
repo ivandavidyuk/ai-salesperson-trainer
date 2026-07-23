@@ -158,6 +158,7 @@ docker compose -f docker-compose.prod.yml exec frontend npm run seed:content
 #    без которых backend откажется начинать разговор
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:patients
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:training
+docker compose -f docker-compose.prod.yml exec frontend npm run seed:achievements
 
 # 3. Пользователь (email, пароль, имя, фамилия)
 docker compose -f docker-compose.prod.yml exec frontend npm run create-user
