@@ -110,7 +110,7 @@ export default function HomePage() {
         <>
           {/* Контент ограничен 1440px и центрируется: на 1680/1920 растут
               только боковые поля, колонки не расползаются */}
-          <div className="mx-auto w-full max-w-[1440px] shrink-0 px-10 pb-1 pt-[26px]">
+          <div className="mx-auto w-full max-w-[1760px] shrink-0 px-10 pb-1 pt-[26px]">
             <div className="mb-[22px]">
               <div className="text-[28px] font-bold tracking-[-.02em] text-ink">
                 {greeting()}, {data.user.firstName} 👋
@@ -169,7 +169,7 @@ export default function HomePage() {
 
           {/* Нижний ряд растягивается на всю оставшуюся высоту — под ним
               не остаётся пустоты, список скроллится внутри себя */}
-          <div className="mx-auto flex w-full min-h-0 max-w-[1440px] flex-1 items-stretch gap-6 px-10 pb-8 pt-4">
+          <div className="mx-auto flex w-full min-h-0 max-w-[1760px] flex-1 items-stretch gap-6 px-10 pb-8 pt-4">
             {/* Прошлые разговоры */}
             <div className="flex flex-[2] flex-col">
               <div className="mb-2.5 flex items-center justify-between">

@@ -10,9 +10,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import Logo from "@/app/components/Logo";
 
-// Ширины меню из макета
-const NAV_WIDTH_OPEN = 248;
-const NAV_WIDTH_CLOSED = 66;
+// Ширины меню из макета. Макеты перерисованы под рамку 1440×900 — размер
+// реального ноутбука, поэтому рейка и шапка стали крупнее: по элементам
+// удобнее попадать, интерфейс соразмерен экрану.
+const NAV_WIDTH_OPEN = 280;
+const NAV_WIDTH_CLOSED = 72;
 
 /**
  * Профиль сохранён — топбару пора перечитать имя и фото.
@@ -250,15 +252,21 @@ export default function AppShell({ title, children }: AppShellProps) {
           width: navOpen ? NAV_WIDTH_OPEN : NAV_WIDTH_CLOSED,
           boxShadow: navOpen ? "14px 0 40px -12px rgba(20,40,38,.75)" : "none",
         }}
-        className="fixed inset-y-0 left-0 z-20 flex flex-col gap-1 overflow-hidden border-r border-line bg-surface-card px-2.5 py-3.5 transition-[width] duration-[260ms] ease-out"
+        // Свёрнутая рейка центрирует пункты фиксированной ширины,
+        // развёрнутая растягивает их на всю ширину меню
+        className={`fixed inset-y-0 left-0 z-20 flex flex-col gap-1 overflow-hidden border-r border-line bg-surface-card px-2.5 py-3.5 transition-[width] duration-[260ms] ease-out ${
+          navOpen ? "items-stretch" : "items-center"
+        }`}
       >
         <button
           type="button"
           onClick={() => setNavOpen((open) => !open)}
           title="Меню"
           aria-label={navOpen ? "Свернуть меню" : "Развернуть меню"}
-          className={`mb-2 flex items-center gap-3 px-[11px] py-[9px] ${
-            navOpen ? "justify-start" : "justify-center"
+          className={`mb-2.5 flex items-center gap-3 rounded-xl ${
+            navOpen
+              ? "w-full justify-start px-3 py-2.5"
+              : "h-11 w-[50px] justify-center"
           }`}
         >
           <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center text-brand-deep">
@@ -292,8 +300,12 @@ export default function AppShell({ title, children }: AppShellProps) {
               key={item.href}
               href={item.href}
               title={item.label}
-              className={`flex w-full items-center gap-3 rounded-input px-[11px] py-2.5 text-sm transition-colors ${
-                navOpen ? "justify-start" : "justify-center"
+              // Свёрнутый пункт — фиксированная подложка 50×44 по центру
+              // рейки; развёрнутый тянется на всю ширину с полями
+              className={`flex items-center gap-3 rounded-input text-sm transition-colors ${
+                navOpen
+                  ? "w-full justify-start px-3 py-2.5"
+                  : "h-11 w-[50px] justify-center"
               } ${
                 active
                   ? "bg-brand-soft font-semibold text-brand-hover"
@@ -322,7 +334,7 @@ export default function AppShell({ title, children }: AppShellProps) {
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7">
+        <header className="flex h-[66px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7">
           <div className="flex items-center gap-3.5">
             {/* Логотип есть на каждом экране и всегда ведёт на главную */}
             <Link href="/" title="На главную" className="shrink-0">

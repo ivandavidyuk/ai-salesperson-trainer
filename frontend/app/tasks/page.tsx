@@ -47,7 +47,7 @@ export default function TasksPage() {
 
   return (
     <AppShell title="Задания">
-      <div className="mx-auto w-full max-w-[1080px] px-10 pb-11 pt-[26px]">
+      <div className="mx-auto w-full max-w-[980px] px-10 pb-11 pt-[26px]">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink">

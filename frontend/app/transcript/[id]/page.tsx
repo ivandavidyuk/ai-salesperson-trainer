@@ -71,7 +71,7 @@ export default function TranscriptPage() {
 
   return (
     <div className="flex h-screen flex-col bg-surface">
-      <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-10">
+      <header className="flex h-[66px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-10">
         <div className="flex items-center gap-3.5">
           <Link href="/" title="На главную" className="shrink-0">
             <Logo size="sm" />
@@ -132,7 +132,7 @@ export default function TranscriptPage() {
       )}
 
       {!loading && !error && data && (
-        <div className="flex w-full min-h-0 max-w-[1440px] flex-1 self-center">
+        <div className="flex w-full min-h-0 max-w-[1760px] flex-1 self-center">
           <div className="min-h-0 flex-[1.7] overflow-y-auto border-r border-line px-9 py-8">
             <div className="mb-6 text-center">
               <span className="rounded-full bg-surface-bubble px-3 py-1 font-mono text-[11px] tracking-wide text-ink-placeholder">

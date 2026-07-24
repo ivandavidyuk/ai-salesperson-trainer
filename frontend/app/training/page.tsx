@@ -122,7 +122,7 @@ export default function TrainingPage() {
 
   return (
     <AppShell title="Тренировка">
-      <div className="mx-auto w-full max-w-[1440px] px-10 pb-11 pt-[26px]">
+      <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px]">
         <div className="mb-1.5 text-[21px] font-semibold tracking-[-.01em] text-ink">
           Выберите формат
         </div>
