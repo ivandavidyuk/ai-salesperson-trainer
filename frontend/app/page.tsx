@@ -115,9 +115,13 @@ export default function HomePage() {
               <div className="text-[28px] font-bold tracking-[-.02em] text-ink">
                 {greeting()}, {data.user.firstName} 👋
               </div>
-              <div className="mt-1 text-sm text-ink-subtle">
-                Менеджер по продажам
-              </div>
+              {/* Должность из профиля, а не подпись «менеджер по продажам»
+                  для всех: у руководителя она своя */}
+              {data.user.jobTitle && (
+                <div className="mt-1 text-sm text-ink-subtle">
+                  {data.user.jobTitle}
+                </div>
+              )}
             </div>
 
             {/* Пропорции по содержимому: старт шире, метрики фиксированы */}

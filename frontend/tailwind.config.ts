@@ -8,7 +8,11 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  content: ["./app/**/*.{ts,tsx}"],
+  // lib обязателен: там лежат таблицы оформления (DIFFICULTY в lib/training.ts),
+  // и классы, которые встречаются ТОЛЬКО там, иначе не попадают в сборку.
+  // Так пропала точка «Лёгкий»: bg-warn и bg-danger-strong случайно
+  // использовались ещё и в app, а bg-good — нет, и он не сгенерировался.
+  content: ["./app/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
