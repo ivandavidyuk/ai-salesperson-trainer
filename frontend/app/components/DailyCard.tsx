@@ -8,6 +8,8 @@ import { useEffect, useState } from "react";
 
 // Период смены из макета
 const ROTATE_MS = 30_000;
+// Длительность затухания; столько же стоит в classList ниже
+const FADE_MS = 260;
 
 interface DailyCardProps {
   tip: string | null;
@@ -16,22 +18,37 @@ interface DailyCardProps {
 
 export default function DailyCard({ tip, motivation }: DailyCardProps) {
   const [showTip, setShowTip] = useState(true);
+  // Карточки различаются и цветом фона, и текстом, поэтому подменяем
+  // содержимое в момент, когда оно полностью прозрачно, — иначе смена
+  // тёмной «Мотивации» на светлый «Совет» выглядит как рывок
+  const [visible, setVisible] = useState(true);
 
   // Если заполнен только один вид контента, крутить нечего
   const canRotate = Boolean(tip) && Boolean(motivation);
 
   useEffect(() => {
     if (!canRotate) return;
-    const timer = setInterval(() => setShowTip((value) => !value), ROTATE_MS);
+
+    const timer = setInterval(() => {
+      setVisible(false);
+      window.setTimeout(() => {
+        setShowTip((value) => !value);
+        setVisible(true);
+      }, FADE_MS);
+    }, ROTATE_MS);
+
     return () => clearInterval(timer);
   }, [canRotate]);
 
   const tipVisible = canRotate ? showTip : Boolean(tip);
+  const fade = `transition-opacity duration-[260ms] ease-out ${
+    visible ? "opacity-100" : "opacity-0"
+  }`;
 
   if (!tip && !motivation) {
     return (
       <div className="flex flex-1 flex-col rounded-card border border-line bg-surface-card px-5 py-[18px]">
-        <div className="font-mono text-[10.5px] uppercase tracking-[.14em] text-ink-subtle">
+        <div className="font-mono text-[12px] uppercase tracking-[.14em] text-ink-subtle">
           Совет дня
         </div>
         <div className="mt-2.5 text-[13.5px] leading-normal text-ink-subtle">
@@ -43,8 +60,10 @@ export default function DailyCard({ tip, motivation }: DailyCardProps) {
 
   if (tipVisible) {
     return (
-      <div className="flex flex-1 flex-col rounded-card border border-line bg-surface-card px-5 py-[18px]">
-        <div className="font-mono text-[10.5px] uppercase tracking-[.14em] text-brand-hover">
+      <div
+        className={`flex flex-1 flex-col rounded-card border border-line bg-surface-card px-5 py-[18px] ${fade}`}
+      >
+        <div className="font-mono text-[12px] uppercase tracking-[.14em] text-brand-hover">
           Совет дня
         </div>
         <div className="mt-2.5 text-pretty text-[13.5px] leading-normal text-ink-body">
@@ -55,8 +74,10 @@ export default function DailyCard({ tip, motivation }: DailyCardProps) {
   }
 
   return (
-    <div className="flex flex-1 flex-col rounded-card bg-surface-dark px-5 py-[18px]">
-      <div className="font-mono text-[10.5px] uppercase tracking-[.14em] text-brand-on-dark">
+    <div
+      className={`flex flex-1 flex-col rounded-card bg-surface-dark px-5 py-[18px] ${fade}`}
+    >
+      <div className="font-mono text-[12px] uppercase tracking-[.14em] text-brand-on-dark">
         Мотивация
       </div>
       <div className="mt-2.5 text-pretty text-[13.5px] leading-normal text-brand-text-on-dark">

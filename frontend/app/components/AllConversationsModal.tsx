@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import type { HomeConversation } from "@/lib/home";
 import ConversationRow from "@/app/components/ConversationRow";
+import Loader from "@/app/components/Loader";
 
 interface AllConversationsModalProps {
   onClose: () => void;
@@ -89,7 +90,9 @@ export default function AllConversationsModal({
           {error && <p className="px-5 py-6 text-sm text-danger-text">{error}</p>}
 
           {!error && conversations === null && (
-            <p className="px-5 py-6 text-sm text-ink-muted">Загрузка…</p>
+            <div className="px-5 py-10">
+              <Loader />
+            </div>
           )}
 
           {conversations?.length === 0 && (

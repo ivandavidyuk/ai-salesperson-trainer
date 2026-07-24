@@ -8,6 +8,7 @@
 // Состояния: до старта · соединение · разговор (говорит клиент / слушаю вас)
 // · пауза · нет доступа к микрофону · завершение.
 
+import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CallAvatar from "@/app/components/CallAvatar";
@@ -138,7 +139,7 @@ function SessionScreen() {
     }
   }
 
-  // «Начать разговор»: создаём сессию, подключаем WebSocket, микрофон и плеер
+  // «Начать тренировку»: создаём сессию, подключаем WebSocket, микрофон и плеер
   async function handleStart() {
     setBusy(true);
     setErrorMsg("");
@@ -293,7 +294,24 @@ function SessionScreen() {
     <main className="flex h-screen flex-col bg-surface-card">
       {/* Топбар: логотип, а справа — таймер во время разговора или выход */}
       <header className="flex h-[68px] shrink-0 items-center justify-between border-b border-line-soft px-8">
-        <Logo />
+        <div className="flex items-center gap-3.5">
+          <Link href="/" title="На главную">
+            <Logo />
+          </Link>
+          {/* Уйти можно только до начала разговора: во время него переход
+              оборвал бы живую сессию, поэтому ссылки там нет */}
+          {canLeave && (
+            <>
+              <span className="h-5 w-px bg-line" aria-hidden="true" />
+              <Link
+                href="/"
+                className="text-sm text-ink-muted transition-colors hover:text-brand-hover"
+              >
+                ← Назад
+              </Link>
+            </>
+          )}
+        </div>
 
         {inCall && <Timer seconds={seconds} paused={screenState === "paused"} size="lg" />}
 
@@ -351,7 +369,7 @@ function SessionScreen() {
               className="mt-6 inline-flex items-center gap-2.5 rounded-input bg-brand px-[30px] py-3.5 text-base font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
             >
               <span className="inline-block h-2 w-2 rounded-full bg-white" />
-              Начать разговор
+              Начать тренировку
             </button>
             <div className="mt-3 text-[12.5px] text-ink-subtle">
               Понадобится доступ к микрофону

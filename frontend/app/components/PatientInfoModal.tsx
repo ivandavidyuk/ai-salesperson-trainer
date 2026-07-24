@@ -89,9 +89,8 @@ export default function PatientInfoModal({
               длинное, отдельным блоком она бы просто отодвигала разбор */}
           {hasBriefing && (
             <span
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${difficulty.pill}`}
+              className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${difficulty.pill}`}
             >
-              <span className={`inline-block h-1.5 w-1.5 rounded-full ${difficulty.dot}`} />
               {difficulty.label}
             </span>
           )}
@@ -125,9 +124,8 @@ export default function PatientInfoModal({
                 Уровень сложности
               </div>
               <span
-                className={`mt-2 inline-flex items-center gap-[7px] rounded-full px-3 py-[5px] text-xs font-semibold ${difficulty.pill}`}
+                className={`mt-2 inline-flex items-center rounded-full px-3 py-[5px] text-xs font-semibold ${difficulty.pill}`}
               >
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${difficulty.dot}`} />
                 {difficulty.label}
               </span>
             </div>

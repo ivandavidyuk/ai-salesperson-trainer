@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import AppShell from "@/app/components/AppShell";
-import Spinner from "@/app/components/Spinner";
+import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import { GROUP_LABELS, type WizardTrainingType } from "@/lib/training";
 
@@ -20,10 +20,12 @@ const STAGE_ICONS: Record<string, ReactNode> = {
       <circle cx="12" cy="12" r="9" />
     </>
   ),
+  // Знак вопроса центрируем по окружности: прежний глиф был смещён вниз,
+  // и точка почти касалась круга
   s2: (
     <>
-      <path d="M9 11.5a3 3 0 116 0c0 2-3 2.5-3 4" />
-      <path d="M12 18.5h.01" />
+      <path d="M9.4 10a2.6 2.6 0 115.2 0c0 1.8-2.6 2.2-2.6 3.9" />
+      <path d="M12 16.8h.01" />
       <circle cx="12" cy="12" r="9" />
     </>
   ),
@@ -130,8 +132,8 @@ export default function TrainingPage() {
         </p>
 
         {!types && !error && (
-          <div className="flex justify-center py-16 text-ink-muted">
-            <Spinner />
+          <div className="flex justify-center py-16">
+            <Loader />
           </div>
         )}
 

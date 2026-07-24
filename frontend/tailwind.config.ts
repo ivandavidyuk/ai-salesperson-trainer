@@ -145,6 +145,11 @@ const config: Config = {
           "0%, 100%": { transform: "scale(1)", opacity: "0.85" },
           "50%": { transform: "scale(1.05)", opacity: "1" },
         },
+        // Точка лоадера: подъём с проявлением. Три точки идут со сдвигом фазы
+        dotwave: {
+          "0%, 80%, 100%": { transform: "translateY(0)", opacity: "0.35" },
+          "40%": { transform: "translateY(-5px)", opacity: "1" },
+        },
       },
       animation: {
         "pulse-ring":
@@ -152,6 +157,7 @@ const config: Config = {
         ringpulse: "ringpulse 2.4s ease-out infinite",
         barwave: "barwave 1s ease-in-out infinite",
         softpulse: "softpulse 2.4s ease-in-out infinite",
+        dotwave: "dotwave 1.25s ease-in-out infinite",
       },
     },
   },

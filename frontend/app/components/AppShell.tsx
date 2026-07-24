@@ -21,6 +21,26 @@ const NAV_WIDTH_CLOSED = 66;
  */
 export const PROFILE_UPDATED_EVENT = "podhod:profile-updated";
 
+interface ShellUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  avatarUpdatedAt: string | null;
+}
+
+/**
+ * Последние известные значения для топбара и меню.
+ *
+ * AppShell рендерится внутри каждой страницы, а не в общем layout, поэтому
+ * при переходе он размонтируется и состояние обнуляется. Без кэша пункт
+ * «Статистика» (он только у руководителя) исчезал на время запроса роли,
+ * а счётчик заданий прыгал с нуля на настоящее число. Модульная переменная
+ * живёт, пока жива вкладка, и переживает перемонтирование.
+ */
+let cachedUser: ShellUser | null = null;
+let cachedTaskCount = 0;
+
 interface NavItem {
   href: string;
   label: string;
@@ -141,16 +161,11 @@ export default function AppShell({ title, children }: AppShellProps) {
   // и открытое на старте перекрывало бы страницу при каждом заходе
   const [navOpen, setNavOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [user, setUser] = useState<{
-    id: string;
-    firstName: string;
-    lastName: string;
-    role: string;
-    avatarUpdatedAt: string | null;
-  } | null>(null);
+  // Стартуем с кэша: при переходе между страницами меню не должно моргать
+  const [user, setUser] = useState<ShellUser | null>(cachedUser);
 
   // Число активных заданий для бейджа в меню
-  const [taskCount, setTaskCount] = useState(0);
+  const [taskCount, setTaskCount] = useState(cachedTaskCount);
 
   // Имя и фото для топбара. Перечитываем при переходе между страницами
   // и по событию из профиля: без него шапка показывала бы старое фото
@@ -162,7 +177,8 @@ export default function AppShell({ title, children }: AppShellProps) {
       try {
         const res = await fetch("/api/auth/me");
         if (!res.ok) return;
-        const data = await res.json();
+        const data = (await res.json()) as ShellUser;
+        cachedUser = data;
         if (!cancelled) setUser(data);
       } catch {
         // молча: топбар не критичен для работы страницы
@@ -186,6 +202,7 @@ export default function AppShell({ title, children }: AppShellProps) {
         const res = await fetch("/api/assignments/count");
         if (!res.ok) return;
         const data = (await res.json()) as { count: number };
+        cachedTaskCount = data.count;
         if (!cancelled) setTaskCount(data.count);
       } catch {
         // молча: без бейджа меню остаётся рабочим
@@ -198,6 +215,10 @@ export default function AppShell({ title, children }: AppShellProps) {
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
+    // Иначе следующий вошедший увидит в шапке имя и роль предыдущего,
+    // пока не ответит /api/auth/me
+    cachedUser = null;
+    cachedTaskCount = 0;
     router.push("/login");
   }
 
@@ -302,111 +323,120 @@ export default function AppShell({ title, children }: AppShellProps) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3.5">
+            {/* Логотип есть на каждом экране и всегда ведёт на главную */}
+            <Link href="/" title="На главную" className="shrink-0">
+              <Logo size="sm" />
+            </Link>
+            <span className="h-5 w-px bg-line" aria-hidden="true" />
             <div className="text-[15px] font-semibold text-ink">{title}</div>
-            {/* У руководителя те же разделы, но наполнение другое —
-                плашка объясняет, почему страница выглядит иначе */}
-            {user?.role === "head" && (
-              <span className="rounded-full bg-brand-soft px-2.5 py-[3px] text-[10.5px] font-bold uppercase tracking-[.06em] text-brand-hover">
-                Режим РОП
-              </span>
-            )}
           </div>
 
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setUserMenuOpen((open) => !open)}
-              className="flex items-center gap-2.5 rounded-input py-[5px] pl-1.5 pr-2.5 transition-colors hover:bg-surface-bubble"
-            >
-              <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
-                {user?.avatarUpdatedAt ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={`/api/users/${user.id}/avatar?v=${encodeURIComponent(user.avatarUpdatedAt)}`}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <>
-                    {user ? `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}` : ""}
-                  </>
-                )}
+          <div className="flex items-center gap-3">
+            {/* У руководителя те же разделы, но наполнение другое —
+                плашка объясняет, почему страница выглядит иначе.
+                Стоит рядом с именем: это признак смотрящего, а не страницы */}
+            {user?.role === "head" && (
+              <span className="rounded-full bg-brand-soft px-2.5 py-[3px] text-[10.5px] font-bold uppercase tracking-[.06em] text-brand-hover">
+                Руководитель
               </span>
-              <span className="text-sm text-ink-muted">{shortName || "…"}</span>
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-ink-icon"
-                aria-hidden="true"
-              >
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-
-            {userMenuOpen && (
-              <>
-                {/* Клик мимо закрывает меню */}
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setUserMenuOpen(false)}
-                  aria-hidden="true"
-                />
-                <div className="absolute right-0 top-full z-50 w-[196px] pt-2">
-                  <div className="flex flex-col gap-0.5 rounded-xl border border-line bg-surface-card p-1.5 shadow-[0_18px_40px_-18px_rgba(20,40,38,.5)]">
-                    <Link
-                      href="/profile"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-[11px] rounded-[9px] px-[11px] py-2.5 text-sm font-medium text-ink-body transition-colors hover:bg-surface-bubble"
-                    >
-                      <svg
-                        width="17"
-                        height="17"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-ink-muted"
-                        aria-hidden="true"
-                      >
-                        {icons.profileMenu}
-                      </svg>
-                      Мой профиль
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="flex w-full items-center gap-[11px] rounded-[9px] px-[11px] py-2.5 text-left text-sm font-medium text-danger-strong transition-colors hover:bg-danger-wash"
-                    >
-                      <svg
-                        width="17"
-                        height="17"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M15 4h3a1 1 0 011 1v14a1 1 0 01-1 1h-3" />
-                        <path d="M10 8l-4 4 4 4" />
-                        <path d="M6 12h11" />
-                      </svg>
-                      Выйти
-                    </button>
-                  </div>
-                </div>
-              </>
             )}
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((open) => !open)}
+                className="flex items-center gap-2.5 rounded-input py-[5px] pl-1.5 pr-2.5 transition-colors hover:bg-surface-bubble"
+              >
+                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
+                  {user?.avatarUpdatedAt ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`/api/users/${user.id}/avatar?v=${encodeURIComponent(user.avatarUpdatedAt)}`}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <>
+                      {user ? `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}` : ""}
+                    </>
+                  )}
+                </span>
+                <span className="text-sm text-ink-muted">{shortName || "…"}</span>
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-ink-icon"
+                  aria-hidden="true"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+
+              {userMenuOpen && (
+                <>
+                  {/* Клик мимо закрывает меню */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setUserMenuOpen(false)}
+                    aria-hidden="true"
+                  />
+                  <div className="absolute right-0 top-full z-50 w-[196px] pt-2">
+                    <div className="flex flex-col gap-0.5 rounded-xl border border-line bg-surface-card p-1.5 shadow-[0_18px_40px_-18px_rgba(20,40,38,.5)]">
+                      <Link
+                        href="/profile"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-[11px] rounded-[9px] px-[11px] py-2.5 text-sm font-medium text-ink-body transition-colors hover:bg-surface-bubble"
+                      >
+                        <svg
+                          width="17"
+                          height="17"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-ink-muted"
+                          aria-hidden="true"
+                        >
+                          {icons.profileMenu}
+                        </svg>
+                        Мой профиль
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="flex w-full items-center gap-[11px] rounded-[9px] px-[11px] py-2.5 text-left text-sm font-medium text-danger-strong transition-colors hover:bg-danger-wash"
+                      >
+                        <svg
+                          width="17"
+                          height="17"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M15 4h3a1 1 0 011 1v14a1 1 0 01-1 1h-3" />
+                          <path d="M10 8l-4 4 4 4" />
+                          <path d="M6 12h11" />
+                        </svg>
+                        Выйти
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </header>
 

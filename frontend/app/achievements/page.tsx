@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import AppShell from "@/app/components/AppShell";
-import Spinner from "@/app/components/Spinner";
+import Loader from "@/app/components/Loader";
 import { plural } from "@/lib/format";
 
 type Tone = "skill" | "gold" | "fun";
@@ -139,8 +139,8 @@ export default function AchievementsPage() {
     <AppShell title="Достижения">
       <div className="mx-auto w-full max-w-[1440px] px-10 pb-11 pt-[26px]">
         {!data && !error && (
-          <div className="flex justify-center py-16 text-ink-muted">
-            <Spinner />
+          <div className="flex justify-center py-16">
+            <Loader />
           </div>
         )}
 

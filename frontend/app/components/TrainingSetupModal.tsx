@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import Alert from "@/app/components/Alert";
 import Field from "@/app/components/Field";
 import PatientInfoModal from "@/app/components/PatientInfoModal";
+import Loader from "@/app/components/Loader";
 import Spinner from "@/app/components/Spinner";
 import { formatDueDate, initials } from "@/lib/format";
 import {
@@ -121,10 +122,11 @@ function GroupTitle({ children, tone }: { children: string; tone?: "warn" }) {
 function DifficultyPill({ difficulty }: { difficulty: DifficultyKey }) {
   const tone = DIFFICULTY[difficulty];
   return (
+    // Без точки: заливка плашки сама несёт цвет сложности. Точки остались
+    // только в фильтрах, где кнопки белые и цвету взяться неоткуда.
     <span
-      className={`inline-flex shrink-0 items-center gap-[5px] rounded-full px-2.5 py-[3px] text-[10.5px] font-semibold ${tone.pill}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-[3px] text-[10.5px] font-semibold ${tone.pill}`}
     >
-      <span className={`inline-block h-[5px] w-[5px] rounded-full ${tone.dot}`} />
       {tone.label}
     </span>
   );
@@ -457,11 +459,41 @@ export default function TrainingSetupModal({
           {currentStep === "assign" && (
             <>
               <div>
+                <GroupTitle>Задание</GroupTitle>
+                <Field
+                  label="Название"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Возражение по цене операции"
+                />
+
+                <div className="mt-3.5 grid grid-cols-2 gap-4">
+                  <Field
+                    label="Срок"
+                    type="date"
+                    value={dueAt}
+                    onChange={(event) => setDueAt(event.target.value)}
+                  />
+                  <label className="flex cursor-pointer items-end gap-2.5 pb-3">
+                    <input
+                      type="checkbox"
+                      checked={isPriority}
+                      onChange={(event) => setIsPriority(event.target.checked)}
+                      className="h-[18px] w-[18px] accent-brand"
+                    />
+                    <span className="text-sm text-ink-body">
+                      Приоритетное задание
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
                 <GroupTitle>Кому назначить</GroupTitle>
 
                 {!managers && !loadError && (
-                  <div className="flex justify-center py-6 text-ink-muted">
-                    <Spinner />
+                  <div className="flex justify-center py-6">
+                    <Loader />
                   </div>
                 )}
 
@@ -509,36 +541,6 @@ export default function TrainingSetupModal({
               </div>
 
               <div>
-                <GroupTitle>Задание</GroupTitle>
-                <Field
-                  label="Название"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="Возражение по цене операции"
-                />
-
-                <div className="mt-3.5 grid grid-cols-2 gap-4">
-                  <Field
-                    label="Срок"
-                    type="date"
-                    value={dueAt}
-                    onChange={(event) => setDueAt(event.target.value)}
-                  />
-                  <label className="flex cursor-pointer items-end gap-2.5 pb-3">
-                    <input
-                      type="checkbox"
-                      checked={isPriority}
-                      onChange={(event) => setIsPriority(event.target.checked)}
-                      className="h-[18px] w-[18px] accent-brand"
-                    />
-                    <span className="text-sm text-ink-body">
-                      Приоритетное задание
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div>
                 <GroupTitle>Комментарий</GroupTitle>
                 <textarea
                   value={comment}
@@ -551,8 +553,8 @@ export default function TrainingSetupModal({
           )}
 
           {currentStep === "type" && !types && !loadError && (
-            <div className="flex justify-center py-9 text-ink-muted">
-              <Spinner />
+            <div className="flex justify-center py-9">
+              <Loader />
             </div>
           )}
 
@@ -634,8 +636,8 @@ export default function TrainingSetupModal({
               </div>
 
               {!patients && !loadError && (
-                <div className="flex justify-center py-9 text-ink-muted">
-                  <Spinner />
+                <div className="flex justify-center py-9">
+                  <Loader />
                 </div>
               )}
 
@@ -665,7 +667,11 @@ export default function TrainingSetupModal({
                           setInfoPatient(patient);
                         }}
                         title="О пациенте"
-                        className="-ml-1 inline-flex min-w-0 items-center gap-2.5 rounded-full py-1 pl-1 pr-2.5 transition-colors hover:bg-surface-bubble"
+                        // У выбранной строки фон тиловый, и серый ховер на нём
+                        // почти не читается — берём тот же оттенок, что на «Обзоре»
+                        className={`-ml-1 inline-flex min-w-0 items-center gap-2.5 rounded-full py-1 pl-1 pr-2.5 transition-colors ${
+                          selected ? "hover:bg-[#DCEDE9]" : "hover:bg-surface-bubble"
+                        }`}
                       >
                         <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand">
                           {initials(patient.name)}
@@ -720,8 +726,8 @@ export default function TrainingSetupModal({
           {/* В режиме задания «Обзор» — первый экран, справочник типов
               ещё может грузиться */}
           {currentStep === "review" && !selectedType && !loadError && (
-            <div className="flex justify-center py-9 text-ink-muted">
-              <Spinner />
+            <div className="flex justify-center py-9">
+              <Loader />
             </div>
           )}
 
@@ -774,7 +780,7 @@ export default function TrainingSetupModal({
                       type="button"
                       onClick={() => setInfoPatient(selectedPatient)}
                       title="О пациенте"
-                      className="-ml-1 inline-flex min-w-0 items-center gap-3 rounded-xl py-1.5 pl-1.5 pr-3 transition-colors hover:bg-[#DCEDE9]"
+                      className="-ml-1 inline-flex min-w-0 items-center gap-3 rounded-full py-1.5 pl-1.5 pr-3 transition-colors hover:bg-[#DCEDE9]"
                     >
                       <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-[17px] font-semibold text-brand">
                         {initials(selectedPatient.name)}

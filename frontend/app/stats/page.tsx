@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import AppShell from "@/app/components/AppShell";
 import ScoreBadge from "@/app/components/ScoreBadge";
-import Spinner from "@/app/components/Spinner";
+import Loader from "@/app/components/Loader";
 import TeamHistoryModal from "@/app/components/TeamHistoryModal";
 import { initials, plural } from "@/lib/format";
 import type { TeamMemberStats } from "@/lib/team";
@@ -77,8 +77,8 @@ export default function StatsPage() {
             </div>
 
             {!team && !error && (
-              <div className="flex justify-center py-16 text-ink-muted">
-                <Spinner />
+              <div className="flex justify-center py-16">
+                <Loader />
               </div>
             )}
 

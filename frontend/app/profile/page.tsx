@@ -9,7 +9,7 @@ import AppShell, { PROFILE_UPDATED_EVENT } from "@/app/components/AppShell";
 import Alert from "@/app/components/Alert";
 import Button from "@/app/components/Button";
 import Field from "@/app/components/Field";
-import Spinner from "@/app/components/Spinner";
+import Loader from "@/app/components/Loader";
 import { compressAvatar } from "@/lib/avatar";
 import { initials } from "@/lib/format";
 
@@ -52,8 +52,8 @@ export default function ProfilePage() {
     <AppShell title="Профиль">
       <div className="mx-auto flex min-h-0 w-full max-w-[1200px] flex-1 gap-[22px] px-10 py-[26px]">
         {!profile && !loadError && (
-          <div className="flex flex-1 justify-center py-16 text-ink-muted">
-            <Spinner />
+          <div className="flex flex-1 justify-center py-16">
+            <Loader />
           </div>
         )}
 
