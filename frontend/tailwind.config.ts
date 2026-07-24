@@ -33,6 +33,7 @@ const config: Config = {
           "on-dark": "#7FC9BD", // подпись на тёмной карточке «Мотивация»
           "text-on-dark": "#DCEEEA", // текст на тёмной карточке
           "bar-top": "#23A594", // верх градиента столбца в «Прогрессе»
+          sparkline: "#BFDDD6", // слабый день в активности менеджера
           score: "#0A5F55", // цифра средней оценки
           "score-muted": "#7FA9A2", // «/ 10» рядом с оценкой
           "score-label": "#5C8079", // подпись выделенной карточки
@@ -83,6 +84,25 @@ const config: Config = {
           surface: "#FBEFD6",
         },
         // Идеальная оценка 10/10 — золотой бейдж
+        // Медали подиума на «Статистике» отдела. Плашка места — насыщенный
+        // градиент, баннер карточки — тот же металл, но светлее: под ним
+        // лежит имя и цифры, и сочный фон их бы забивал.
+        podium: {
+          "gold-from": "#F7DE8E",
+          "gold-to": "#E0AE39",
+          "gold-banner-from": "#FBE9A8",
+          "gold-banner-to": "#EBC65A",
+          "silver-from": "#EDF1F3",
+          "silver-to": "#BFC8CE",
+          "silver-text": "#3E4750",
+          "silver-banner-from": "#EDF0F2",
+          "silver-banner-to": "#C4CCD1",
+          "bronze-from": "#F0C89C",
+          "bronze-to": "#C98E5B",
+          "bronze-text": "#5E3413",
+          "bronze-banner-from": "#F1D6B4",
+          "bronze-banner-to": "#D29A66",
+        },
         gold: {
           text: "#5A3C00",
           from: "#F4D67E",

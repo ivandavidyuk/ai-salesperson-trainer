@@ -127,6 +127,9 @@ export async function averageScores(userId: string, from: Date, to: Date) {
       iceBreakerScore: true,
       needsScore: true,
       objectionsScore: true,
+      // Общая оценка нужна статистике отдела: по ней считается прирост
+      // за неделю. «Прогресс» на главной это поле просто не читает.
+      overallScore: true,
     },
   });
   return result._avg;
