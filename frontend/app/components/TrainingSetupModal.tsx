@@ -925,7 +925,11 @@ export default function TrainingSetupModal({
           )}
 
           <div className="flex items-center gap-2.5">
-            {!isLastStep && (
+            {/* На шаге «Кому» случайного выбора нет: handleRandom заполняет
+                тип и пациента, но менеджера выбрать за руководителя нельзя —
+                кнопка увозила на «Обзор» с пустым получателем, и задание
+                не создавалось */}
+            {!isLastStep && currentStep !== "assign" && (
               <button
                 type="button"
                 onClick={handleRandom}

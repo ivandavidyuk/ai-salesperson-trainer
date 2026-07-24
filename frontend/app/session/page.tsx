@@ -285,23 +285,19 @@ function SessionScreen() {
     }
   }
 
-  // «Выйти»: завершаем сессию авторизации
-  async function handleLogout() {
-    teardown();
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-  }
 
   const inCall = screenState === "active" || screenState === "paused";
   const canLeave = screenState === "idle" || screenState === "micError";
 
   return (
     <main className="flex h-screen flex-col bg-surface-card">
-      {/* Топбар: логотип, а справа — таймер во время разговора или выход */}
-      <header className="flex h-[68px] shrink-0 items-center justify-between border-b border-line-soft px-8">
+      {/* Топбар: логотип и «Назад», справа — таймер во время разговора.
+          Высота и отступы те же, что в AppShell: экран разговора выпадает
+          из общей оболочки, но выглядеть должен её продолжением. */}
+      <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7">
         <div className="flex items-center gap-3.5">
-          <Link href="/" title="На главную">
-            <Logo />
+          <Link href="/" title="На главную" className="shrink-0">
+            <Logo size="sm" />
           </Link>
           {/* Уйти можно только до начала разговора: во время него переход
               оборвал бы живую сессию, поэтому ссылки там нет */}
@@ -314,20 +310,6 @@ function SessionScreen() {
         </div>
 
         {inCall && <Timer seconds={seconds} paused={screenState === "paused"} size="lg" />}
-
-        {canLeave && (
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="text-sm font-medium text-ink-muted transition-colors hover:text-ink"
-          >
-            Выйти
-          </button>
-        )}
-
-        {screenState === "connecting" && (
-          <span className="text-sm font-medium text-disabled">Выйти</span>
-        )}
 
         {screenState === "completing" && (
           <span className="font-mono text-[15px] text-ink-subtle">

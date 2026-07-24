@@ -51,7 +51,7 @@ export interface ProgressMetric {
 }
 
 export interface HomeData {
-  user: { firstName: string; lastName: string };
+  user: { firstName: string; lastName: string; jobTitle: string | null };
   daily: { tip: string | null; motivation: string | null };
   stats: {
     total: number;
@@ -135,7 +135,7 @@ export async function averageScores(userId: string, from: Date, to: Date) {
 export async function getHomeData(userId: string): Promise<HomeData | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { firstName: true, lastName: true },
+    select: { firstName: true, lastName: true, jobTitle: true },
   });
   if (!user) return null;
 

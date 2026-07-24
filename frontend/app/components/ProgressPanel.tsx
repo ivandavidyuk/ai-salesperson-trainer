@@ -48,39 +48,34 @@ export default function ProgressPanel({
           </p>
         )}
 
-        {/* Шкалы распределяются по свободной высоте: панель тянется на всю
-            колонку, и при четырёх этапах между ними и выводами оставалась
-            заметная дыра */}
-        {hasData && (
-          <div className="flex flex-1 flex-col justify-between gap-2">
-            {metrics.map((metric) => (
-              <div key={metric.key}>
-                <div className="mb-1.5 flex items-center justify-between gap-3">
-                  <span className="whitespace-nowrap text-[13px] text-ink-body">
-                    {metric.label}
+        {hasData &&
+          metrics.map((metric) => (
+            <div key={metric.key} className="mb-2 last:mb-0">
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <span className="whitespace-nowrap text-[13px] text-ink-body">
+                  {metric.label}
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <span className="font-mono text-[13px] text-ink">
+                    {metric.value ?? "—"}
                   </span>
-                  <span className="inline-flex items-center gap-2">
-                    <span className="font-mono text-[13px] text-ink">
-                      {metric.value ?? "—"}
-                    </span>
-                    <Delta delta={metric.delta} />
-                  </span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-line-soft">
-                  <div
-                    className="h-full rounded-full bg-brand"
-                    // Шкала 0–10, поэтому оценка напрямую переводится в проценты
-                    style={{ width: `${((metric.value ?? 0) / 10) * 100}%` }}
-                  />
-                </div>
+                  <Delta delta={metric.delta} />
+                </span>
               </div>
-            ))}
-          </div>
-        )}
+              <div className="h-1.5 overflow-hidden rounded-full bg-line-soft">
+                <div
+                  className="h-full rounded-full bg-brand"
+                  // Шкала 0–10, поэтому оценка напрямую переводится в проценты
+                  style={{ width: `${((metric.value ?? 0) / 10) * 100}%` }}
+                />
+              </div>
+            </div>
+          ))}
 
         {(strength || growthPoint) && (
           <>
-            <div className="mb-3.5 mt-4 h-px shrink-0 bg-line-soft" />
+            {/* mt-auto прижимает выводы к низу панели, как в макете */}
+            <div className="mt-auto mb-3.5 h-px shrink-0 bg-line-soft" />
 
             {strength && (
               <div className="mb-2">
