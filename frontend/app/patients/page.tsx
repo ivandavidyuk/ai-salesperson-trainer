@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/app/components/AppShell";
 import PatientInfoModal from "@/app/components/PatientInfoModal";
-import Spinner from "@/app/components/Spinner";
+import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import { initials, plural } from "@/lib/format";
 import { DIFFICULTY, type DifficultyKey, type WizardPatient } from "@/lib/training";
@@ -144,8 +144,8 @@ export default function PatientsPage() {
         </div>
 
         {!patients && !error && (
-          <div className="flex justify-center py-16 text-ink-muted">
-            <Spinner />
+          <div className="flex justify-center py-16">
+            <Loader />
           </div>
         )}
 
@@ -215,43 +215,47 @@ function PatientCard({
   return (
     // Три колонки при gap-4: (100% − 2 × 16px) / 3
     <div className="flex w-[calc((100%-32px)/3)] flex-col rounded-[14px] border border-line bg-surface-card p-5">
-      <div className="flex items-center gap-3">
-        <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-[17px] font-semibold text-brand">
-          {initials(patient.name)}
-        </span>
-        <div className="min-w-0 flex-1">
-          {/* Имя — кнопка: открывает карточку с полным анамнезом */}
-          <button
-            type="button"
-            onClick={onOpenInfo}
-            title="О пациенте"
-            className="inline-flex max-w-full items-center gap-1.5 text-left text-base font-semibold text-ink transition-colors hover:text-brand-hover"
-          >
-            <span className="truncate">{patient.name}</span>
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              className="shrink-0 text-ink-icon"
-              aria-hidden="true"
-            >
-              <path d="M9 6l6 6-6 6" />
-            </svg>
-          </button>
-          {patient.description && (
-            <div className="mt-px truncate text-[13px] text-ink-subtle">
-              {patient.description}
-            </div>
-          )}
-        </div>
-        <span
-          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${difficulty.pill}`}
+      <div className="flex items-center gap-2">
+        {/* Аватар с именем — одна кнопка, как в мастере тренировки:
+            открывает карточку с полным анамнезом */}
+        <button
+          type="button"
+          onClick={onOpenInfo}
+          title="О пациенте"
+          className="-ml-1.5 inline-flex min-w-0 flex-1 items-center gap-3 rounded-full py-1.5 pl-1.5 pr-3 text-left transition-colors hover:bg-surface-bubble"
         >
-          <span className={`inline-block h-1.5 w-1.5 rounded-full ${difficulty.dot}`} />
+          <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-[17px] font-semibold text-brand">
+            {initials(patient.name)}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-1.5">
+              <span className="truncate text-base font-semibold text-ink">
+                {patient.name}
+              </span>
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                className="shrink-0 text-ink-icon"
+                aria-hidden="true"
+              >
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </span>
+            {patient.description && (
+              <span className="mt-px block truncate text-[13px] text-ink-subtle">
+                {patient.description}
+              </span>
+            )}
+          </span>
+        </button>
+        <span
+          className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${difficulty.pill}`}
+        >
           {difficulty.label}
         </span>
       </div>

@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/app/components/AppShell";
 import PatientInfoModal from "@/app/components/PatientInfoModal";
-import Spinner from "@/app/components/Spinner";
+import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import { formatDueDate, initials, isOverdue, plural } from "@/lib/format";
 import type { Assignment, WizardPatient } from "@/lib/training";
@@ -92,8 +92,8 @@ export default function TasksPage() {
         </div>
 
         {!assignments && !error && (
-          <div className="flex justify-center py-16 text-ink-muted">
-            <Spinner />
+          <div className="flex justify-center py-16">
+            <Loader />
           </div>
         )}
 

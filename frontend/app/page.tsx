@@ -10,6 +10,7 @@ import AllConversationsModal from "@/app/components/AllConversationsModal";
 import AppShell from "@/app/components/AppShell";
 import ConversationRow from "@/app/components/ConversationRow";
 import DailyCard from "@/app/components/DailyCard";
+import Loader from "@/app/components/Loader";
 import ProgressPanel from "@/app/components/ProgressPanel";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import type { HomeData } from "@/lib/home";
@@ -100,7 +101,9 @@ export default function HomePage() {
       )}
 
       {!error && !data && (
-        <p className="px-7 py-6 text-sm text-ink-muted">Загрузка…</p>
+        <div className="flex flex-1 items-center justify-center">
+          <Loader label="Собираем вашу статистику" />
+        </div>
       )}
 
       {data && (
@@ -110,7 +113,7 @@ export default function HomePage() {
           <div className="mx-auto w-full max-w-[1440px] shrink-0 px-10 pb-1 pt-[26px]">
             <div className="mb-[22px]">
               <div className="text-[28px] font-bold tracking-[-.02em] text-ink">
-                {greeting()}, {data.user.firstName}
+                {greeting()}, {data.user.firstName} 👋
               </div>
               <div className="mt-1 text-sm text-ink-subtle">
                 Менеджер по продажам

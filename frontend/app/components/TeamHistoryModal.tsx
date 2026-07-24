@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import ScoreBadge from "@/app/components/ScoreBadge";
-import Spinner from "@/app/components/Spinner";
+import Loader from "@/app/components/Loader";
 import { formatConversationDate, formatDuration, initials } from "@/lib/format";
 
 interface HistorySession {
@@ -89,8 +89,8 @@ export default function TeamHistoryModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {!sessions && !error && (
-            <div className="flex justify-center py-12 text-ink-muted">
-              <Spinner />
+            <div className="flex justify-center py-12">
+              <Loader />
             </div>
           )}
 

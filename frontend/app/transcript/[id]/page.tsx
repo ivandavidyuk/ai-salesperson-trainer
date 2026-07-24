@@ -11,7 +11,9 @@ import Alert from "@/app/components/Alert";
 import Button from "@/app/components/Button";
 import ReviewPanel from "@/app/components/ReviewPanel";
 import TranscriptMessage from "@/app/components/TranscriptMessage";
-import Spinner from "@/app/components/Spinner";
+import BackLink from "@/app/components/BackLink";
+import Logo from "@/app/components/Logo";
+import Loader from "@/app/components/Loader";
 import { formatConversationDate, formatDuration, initials } from "@/lib/format";
 import { messageOffsetSec, type TranscriptData } from "@/lib/transcript";
 
@@ -71,12 +73,11 @@ export default function TranscriptPage() {
     <div className="flex h-screen flex-col bg-surface">
       <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-10">
         <div className="flex items-center gap-3.5">
-          <Link
-            href="/"
-            className="text-sm text-ink-muted transition-colors hover:text-brand-hover"
-          >
-            ← Назад
+          <Link href="/" title="На главную" className="shrink-0">
+            <Logo size="sm" />
           </Link>
+          <span className="h-5 w-px bg-line" aria-hidden="true" />
+          <BackLink />
 
           {session && (
             <>
@@ -119,8 +120,8 @@ export default function TranscriptPage() {
       </header>
 
       {loading && (
-        <div className="flex flex-1 items-center justify-center text-ink-muted">
-          <Spinner />
+        <div className="flex flex-1 items-center justify-center">
+          <Loader />
         </div>
       )}
 
