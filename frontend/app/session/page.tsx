@@ -32,9 +32,18 @@ import {
 // Порог голоса — тот же, что на бэкенде (_MIN_VOICE_RMS в services/stt.py)
 const VOICE_RMS = 500;
 
-// Сколько тишины в разговоре считаем поводом сказать «микрофон вас не слышит».
-// Пауза в речи бывает и десятисекундной, поэтому берём с запасом.
-const SILENT_ALERT_MS = 20_000;
+// Порог «хоть какой-то сигнал». Живой микрофон даже в тихой комнате даёт
+// шум в несколько десятков; ровный ноль — это отключённый вход.
+const SIGNAL_RMS = 15;
+
+// Два разных случая, и спешить в них нужно по-разному.
+// Полная тишина — устройство мертво, ошибиться тут почти невозможно.
+const NO_SIGNAL_MS = 5_000;
+// Сигнал есть, но до голоса не дотягивает — микрофон работает, просто тихо.
+// Тут спешить нельзя: человек мог просто задуматься.
+const TOO_QUIET_MS = 20_000;
+
+type MicAlert = "no-signal" | "too-quiet" | null;
 
 type ScreenState =
   | "idle"
@@ -98,18 +107,26 @@ function SessionScreen() {
   const [inputId, setInputId] = useState<string | null>(savedInputId());
   const [outputId, setOutputId] = useState<string | null>(savedOutputId());
   const [micHint, setMicHint] = useState("");
+  // Новому пользователю показываем списки сразу: он ещё ничего не выбирал.
+  // Тому, кто уже настроил, — свёрнутую строку.
+  const [settingsOpen, setSettingsOpen] = useState(() => savedInputId() === null);
   // Громкость последнего блока и момент, когда в неё последний раз попал голос
   const [level, setLevel] = useState(0);
   const lastVoiceAtRef = useRef(Date.now());
-  const [micSilent, setMicSilent] = useState(false);
+  const lastSoundAtRef = useRef(Date.now());
+  const [micAlert, setMicAlert] = useState<MicAlert>(null);
   // Проверочный захват на экране до разговора
   const previewRef = useRef<MicRecorder | null>(null);
 
   const noteLevel = useCallback((rms: number) => {
     setLevel(rms);
+    const now = Date.now();
+    // Сигнал и голос отмечаем раздельно: по их сочетанию сторож различает
+    // мёртвое устройство и просто тихий микрофон
+    if (rms >= SIGNAL_RMS) lastSoundAtRef.current = now;
     if (rms >= VOICE_RMS) {
-      lastVoiceAtRef.current = Date.now();
-      setMicSilent(false);
+      lastVoiceAtRef.current = now;
+      setMicAlert(null);
     }
   }, []);
 
@@ -201,18 +218,28 @@ function SessionScreen() {
   // узнает сразу, а не через десять минут разговора с пустотой
   useEffect(() => {
     if (screenState !== "active") {
-      setMicSilent(false);
+      setMicAlert(null);
       return;
     }
     lastVoiceAtRef.current = Date.now();
+    lastSoundAtRef.current = Date.now();
+
     const id = setInterval(() => {
-      // Пока говорит ИИ, менеджер молчит по делу — иначе на длинном ответе
-      // плашка вылезала бы на ровном месте
+      const now = Date.now();
+      // Пока говорит ИИ, менеджер молчит по делу — иначе плашка вылезала бы
+      // на длинном ответе
       if (aiSpeakingRef.current) {
-        lastVoiceAtRef.current = Date.now();
+        lastVoiceAtRef.current = now;
+        lastSoundAtRef.current = now;
         return;
       }
-      setMicSilent(Date.now() - lastVoiceAtRef.current > SILENT_ALERT_MS);
+      if (now - lastSoundAtRef.current > NO_SIGNAL_MS) {
+        setMicAlert("no-signal");
+      } else if (now - lastVoiceAtRef.current > TOO_QUIET_MS) {
+        setMicAlert("too-quiet");
+      } else {
+        setMicAlert(null);
+      }
     }, 1000);
     return () => clearInterval(id);
   }, [screenState]);
@@ -435,7 +462,8 @@ function SessionScreen() {
       setInputId(id);
       setLevel(0);
       lastVoiceAtRef.current = Date.now();
-      setMicSilent(false);
+      lastSoundAtRef.current = Date.now();
+      setMicAlert(null);
 
       const restart = async (recorder: MicRecorder | null, live: boolean) => {
         if (!recorder) return;
@@ -464,6 +492,13 @@ function SessionScreen() {
     },
     [screenState, noteLevel]
   );
+
+  // Подпись текущего микрофона для свёрнутой строки. Пока разрешение не
+  // выдано, подписей у устройств нет — тогда говорим нейтрально.
+  const currentInputLabel =
+    inputs.find((device) => device.id === inputId)?.label ??
+    inputs[0]?.label ??
+    "Микрофон по умолчанию";
 
   const changeOutput = useCallback((id: string) => {
     saveOutputId(id);
@@ -529,19 +564,48 @@ function SessionScreen() {
               </div>
             )}
 
-            {/* Проверка устройств до разговора: видно, кто слушает
-                и слышат ли вас, пока это ещё можно исправить */}
+            {/* Проверка устройств до разговора. Свёрнута до одной строки:
+                постоянные два списка перед каждым звонком быстро надоели бы.
+                Но полоска уровня видна всегда — ради неё всё и делалось,
+                а спрятанную за кнопку проверку никто бы не открывал */}
             <div className="mt-[22px] w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-4">
-              <AudioDevicePicker
-                inputs={inputs}
-                inputId={inputId}
-                onInputChange={changeInput}
-                outputs={outputs}
-                outputId={outputId}
-                onOutputChange={changeOutput}
-                level={level}
-                heard={level >= VOICE_RMS}
-              />
+              {settingsOpen ? (
+                <AudioDevicePicker
+                  inputs={inputs}
+                  inputId={inputId}
+                  onInputChange={changeInput}
+                  outputs={outputs}
+                  outputId={outputId}
+                  onOutputChange={changeOutput}
+                  level={level}
+                  heard={level >= VOICE_RMS}
+                />
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13.5px] text-ink-body">
+                      {currentInputLabel}
+                    </div>
+                    <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-line-soft">
+                      <div
+                        style={{
+                          width: `${Math.min(100, Math.round((level / 4000) * 100))}%`,
+                        }}
+                        className={`h-full rounded-full transition-[width] duration-75 ${
+                          level >= VOICE_RMS ? "bg-brand" : "bg-brand-sparkline"
+                        }`}
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsOpen(true)}
+                    className="shrink-0 text-[13.5px] font-semibold text-brand transition-colors hover:text-brand-hover"
+                  >
+                    Настроить
+                  </button>
+                </div>
+              )}
               {micHint && (
                 <p className="mt-3 text-[12.5px] leading-normal text-danger-text">
                   {micHint}
@@ -613,32 +677,37 @@ function SessionScreen() {
               />
             </div>
 
-            {/* Микрофон давно ничего не слышит. Разговор при этом идёт и
-                выглядит рабочим — без этой плашки человек узнавал бы
-                о проблеме через десять минут разговора с тишиной */}
-            {micSilent && (
+            {/* Разговор идёт и выглядит рабочим, а микрофон молчит. Без этой
+                плашки человек узнавал бы о проблеме через десять минут */}
+            {micAlert && (
               <div className="mt-6 w-full max-w-[440px] rounded-xl border border-warn-border bg-warn-surface px-[18px] py-4">
                 <div className="text-sm font-semibold text-warn">
-                  Микрофон вас не слышит
+                  {micAlert === "no-signal"
+                    ? "Микрофон не даёт сигнала"
+                    : "Вас плохо слышно"}
                 </div>
                 <p className="mt-1 text-[13px] leading-normal text-ink-body">
-                  Уже {Math.round(SILENT_ALERT_MS / 1000)} секунд не слышно
-                  звука. Возможно, выбрано не то устройство — переключите его,
-                  разговор не прервётся.
+                  {micAlert === "no-signal"
+                    ? "Похоже, выбрано не то устройство: звука нет совсем. Переключите микрофон — разговор не прервётся."
+                    : "Звук есть, но слишком тихий для распознавания. Говорите громче, придвиньтесь к микрофону или прибавьте его громкость в настройках системы."}
                 </p>
-                <div className="mt-3.5">
-                  <AudioDevicePicker
-                    compact
-                    inputs={inputs}
-                    inputId={inputId}
-                    onInputChange={changeInput}
-                    outputs={[]}
-                    outputId={outputId}
-                    onOutputChange={changeOutput}
-                    level={level}
-                    heard={level >= VOICE_RMS}
-                  />
-                </div>
+                {/* Список нужен только когда устройство молчит: при тихом
+                    сигнале менять его незачем, дело в громкости */}
+                {micAlert === "no-signal" && (
+                  <div className="mt-3.5">
+                    <AudioDevicePicker
+                      compact
+                      inputs={inputs}
+                      inputId={inputId}
+                      onInputChange={changeInput}
+                      outputs={[]}
+                      outputId={outputId}
+                      onOutputChange={changeOutput}
+                      level={level}
+                      heard={level >= VOICE_RMS}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
