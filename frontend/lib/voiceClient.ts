@@ -29,6 +29,15 @@ function base64ToBytes(base64: string): Uint8Array {
 // Целевая частота дискретизации, которую ждёт STT
 const TARGET_SAMPLE_RATE = 16000;
 
+/** Громкость блока PCM16 — те же единицы, что считает бэкенд. */
+function pcm16Rms(buffer: ArrayBuffer): number {
+  const samples = new Int16Array(buffer);
+  if (samples.length === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < samples.length; i += 1) sum += samples[i] * samples[i];
+  return Math.sqrt(sum / samples.length);
+}
+
 // Пауза плеера между предложениями ответа, в течение которой ИИ всё ещё
 // считается говорящим (иначе индикатор мигал бы на каждом стыке)
 const PLAYBACK_GAP_GRACE_MS = 600;
@@ -42,19 +51,57 @@ export class MicRecorder {
   private node: AudioWorkletNode | null = null;
   private paused = false;
 
-  // Запускает захват. onPcm вызывается с base64-строкой PCM16 на каждый блок.
-  async start(onPcm: (base64: string) => void): Promise<void> {
-    // Запрашиваем микрофон (моно, с шумо-/эхоподавлением)
-    this.stream = await navigator.mediaDevices.getUserMedia({
+  /**
+   * Запускает захват. onPcm вызывается с base64-строкой PCM16 на каждый блок,
+   * onLevel — с громкостью этого блока в тех же единицах, что считает сервер
+   * (PCM16), чтобы шкала в интерфейсе и порог голоса на бэкенде говорили
+   * на одном языке.
+   */
+  async start(
+    onPcm: (base64: string) => void,
+    options: {
+      deviceId?: string | null;
+      onLevel?: (rms: number) => void;
+      /** Сохранённое устройство исчезло — id больше не годится */
+      onDeviceMissing?: () => void;
+    } = {}
+  ): Promise<void> {
+    const { deviceId, onLevel, onDeviceMissing } = options;
+
+    // Моно, с шумо- и эхоподавлением
+    const constraints = (id?: string | null): MediaStreamConstraints => ({
       audio: {
         channelCount: 1,
         echoCancellation: true,
         noiseSuppression: true,
+        ...(id ? { deviceId: { exact: id } } : {}),
       },
     });
 
-    // Пытаемся создать контекст сразу на 16 кГц (иначе ворклет ресемплит сам)
-    this.ctx = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia(
+        constraints(deviceId)
+      );
+    } catch (error) {
+      // Выбранного устройства больше нет (вынули гарнитуру, сменился профиль).
+      // Без отката человек оказался бы заперт с неработающим микрофоном.
+      const name = (error as { name?: string } | null)?.name;
+      if (deviceId && (name === "OverconstrainedError" || name === "NotFoundError")) {
+        onDeviceMissing?.();
+        this.stream = await navigator.mediaDevices.getUserMedia(constraints(null));
+      } else {
+        throw error;
+      }
+    }
+
+    // Пытаемся создать контекст сразу на 16 кГц. Если устройство такую
+    // частоту не отдаёт и браузер отказывается — берём его умолчание:
+    // ворклет читает реальную частоту контекста и ресемплит сам.
+    try {
+      this.ctx = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
+    } catch {
+      this.ctx = new AudioContext();
+    }
 
     // Некоторые браузеры стартуют контекст в состоянии suspended
     if (this.ctx.state === "suspended") {
@@ -71,6 +118,9 @@ export class MicRecorder {
     // Получаем готовые PCM16-буферы из ворклета
     this.node.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
       if (this.paused) return;
+      // Уровень считаем из того же буфера, что уходит на сервер, — лишней
+      // работы нет, а шкала показывает ровно то, что слышит распознавание
+      if (onLevel) onLevel(pcm16Rms(event.data));
       onPcm(arrayBufferToBase64(event.data));
     };
 
@@ -158,10 +208,33 @@ export class AudioPlayer {
   private playing = false;
   private current: HTMLAudioElement | null = null;
 
+  /** Выбранный динамик. Запоминаем: в фолбэке элемент новый на каждое предложение. */
+  private outputDeviceId: string | null = null;
+
   constructor() {
     this.useMse = mseSupported();
     if (this.useMse) {
       this._initMse();
+    }
+  }
+
+  /**
+   * Переключает вывод на другой динамик. Работает только там, где есть
+   * setSinkId (Chromium); в Firefox и на iOS тихо ничего не делает.
+   */
+  setOutputDevice(deviceId: string | null): void {
+    this.outputDeviceId = deviceId;
+    if (this.audio) void this._applySink(this.audio);
+    if (this.current) void this._applySink(this.current);
+  }
+
+  private async _applySink(audio: HTMLAudioElement): Promise<void> {
+    if (!this.outputDeviceId) return;
+    if (typeof audio.setSinkId !== "function") return;
+    try {
+      await audio.setSinkId(this.outputDeviceId);
+    } catch {
+      // Устройство могли вынуть — остаёмся на прежнем выводе
     }
   }
 
@@ -318,6 +391,7 @@ export class AudioPlayer {
     this.mediaSource = new MediaSource();
     this.objectUrl = URL.createObjectURL(this.mediaSource);
     this.audio = new Audio(this.objectUrl);
+    void this._applySink(this.audio);
     // Единственный надёжный признак речи — что позиция реально растёт
     this.audio.addEventListener("timeupdate", () => this._notePlaybackProgress());
 
@@ -422,6 +496,7 @@ export class AudioPlayer {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     this.current = audio;
+    void this._applySink(audio);
 
     const cleanup = () => {
       URL.revokeObjectURL(url);

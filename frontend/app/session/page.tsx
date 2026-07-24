@@ -11,12 +11,30 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import AudioDevicePicker from "@/app/components/AudioDevicePicker";
 import BackLink from "@/app/components/BackLink";
 import CallAvatar from "@/app/components/CallAvatar";
 import Logo from "@/app/components/Logo";
 import SpeakerPill from "@/app/components/SpeakerPill";
 import Timer from "@/app/components/Timer";
 import { AudioPlayer, MicRecorder } from "@/lib/voiceClient";
+import {
+  listDevices,
+  micErrorText,
+  onDevicesChanged,
+  saveInputId,
+  saveOutputId,
+  savedInputId,
+  savedOutputId,
+  type AudioDevice,
+} from "@/lib/audioDevices";
+
+// Порог голоса — тот же, что на бэкенде (_MIN_VOICE_RMS в services/stt.py)
+const VOICE_RMS = 500;
+
+// Сколько тишины в разговоре считаем поводом сказать «микрофон вас не слышит».
+// Пауза в речи бывает и десятисекундной, поэтому берём с запасом.
+const SILENT_ALERT_MS = 20_000;
 
 type ScreenState =
   | "idle"
@@ -65,11 +83,41 @@ function SessionScreen() {
   const [errorMsg, setErrorMsg] = useState("");
   // Звучит ли сейчас ответ ИИ — от этого зависит индикатор и вид аватара
   const [aiSpeaking, setAiSpeaking] = useState(false);
+  // Та же величина ссылкой: сторож тишины опрашивает её из интервала,
+  // и пересоздавать интервал на каждое переключение речи незачем
+  const aiSpeakingRef = useRef(false);
 
   // Ссылки на активные ресурсы разговора
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MicRecorder | null>(null);
   const playerRef = useRef<AudioPlayer | null>(null);
+
+  // --- Аудио-устройства -----------------------------------------------------
+  const [inputs, setInputs] = useState<AudioDevice[]>([]);
+  const [outputs, setOutputs] = useState<AudioDevice[]>([]);
+  const [inputId, setInputId] = useState<string | null>(savedInputId());
+  const [outputId, setOutputId] = useState<string | null>(savedOutputId());
+  const [micHint, setMicHint] = useState("");
+  // Громкость последнего блока и момент, когда в неё последний раз попал голос
+  const [level, setLevel] = useState(0);
+  const lastVoiceAtRef = useRef(Date.now());
+  const [micSilent, setMicSilent] = useState(false);
+  // Проверочный захват на экране до разговора
+  const previewRef = useRef<MicRecorder | null>(null);
+
+  const noteLevel = useCallback((rms: number) => {
+    setLevel(rms);
+    if (rms >= VOICE_RMS) {
+      lastVoiceAtRef.current = Date.now();
+      setMicSilent(false);
+    }
+  }, []);
+
+  const refreshDevices = useCallback(async () => {
+    const { inputs: ins, outputs: outs } = await listDevices();
+    setInputs(ins);
+    setOutputs(outs);
+  }, []);
 
   // Пациент, с которым пойдёт разговор: либо выбранный в мастере,
   // либо первый активный при прямом заходе на страницу
@@ -100,6 +148,75 @@ function SessionScreen() {
     };
   }, [chosenPatientId]);
 
+  // Проверочный захват на экране подготовки: человек видит, какое устройство
+  // его слушает и слышат ли его, ещё до начала разговора. Именно здесь
+  // вскрывается случай, когда браузер молча выбрал не тот вход.
+  useEffect(() => {
+    if (screenState !== "idle") return;
+
+    let cancelled = false;
+    const recorder = new MicRecorder();
+
+    (async () => {
+      try {
+        await recorder.start(() => {}, {
+          deviceId: savedInputId(),
+          onLevel: (rms) => {
+            if (!cancelled) noteLevel(rms);
+          },
+          // Сохранённого устройства больше нет — забываем его, чтобы
+          // не спотыкаться о него при каждом заходе
+          onDeviceMissing: () => {
+            saveInputId(null);
+            setInputId(null);
+          },
+        });
+        if (cancelled) {
+          await recorder.stop();
+          return;
+        }
+        previewRef.current = recorder;
+        setMicHint("");
+        // Подписи устройств появляются только после выданного разрешения
+        await refreshDevices();
+      } catch (error) {
+        if (!cancelled) setMicHint(micErrorText(error));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      // Останавливаем именно текущий захват: смена микрофона заменяет его
+      // на новый, и остановка исходного оставила бы устройство занятым
+      const active = previewRef.current ?? recorder;
+      previewRef.current = null;
+      void active.stop();
+    };
+  }, [screenState, noteLevel, refreshDevices]);
+
+  // Устройства втыкают и вынимают прямо во время работы
+  useEffect(() => onDevicesChanged(() => void refreshDevices()), [refreshDevices]);
+
+  // Сторож тишины: если микрофон долго не слышит ничего, человек об этом
+  // узнает сразу, а не через десять минут разговора с пустотой
+  useEffect(() => {
+    if (screenState !== "active") {
+      setMicSilent(false);
+      return;
+    }
+    lastVoiceAtRef.current = Date.now();
+    const id = setInterval(() => {
+      // Пока говорит ИИ, менеджер молчит по делу — иначе на длинном ответе
+      // плашка вылезала бы на ровном месте
+      if (aiSpeakingRef.current) {
+        lastVoiceAtRef.current = Date.now();
+        return;
+      }
+      setMicSilent(Date.now() - lastVoiceAtRef.current > SILENT_ALERT_MS);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [screenState]);
+
   // Таймер идёт во время разговора; на паузе замирает, но не сбрасывается
   useEffect(() => {
     if (screenState !== "active") return;
@@ -111,10 +228,13 @@ function SessionScreen() {
   useEffect(() => {
     if (screenState !== "active") {
       setAiSpeaking(false);
+      aiSpeakingRef.current = false;
       return;
     }
     const id = setInterval(() => {
-      setAiSpeaking(playerRef.current?.isPlaying() ?? false);
+      const speaking = playerRef.current?.isPlaying() ?? false;
+      setAiSpeaking(speaking);
+      aiSpeakingRef.current = speaking;
     }, SPEAKER_POLL_MS);
     return () => clearInterval(id);
   }, [screenState]);
@@ -184,6 +304,14 @@ function SessionScreen() {
 
       // Готовим плеер для голосовых ответов ИИ
       playerRef.current = new AudioPlayer();
+      playerRef.current.setOutputDevice(outputId);
+
+      // Проверочный захват больше не нужен — освобождаем устройство,
+      // иначе на разговор пойдёт второй параллельный захват
+      if (previewRef.current) {
+        await previewRef.current.stop();
+        previewRef.current = null;
+      }
 
       // Открываем WebSocket с ws-токеном в query
       const url = `${wsUrl}?token=${encodeURIComponent(wsToken)}`;
@@ -195,12 +323,22 @@ function SessionScreen() {
         try {
           const recorder = new MicRecorder();
           recorderRef.current = recorder;
-          await recorder.start((base64) => {
-            sendWs({ type: "audio_chunk", data: base64 });
-          });
+          await recorder.start(
+            (base64) => sendWs({ type: "audio_chunk", data: base64 }),
+            {
+              deviceId: inputId,
+              onLevel: noteLevel,
+              onDeviceMissing: () => {
+                saveInputId(null);
+                setInputId(null);
+              },
+            }
+          );
           setScreenState("active");
-        } catch {
-          // Без микрофона разговор невозможен — показываем, как его включить
+        } catch (error) {
+          // Без микрофона разговор невозможен — показываем причину отказа,
+          // а не общий экран, из которого ничего не понять
+          setMicHint(micErrorText(error));
           setScreenState("micError");
         }
       };
@@ -286,6 +424,53 @@ function SessionScreen() {
   }
 
 
+  /**
+   * Смена микрофона. До разговора переоткрываем проверочный захват,
+   * во время — только захват, не трогая ни WebSocket, ни саму сессию:
+   * человек не должен терять разговор из-за не того устройства.
+   */
+  const changeInput = useCallback(
+    async (id: string) => {
+      saveInputId(id);
+      setInputId(id);
+      setLevel(0);
+      lastVoiceAtRef.current = Date.now();
+      setMicSilent(false);
+
+      const restart = async (recorder: MicRecorder | null, live: boolean) => {
+        if (!recorder) return;
+        await recorder.stop();
+        const next = new MicRecorder();
+        await next.start(
+          live
+            ? (base64) => sendWs({ type: "audio_chunk", data: base64 })
+            : () => {},
+          { deviceId: id, onLevel: noteLevel }
+        );
+        if (live) recorderRef.current = next;
+        else previewRef.current = next;
+      };
+
+      try {
+        if (screenState === "active" || screenState === "paused") {
+          await restart(recorderRef.current, true);
+        } else {
+          await restart(previewRef.current, false);
+        }
+        setMicHint("");
+      } catch (error) {
+        setMicHint(micErrorText(error));
+      }
+    },
+    [screenState, noteLevel]
+  );
+
+  const changeOutput = useCallback((id: string) => {
+    saveOutputId(id);
+    setOutputId(id);
+    playerRef.current?.setOutputDevice(id);
+  }, []);
+
   const inCall = screenState === "active" || screenState === "paused";
   const canLeave = screenState === "idle" || screenState === "micError";
 
@@ -344,6 +529,26 @@ function SessionScreen() {
               </div>
             )}
 
+            {/* Проверка устройств до разговора: видно, кто слушает
+                и слышат ли вас, пока это ещё можно исправить */}
+            <div className="mt-[22px] w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-4">
+              <AudioDevicePicker
+                inputs={inputs}
+                inputId={inputId}
+                onInputChange={changeInput}
+                outputs={outputs}
+                outputId={outputId}
+                onOutputChange={changeOutput}
+                level={level}
+                heard={level >= VOICE_RMS}
+              />
+              {micHint && (
+                <p className="mt-3 text-[12.5px] leading-normal text-danger-text">
+                  {micHint}
+                </p>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={handleStart}
@@ -353,9 +558,6 @@ function SessionScreen() {
               <span className="inline-block h-2 w-2 rounded-full bg-white" />
               Начать тренировку
             </button>
-            <div className="mt-3 text-[12.5px] text-ink-subtle">
-              Понадобится доступ к микрофону
-            </div>
           </>
         )}
 
@@ -411,6 +613,35 @@ function SessionScreen() {
               />
             </div>
 
+            {/* Микрофон давно ничего не слышит. Разговор при этом идёт и
+                выглядит рабочим — без этой плашки человек узнавал бы
+                о проблеме через десять минут разговора с тишиной */}
+            {micSilent && (
+              <div className="mt-6 w-full max-w-[440px] rounded-xl border border-warn-border bg-warn-surface px-[18px] py-4">
+                <div className="text-sm font-semibold text-warn">
+                  Микрофон вас не слышит
+                </div>
+                <p className="mt-1 text-[13px] leading-normal text-ink-body">
+                  Уже {Math.round(SILENT_ALERT_MS / 1000)} секунд не слышно
+                  звука. Возможно, выбрано не то устройство — переключите его,
+                  разговор не прервётся.
+                </p>
+                <div className="mt-3.5">
+                  <AudioDevicePicker
+                    compact
+                    inputs={inputs}
+                    inputId={inputId}
+                    onInputChange={changeInput}
+                    outputs={[]}
+                    outputId={outputId}
+                    onOutputChange={changeOutput}
+                    level={level}
+                    heard={level >= VOICE_RMS}
+                  />
+                </div>
+              </div>
+            )}
+
             {errorMsg && (
               <p className="mt-4 max-w-[440px] text-center text-sm text-danger-text">
                 {errorMsg}
@@ -461,13 +692,17 @@ function SessionScreen() {
               🎙
             </div>
             <div className="mt-[18px] text-[21px] font-semibold text-ink">
-              Нет доступа к микрофону
+              Микрофон не включился
             </div>
+            {/* Причина, а не догадка: раньше любой сбой выглядел как запрет
+                браузера, хотя устройство могло быть занято или отсутствовать */}
             <p className="mt-2 max-w-[420px] text-center text-[14.5px] leading-normal text-ink-muted">
-              Браузер заблокировал микрофон. Разрешите доступ в настройках сайта
-              и повторите — без него разговор не начнётся.
+              {micHint ||
+                "Не удалось включить микрофон. Проверьте устройство и попробуйте снова."}
             </p>
             <div className="mt-5 w-full max-w-[440px] rounded-xl border border-line bg-surface px-4 py-3.5 text-[13px] leading-relaxed text-ink-label">
+              Если доступ заблокирован браузером:
+              <br />
               1. Нажмите на значок 🔒 слева от адреса
               <br />
               2. Включите «Микрофон»
