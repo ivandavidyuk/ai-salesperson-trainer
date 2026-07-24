@@ -137,7 +137,7 @@ export default function AchievementsPage() {
 
   return (
     <AppShell title="Достижения">
-      <div className="mx-auto w-full max-w-[1440px] px-10 pb-11 pt-[26px]">
+      <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px]">
         {!data && !error && (
           <div className="flex justify-center py-16">
             <Loader />

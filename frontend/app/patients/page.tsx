@@ -71,7 +71,7 @@ export default function PatientsPage() {
 
   return (
     <AppShell title="Пациенты">
-      <div className="mx-auto w-full max-w-[1440px] px-10 pb-11 pt-[26px]">
+      <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px]">
         <div className="mb-1.5 flex items-baseline justify-between gap-4">
           <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink">
             Библиотека пациентов

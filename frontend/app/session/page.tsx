@@ -294,7 +294,7 @@ function SessionScreen() {
       {/* Топбар: логотип и «Назад», справа — таймер во время разговора.
           Высота и отступы те же, что в AppShell: экран разговора выпадает
           из общей оболочки, но выглядеть должен её продолжением. */}
-      <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7">
+      <header className="flex h-[66px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7">
         <div className="flex items-center gap-3.5">
           <Link href="/" title="На главную" className="shrink-0">
             <Logo size="sm" />
