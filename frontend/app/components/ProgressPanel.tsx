@@ -1,6 +1,10 @@
 // Панель «Прогресс»: средние оценки по этапам сделки за текущую неделю
 // с изменением к прошлой, плюс сильная сторона и точка роста
 // из последнего разбора.
+//
+// Этапы показаны вертикальными столбцами: они тянутся на всю свободную
+// высоту панели, поэтому пустоты между графиком и выводами не остаётся —
+// раньше шкалы были горизонтальными и жались кверху.
 
 import type { ProgressMetric } from "@/lib/home";
 
@@ -12,16 +16,26 @@ interface ProgressPanelProps {
 
 // Изменение к прошлой неделе: рост — зелёный, падение — красный,
 // «без изменений» и отсутствие данных не показываем вовсе.
+//
+// Место под плашку резервируется всегда: столбцы стоят в одной строке и
+// выравниваются по низу, поэтому колонка без дельты иначе подняла бы свою
+// дорожку выше соседних. У новых пользователей дельт нет ни у одного этапа,
+// так что это обычное состояние, а не редкий случай.
 function Delta({ delta }: { delta: number | null }) {
-  if (delta === null || delta === 0) return null;
-  const up = delta > 0;
+  const visible = delta !== null && delta !== 0;
+  const up = (delta ?? 0) > 0;
+
   return (
-    <span
-      className={`rounded-full px-[7px] py-0.5 text-[11px] font-semibold ${
-        up ? "bg-good-surface text-good" : "bg-danger-soft text-danger-strong"
-      }`}
-    >
-      {up ? "▲" : "▼"} {Math.abs(delta)}
+    <span className="flex h-[18px] items-center">
+      {visible && (
+        <span
+          className={`rounded-full px-[7px] py-0.5 text-[10.5px] font-semibold ${
+            up ? "bg-good-surface text-good" : "bg-danger-soft text-danger-strong"
+          }`}
+        >
+          {up ? "▲" : "▼"} {Math.abs(delta as number)}
+        </span>
+      )}
     </span>
   );
 }
@@ -48,34 +62,63 @@ export default function ProgressPanel({
           </p>
         )}
 
-        {hasData &&
-          metrics.map((metric) => (
-            <div key={metric.key} className="mb-2 last:mb-0">
-              <div className="mb-1.5 flex items-center justify-between gap-3">
-                <span className="whitespace-nowrap text-[13px] text-ink-body">
-                  {metric.label}
-                </span>
-                <span className="inline-flex items-center gap-2">
-                  <span className="font-mono text-[13px] text-ink">
-                    {metric.value ?? "—"}
-                  </span>
-                  <Delta delta={metric.delta} />
-                </span>
+        {hasData && (
+          <>
+            <div className="mb-3.5 flex items-baseline justify-between">
+              <span className="font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+                Оценка по этапам
+              </span>
+              <span className="font-mono text-[10.5px] text-ink-placeholder">
+                0 – 10
+              </span>
+            </div>
+
+            {/* min-h-0 и на обёртке, и на строке столбцов: без него flex-1
+                у дорожки не сможет сжаться и панель вылезет за экран */}
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex min-h-0 flex-1 items-stretch gap-3.5">
+                {metrics.map((metric) => (
+                  <div
+                    key={metric.key}
+                    className="flex min-w-0 flex-1 flex-col items-center gap-2"
+                  >
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="font-mono text-xl font-medium leading-none text-ink">
+                        {metric.value ?? "—"}
+                      </span>
+                      <Delta delta={metric.delta} />
+                    </div>
+
+                    <div className="flex w-full max-w-[58px] flex-1 items-end overflow-hidden rounded-[11px] bg-surface-bubble">
+                      <div
+                        className="w-full rounded-t-lg bg-gradient-to-b from-brand-bar-top to-brand shadow-[inset_0_1px_0_rgba(255,255,255,.3)]"
+                        // Шкала 0–10, поэтому оценка напрямую переводится в проценты
+                        style={{ height: `${((metric.value ?? 0) / 10) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-line-soft">
-                <div
-                  className="h-full rounded-full bg-brand"
-                  // Шкала 0–10, поэтому оценка напрямую переводится в проценты
-                  style={{ width: `${((metric.value ?? 0) / 10) * 100}%` }}
-                />
+
+              {/* Подписи — отдельной строкой под дорожками: внутри колонок
+                  разная длина названий сдвигала бы низ столбцов */}
+              <div className="mt-3.5 flex gap-3.5">
+                {metrics.map((metric) => (
+                  <div
+                    key={metric.key}
+                    className="min-w-0 flex-1 text-balance text-center text-[12.5px] font-medium leading-[1.35] tracking-[-.005em] text-ink-body"
+                  >
+                    {metric.label}
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
+          </>
+        )}
 
         {(strength || growthPoint) && (
           <>
-            {/* mt-auto прижимает выводы к низу панели, как в макете */}
-            <div className="mt-auto mb-3.5 h-px shrink-0 bg-line-soft" />
+            <div className="mb-3.5 mt-5 h-px shrink-0 bg-line-soft" />
 
             {strength && (
               <div className="mb-2">
