@@ -1,7 +1,7 @@
 // Бейдж оценки разговора. Оформление зависит от значения — пороги взяты
 // из макета: 10 — золотой, от 8 — зелёный, от 6.2 — тиловый, ниже — янтарный.
 
-import { SCORE_GOOD_FROM, SCORE_WARN_BELOW } from "@/lib/score";
+import { scoreTone } from "@/lib/score";
 
 interface ScoreBadgeProps {
   score: number | null;
@@ -27,12 +27,13 @@ export default function ScoreBadge({ score }: ScoreBadgeProps) {
     );
   }
 
-  const toneClass =
-    score >= SCORE_GOOD_FROM
-      ? "bg-good-surface text-good"
-      : score >= SCORE_WARN_BELOW
-        ? "bg-brand-soft text-brand-hover"
-        : "bg-warn-surface text-warn";
+  const toneClass = {
+    gold: "",
+    good: "bg-good-surface text-good",
+    brand: "bg-brand-soft text-brand-hover",
+    warn: "bg-warn-surface text-warn",
+    bad: "bg-danger-soft text-danger-strong",
+  }[scoreTone(score)];
 
   return (
     <span

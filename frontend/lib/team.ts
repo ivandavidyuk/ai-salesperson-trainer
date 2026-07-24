@@ -35,6 +35,12 @@ export interface TeamMemberStats {
   week: number;
   /** Средняя оценка за всё время; null — разборов нет */
   avgScore: number | null;
+  /** Прирост средней за эту неделю к прошлой; null — не с чем сравнивать */
+  weekDelta: number | null;
+  /** Лучшая оценка за всё время; null — разборов нет */
+  bestScore: number | null;
+  /** Разговоров по дням за последние 7 суток, от старого к сегодняшнему */
+  activity: number[];
   stages: TeamStageMetric[];
   strength: string | null;
   growthPoint: string | null;
@@ -63,14 +69,29 @@ export async function getTeamStats(): Promise<TeamMemberStats[]> {
   const prevWeekStart = new Date(weekStart);
   prevWeekStart.setDate(prevWeekStart.getDate() - 7);
 
+  // Спарклайн активности: семь суток, заканчивая сегодняшними.
+  // Границей берём полночь, иначе «день» съезжал бы по времени запроса.
+  const ACTIVITY_DAYS = 7;
+  const activityStart = new Date(now);
+  activityStart.setHours(0, 0, 0, 0);
+  activityStart.setDate(activityStart.getDate() - (ACTIVITY_DAYS - 1));
+
   // В статистику идут только завершённые разговоры: брошенные и текущие
   // искажали бы и счётчики, и средние
   return Promise.all(
     managers.map(async (manager) => {
       const completed = { userId: manager.id, status: "completed" as const };
 
-      const [total, week, scoreAgg, currentWeekAvg, prevWeekAvg, recentRows, lastReview] =
-        await Promise.all([
+      const [
+        total,
+        week,
+        scoreAgg,
+        currentWeekAvg,
+        prevWeekAvg,
+        recentRows,
+        lastReview,
+        activityRows,
+      ] = await Promise.all([
           prisma.session.count({ where: completed }),
           prisma.session.count({
             where: { ...completed, startedAt: { gte: weekStart } },
@@ -78,6 +99,7 @@ export async function getTeamStats(): Promise<TeamMemberStats[]> {
           prisma.sessionReview.aggregate({
             where: { session: completed },
             _avg: { overallScore: true },
+            _max: { overallScore: true },
           }),
           averageScores(manager.id, weekStart, now),
           averageScores(manager.id, prevWeekStart, weekStart),
@@ -97,7 +119,26 @@ export async function getTeamStats(): Promise<TeamMemberStats[]> {
             orderBy: { createdAt: "desc" },
             select: { strength: true, growthPoint: true },
           }),
+          // Одним запросом вместо семи count: дней всего семь, и раскладку
+          // дешевле сделать в JS, чем гонять счётчик на каждый день
+          prisma.session.findMany({
+            where: { ...completed, startedAt: { gte: activityStart } },
+            select: { startedAt: true },
+          }),
         ]);
+
+      const activity = new Array<number>(ACTIVITY_DAYS).fill(0);
+      for (const row of activityRows) {
+        const day = new Date(row.startedAt);
+        day.setHours(0, 0, 0, 0);
+        const index = Math.floor(
+          (day.getTime() - activityStart.getTime()) / 86_400_000
+        );
+        if (index >= 0 && index < ACTIVITY_DAYS) activity[index] += 1;
+      }
+
+      const thisWeekOverall = round1(currentWeekAvg.overallScore ?? null);
+      const prevWeekOverall = round1(prevWeekAvg.overallScore ?? null);
 
       const stages: TeamStageMetric[] = STAGE_METRICS.map(({ key, label }) => {
         const value = round1(currentWeekAvg[key] ?? null);
@@ -120,6 +161,12 @@ export async function getTeamStats(): Promise<TeamMemberStats[]> {
         total,
         week,
         avgScore: round1(scoreAgg._avg.overallScore),
+        weekDelta:
+          thisWeekOverall !== null && prevWeekOverall !== null
+            ? round1(thisWeekOverall - prevWeekOverall)
+            : null,
+        bestScore: round1(scoreAgg._max.overallScore),
+        activity,
         stages,
         strength: lastReview?.strength ?? null,
         growthPoint: lastReview?.growthPoint ?? null,
