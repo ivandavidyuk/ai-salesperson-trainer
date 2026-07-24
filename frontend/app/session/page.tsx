@@ -11,6 +11,7 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import BackLink from "@/app/components/BackLink";
 import CallAvatar from "@/app/components/CallAvatar";
 import Logo from "@/app/components/Logo";
 import SpeakerPill from "@/app/components/SpeakerPill";
@@ -271,7 +272,11 @@ function SessionScreen() {
 
       if (sessionId) {
         await fetch(`/api/sessions/${sessionId}/stop`, { method: "POST" });
-        router.push(`/transcript/${sessionId}`);
+        // replace, а не push: разговор уже завершён, и возвращаться на этот
+        // экран бессмысленно — он поднялся бы в исходном состоянии и предложил
+        // начать заново, создав новый разговор. «Назад» с расшифровки должно
+        // уводить туда, откуда пришли запускать тренировку.
+        router.replace(`/transcript/${sessionId}`);
       } else {
         setScreenState("idle");
       }
@@ -303,12 +308,7 @@ function SessionScreen() {
           {canLeave && (
             <>
               <span className="h-5 w-px bg-line" aria-hidden="true" />
-              <Link
-                href="/"
-                className="text-sm text-ink-muted transition-colors hover:text-brand-hover"
-              >
-                ← Назад
-              </Link>
+              <BackLink />
             </>
           )}
         </div>

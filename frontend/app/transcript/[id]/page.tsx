@@ -11,6 +11,7 @@ import Alert from "@/app/components/Alert";
 import Button from "@/app/components/Button";
 import ReviewPanel from "@/app/components/ReviewPanel";
 import TranscriptMessage from "@/app/components/TranscriptMessage";
+import BackLink from "@/app/components/BackLink";
 import Logo from "@/app/components/Logo";
 import Loader from "@/app/components/Loader";
 import { formatConversationDate, formatDuration, initials } from "@/lib/format";
@@ -76,12 +77,7 @@ export default function TranscriptPage() {
             <Logo size="sm" />
           </Link>
           <span className="h-5 w-px bg-line" aria-hidden="true" />
-          <Link
-            href="/"
-            className="text-sm text-ink-muted transition-colors hover:text-brand-hover"
-          >
-            ← Назад
-          </Link>
+          <BackLink />
 
           {session && (
             <>
