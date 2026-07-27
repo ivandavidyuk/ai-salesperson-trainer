@@ -27,6 +27,8 @@ export interface TranscriptReview {
 export interface TranscriptData {
   session: {
     startedAt: string;
+    /** null у брошенных сессий, которые никто не закрыл штатно */
+    endedAt: string | null;
     durationSec: number | null;
     topic: string | null;
     patientName: string | null;

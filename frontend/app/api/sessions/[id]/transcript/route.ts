@@ -27,6 +27,9 @@ export async function GET(
         userId: true,
         topic: true,
         startedAt: true,
+        // Нужен странице, чтобы понять, ждать ли разбор: он приходит
+        // фоновой задачей через несколько секунд после конца разговора
+        endedAt: true,
         durationSec: true,
         patient: { select: { name: true } },
         review: {
@@ -72,6 +75,7 @@ export async function GET(
     return NextResponse.json({
       session: {
         startedAt: session.startedAt.toISOString(),
+        endedAt: session.endedAt?.toISOString() ?? null,
         durationSec: session.durationSec,
         topic: session.topic,
         patientName: session.patient?.name ?? null,

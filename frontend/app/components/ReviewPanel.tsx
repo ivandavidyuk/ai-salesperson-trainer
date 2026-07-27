@@ -7,6 +7,7 @@
 // (см. DEAL-OUTCOME.md).
 
 import type { TranscriptReview } from "@/lib/transcript";
+import Loader from "@/app/components/Loader";
 import {
   OUTCOME_LABELS,
   SCORE_WARN_BELOW,
@@ -16,6 +17,12 @@ import {
 
 interface ReviewPanelProps {
   review: TranscriptReview | null;
+  /**
+   * Разбор ещё в работе: разговор только что закончился, оценщик считает.
+   * Отличать это от «разбора не будет» обязательно — иначе менеджер видит
+   * «Разбора нет» сразу после звонка, уходит со страницы и не возвращается.
+   */
+  pending?: boolean;
 }
 
 // Кольцо общей оценки. Дуга рисуется через stroke-dasharray, поэтому
@@ -75,7 +82,20 @@ function OutcomeBanner({ outcome }: { outcome: DealOutcome }) {
   );
 }
 
-export default function ReviewPanel({ review }: ReviewPanelProps) {
+/** Разбор считается: показываем это явно, а не пустотой. */
+function PendingReview() {
+  return (
+    <div className="rounded-xl border border-line px-[18px] py-8">
+      <Loader label="Считаем разбор" />
+      <p className="mt-3 text-center text-[13px] leading-normal text-ink-muted">
+        Оценщик читает расшифровку целиком — обычно это занимает несколько
+        секунд. Страница обновится сама, обновлять её вручную не нужно.
+      </p>
+    </div>
+  );
+}
+
+export default function ReviewPanel({ review, pending = false }: ReviewPanelProps) {
   return (
     <div className="flex-1 overflow-y-auto bg-surface-card px-7 py-8">
       <div className="text-base font-semibold text-ink">Разбор разговора</div>
@@ -84,7 +104,9 @@ export default function ReviewPanel({ review }: ReviewPanelProps) {
         роста для следующего разговора.
       </p>
 
-      {!review ? (
+      {pending && !review ? (
+        <PendingReview />
+      ) : !review ? (
         <div className="rounded-xl border border-line px-[18px] py-5">
           <div className="text-sm font-semibold text-ink">Разбора нет</div>
           <p className="mt-1.5 text-[13px] leading-normal text-ink-muted">

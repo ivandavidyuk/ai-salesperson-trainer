@@ -17,6 +17,20 @@ import Loader from "@/app/components/Loader";
 import { formatConversationDate, formatDuration, initials } from "@/lib/format";
 import { messageOffsetSec, type TranscriptData } from "@/lib/transcript";
 
+// Сколько ждать разбор после конца разговора. Оценщик укладывается
+// в 3–4 секунды, но у него три попытки с паузами при отказе провайдера,
+// поэтому запас щедрый. Дальше ждать нечего: значит разбор не состоялся.
+const REVIEW_WAIT_MS = 2 * 60 * 1000;
+const POLL_INTERVAL_MS = 3000;
+
+/** Ждём ли ещё разбор: разговор закончился недавно, а разбора нет. */
+function reviewExpected(data: TranscriptData | null): boolean {
+  if (!data || data.review) return false;
+  // Без endedAt сессию никто не закрыл штатно — разбор не запускался
+  if (!data.session.endedAt) return false;
+  return Date.now() - new Date(data.session.endedAt).getTime() < REVIEW_WAIT_MS;
+}
+
 export default function TranscriptPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -25,10 +39,15 @@ export default function TranscriptPage() {
   const [data, setData] = useState<TranscriptData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Перерисовка по таймеру: без неё окно ожидания истекает молча, и лоадер
+  // крутился бы вечно, пока пользователь не тронет страницу
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const load = async () => {
       try {
         const res = await fetch(`/api/sessions/${sessionId}/transcript`);
         if (!res.ok) {
@@ -46,17 +65,37 @@ export default function TranscriptPage() {
           return;
         }
         const payload = (await res.json()) as TranscriptData;
-        if (!cancelled) setData(payload);
+        if (cancelled) return;
+        setData(payload);
+
+        // Разбор приходит фоновой задачей уже после того, как страница
+        // открылась: перезапрашиваем, пока он не появится
+        if (reviewExpected(payload)) {
+          timer = setTimeout(() => {
+            setTick((value) => value + 1);
+            void load();
+          }, POLL_INTERVAL_MS);
+        }
       } catch {
-        if (!cancelled) setError("Не удалось загрузить расшифровку");
+        // Сетевой сбой на опросе не должен затирать уже показанную
+        // расшифровку — ошибку показываем только на первой загрузке
+        if (!cancelled && !data) setError("Не удалось загрузить расшифровку");
       } finally {
         if (!cancelled) setLoading(false);
       }
-    })();
+    };
+
+    void load();
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
+    // data намеренно не в зависимостях: он меняется на каждом опросе,
+    // и эффект перезапускался бы сам на себя
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, router]);
+
+  const pendingReview = reviewExpected(data);
 
   const session = data?.session;
   const managerName = data
@@ -163,7 +202,7 @@ export default function TranscriptPage() {
             })}
           </div>
 
-          <ReviewPanel review={data.review} />
+          <ReviewPanel review={data.review} pending={pendingReview} />
         </div>
       )}
     </div>
