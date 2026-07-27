@@ -11,9 +11,8 @@
 // выдуманные разговоры там мешали бы.
 
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
-import { randomBytes } from "crypto";
 import { deriveDealResult } from "./deal-result";
+import { seedPassword } from "./seed-password";
 
 const prisma = new PrismaClient();
 
@@ -135,8 +134,10 @@ async function main() {
     process.exit(1);
   }
 
-  const password = process.env.TEAM_PASSWORD || randomBytes(9).toString("base64url");
-  const passwordHash = await bcrypt.hash(password, 10);
+  const password = await seedPassword("TEAM_PASSWORD");
+  // Пароль показываем, только если хоть один аккаунт заводится сейчас:
+  // у существующих сид его не меняет
+  let created = false;
 
   const now = new Date();
   const weekStart = startOfWeek(now);
@@ -144,6 +145,9 @@ async function main() {
   lastWeekStart.setDate(lastWeekStart.getDate() - 7);
 
   for (const member of TEAM) {
+    const existing = await prisma.user.findUnique({ where: { email: member.email } });
+    if (!existing) created = true;
+
     const user = await prisma.user.upsert({
       where: { email: member.email },
       update: {
@@ -151,11 +155,11 @@ async function main() {
         lastName: member.lastName,
         jobTitle: member.jobTitle,
         role: "manager",
-        passwordHash,
+        ...password.update,
       },
       create: {
         email: member.email,
-        passwordHash,
+        passwordHash: password.hash,
         firstName: member.firstName,
         lastName: member.lastName,
         jobTitle: member.jobTitle,
@@ -224,13 +228,11 @@ async function main() {
   }
 
   console.log("\nВход для всех трёх:");
-  if (process.env.TEAM_PASSWORD) {
-    console.log("  пароль: (из переменной окружения TEAM_PASSWORD)");
-  } else {
-    console.log(`  пароль: ${password}`);
+  console.log(`  пароль: ${password.report(!created)}`);
+  if (created) {
     console.log("\nПароль сгенерирован случайно и показан один раз — сохраните его.");
-    console.log("Чтобы задать свой: TEAM_PASSWORD=... npm run seed:team");
   }
+  console.log("\nСменить пароль: TEAM_PASSWORD=... npm run seed:team");
 }
 
 main()
