@@ -28,6 +28,15 @@ enum DailyContentKind {
   motivation
 }
 
+// Чем закончился разговор. paid — пациент согласился оплатить услугу;
+// refused — отказался; not_asked — менеджер так и не предложил оплатить.
+// Последние два различаются намеренно: это разные ошибки с разным лечением.
+enum DealOutcome {
+  paid
+  refused
+  not_asked
+}
+
 // Насколько тяжело продать этому пациенту — плашка в списке выбора
 enum PatientDifficulty {
   easy
@@ -264,10 +273,21 @@ model SessionReview {
   iceBreakerScore Float
   needsScore      Float
   objectionsScore Float
+  // Пятый этап. Nullable: у разговоров, разобранных до появления механизма
+  // определения исхода, закрытие не оценивалось — ноль был бы неправдой
+  closingScore    Float?
+
+  // Чем закончился разговор. Nullable по той же причине
+  outcome         DealOutcome?
 
   // Текстовые выводы разбора
   strength        String
   growthPoint     String
+
+  // Разбор оценщика по обязательным условиям: какие сняты, какие нет.
+  // Менеджеру не отдаётся — иначе получит готовый чек-лист на следующую
+  // попытку. Нужен нам для проверки объективности и РОПу
+  judgeNotes      String?
 
   createdAt       DateTime @default(now())
 

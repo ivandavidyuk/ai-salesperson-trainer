@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://openrouter.ai/api/v1"
     llm_model: str = "openai/gpt-4o-mini"
 
+    # Оценщик разговора — отдельная модель от роли. Требования обратные:
+    # роли важна задержка (у неё размышление выключено), оценщику —
+    # устойчивость суждения, а ждать его никто не ждёт: он вне критического
+    # пути. Отдельная переменная позволяет менять его, не трогая пайплайн.
+    scorer_model: str = "google/gemini-2.5-flash-lite"
+    # Порог допуска к согласию: средняя по первым четырём этапам.
+    # Регулятор сложности — ниже ближе к жизни, выше строже к технике
+    deal_score_threshold: float = 7.0
+
     # ElevenLabs — STT (Realtime) и TTS
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""

@@ -17,7 +17,7 @@ from typing import AsyncIterator, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from core.config import get_settings
-from services import llm, tts
+from services import llm, scoring, tts
 from services.session import (
     STATUS_ACTIVE,
     STATUS_COMPLETED,
@@ -56,6 +56,11 @@ _ECHO_GRACE_SECS = 1.0
 
 # Перезапуск отменённого хода: если после голоса-отмены столько секунд
 # нет ни голоса, ни коммита — голос был шумом, отвечаем на прежний текст
+# Столько ходов без единой оценки — считаем фоновый оценщик сломанным
+# и перестаём применять порог. Иначе его молчаливый отказ сделал бы сделку
+# незакрываемой, а это ровно тот баг, который мы чиним
+_SCORER_BROKEN_AFTER_TURNS = 12
+
 _NOISE_RESTART_SILENCE_SECS = 1.2
 _NOISE_RESTART_POLL_SECS = 0.5
 
@@ -246,6 +251,9 @@ class TurnManager:
         self._utterance_overlapped_ai = False
         self.playback_end = 0.0  # оценка, когда клиент доиграет буфер (monotonic)
         self._barge_in_until = 0.0  # антидребезг клиентского и STT-триггеров
+
+        # Фоновая оценка этапов: от неё зависит, может ли пациент согласиться
+        self._scoring: Optional[asyncio.Task] = None
 
     # --- Колбэки STT ------------------------------------------------------
 
@@ -532,6 +540,87 @@ class TurnManager:
         self.reply_words = set()
         self.task = asyncio.create_task(self._run(text))
 
+    async def _prompt_with_trust(self, turns: int) -> str:
+        """Промпт хода: постоянная часть плюс строка про доверие.
+
+        Строку выбирает код, сравнив последнюю фоновую оценку с порогом.
+        Модель числа не видит — только готовую инструкцию.
+
+        Три разных «оценки нет» трактуются по-разному:
+          • ходов мало, оценщик ещё не успел — порог не взят. Это правда,
+            а не костыль: за пару реплик доверие не строится;
+          • ходов много, а оценки так и нет — оценщик сломан, порог
+            не применяем. Иначе его молчаливый отказ сделал бы сделку
+            незакрываемой, а это ровно тот баг, который мы чиним;
+          • оценка была раньше — берём последнюю известную.
+        """
+        settings = get_settings()
+        scores = await store.get_stage_scores(self.session_id)
+
+        if scores is None:
+            if turns >= _SCORER_BROKEN_AFTER_TURNS:
+                logger.warning(
+                    "Сессия %s: оценок нет после %d ходов — порог не применяется",
+                    self.session_id,
+                    turns,
+                )
+                return self.system_prompt
+            return f"{self.system_prompt}\n\n{llm.trust_instruction(False)}"
+
+        average = scores.get("average", 0.0)
+        reached = average >= settings.deal_score_threshold
+        return f"{self.system_prompt}\n\n{llm.trust_instruction(reached)}"
+
+    def schedule_scoring(self) -> None:
+        """Пересчитывает оценку этапов в фоне, не задерживая разговор.
+
+        После каждого хода: решающая работа обычно делается в двух-трёх
+        репликах прямо перед закрытием, и при редком пересчёте мы отказывали
+        бы, не увидев именно её.
+        """
+        if self._scoring is not None and not self._scoring.done():
+            return  # предыдущий пересчёт ещё идёт — обгонять его незачем
+        self._scoring = asyncio.create_task(self._score_now())
+
+    async def _score_now(self) -> None:
+        try:
+            history = await store.get_messages(self.session_id)
+            # Роль передаём оценщику как контекст: без неё он не сможет
+            # судить, докопался ли менеджер до настоящей боли пациента.
+            # Рубрика при этом остаётся общей — от неё зависит
+            # сопоставимость оценок между разными пациентами
+            scores = await scoring.score_stages(history, self.system_prompt)
+            if scores is None:
+                return
+
+            previous = await store.get_stage_scores(self.session_id)
+            payload = scores.as_dict()
+            payload["average"] = scores.average
+            await store.set_stage_scores(self.session_id, payload)
+
+            threshold = get_settings().deal_score_threshold
+            reached = scores.average >= threshold
+            was_reached = (
+                previous is not None
+                and previous.get("average", 0.0) >= threshold
+            )
+            logger.info(
+                "ОЦЕНКА сессия %s: ход %d | контакт %.1f лёд %.1f потребность %.1f "
+                "возражения %.1f | средняя %.2f | порог %s%s",
+                self.session_id,
+                len(history),
+                scores.contact,
+                scores.iceBreaker,
+                scores.needs,
+                scores.objections,
+                scores.average,
+                "ВЗЯТ" if reached else "НЕ взят",
+                " ← переход" if reached != was_reached and previous is not None else "",
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Оценка не имеет права ронять разговор
+            logger.warning("Фоновая оценка не удалась: %s", exc)
+
     async def _run(self, text: str) -> None:
         """Пайплайн одного хода: LLM-стрим → нарезка → TTS → клиент.
 
@@ -551,6 +640,11 @@ class TurnManager:
             history = await store.get_messages(session_id)
             history.append({"role": "user", "text": text})
 
+            # Промпт на этот ход: постоянная часть плюс строка про доверие.
+            # Она зависит от последней фоновой оценки и решает, может ли
+            # пациент вообще согласиться на оплату (см. DEAL-OUTCOME.md)
+            turn_prompt = await self._prompt_with_trust(len(history))
+
             # Очередь предложений между LLM (producer) и TTS (consumer);
             # None — маркер конца стрима
             sentences: asyncio.Queue[str | None] = asyncio.Queue()
@@ -560,7 +654,7 @@ class TurnManager:
                 buffer = ""
                 full_reply = ""
                 try:
-                    async for delta in llm.stream_reply(history, self.system_prompt):
+                    async for delta in llm.stream_reply(history, turn_prompt):
                         buffer += delta
                         full_reply += delta
                         # Вырезаем из буфера готовые предложения
@@ -645,6 +739,9 @@ class TurnManager:
             await store.append_message_cache(session_id, "assistant", reply)
             asyncio.create_task(self._persist_turn(text, reply))
             self.last_user_text = text
+            # Пересчёт оценки — в фоне: следующий ход её уже увидит, а этот
+            # ничего не ждёт
+            self.schedule_scoring()
 
             total_ms = (time.perf_counter() - t_start) * 1000
             logger.info(
@@ -673,6 +770,62 @@ class TurnManager:
         finally:
             if producer is not None and not producer.done():
                 producer.cancel()
+
+
+async def finalize_review(session_id: str) -> None:
+    """Разбор разговора после его завершения.
+
+    Определяет исход, ставит пять оценок и пишет выводы. Никогда не бросает:
+    вызывается из блока завершения сессии, и её падение не должно мешать
+    разговору закрыться.
+    """
+    try:
+        history = await store.get_transcript(session_id)
+        if len(history) < 2:
+            return  # разговора фактически не было — разбирать нечего
+
+        patient_prompt = await store.get_patient_prompt(session_id)
+        if not patient_prompt:
+            logger.warning(
+                "Сессия %s: нет промпта пациента — разбор невозможен", session_id
+            )
+            return
+
+        review = await scoring.review_conversation(history, patient_prompt)
+        if review is None:
+            logger.warning("Сессия %s: оценщик не вернул разбор", session_id)
+            return
+
+        await store.save_review(
+            session_id,
+            {
+                "overall": review.overall,
+                "contact": review.stages.contact,
+                "iceBreaker": review.stages.iceBreaker,
+                "needs": review.stages.needs,
+                "objections": review.stages.objections,
+                "closing": review.closing,
+                "outcome": review.outcome,
+                "strength": review.strength,
+                "growthPoint": review.growth_point,
+                "judgeNotes": review.judge_notes,
+            },
+        )
+        logger.info(
+            "ИТОГ сессия %s: исход=%s | оценки: контакт %.1f лёд %.1f "
+            "потребность %.1f возражения %.1f закрытие %.1f | общая %.1f | %s",
+            session_id,
+            review.outcome,
+            review.stages.contact,
+            review.stages.iceBreaker,
+            review.stages.needs,
+            review.stages.objections,
+            review.closing,
+            review.overall,
+            review.judge_notes or "без пояснений",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Разбор сессии %s не удался: %s", session_id, exc)
 
 
 @app.websocket("/ws/session/{session_id}")
@@ -856,6 +1009,11 @@ async def session_ws(ws: WebSocket, session_id: str):
         logger.error("Сессия %s: непредвиденная ошибка: %s", session_id, exc)
         await safe_send(ws, {"type": "error", "message": "Внутренняя ошибка"})
     finally:
+        # Разбор разговора. Фоновой задачей и с перехватом всего: оценка
+        # не имеет права влиять на завершение сессии — при её сбое разговор
+        # должен закрыться штатно, а расшифровка сохраниться
+        asyncio.create_task(finalize_review(session_id))
+
         # 6. Корректно закрываем пайплайн, STT, TTS и соединение
         try:
             await manager.shutdown()

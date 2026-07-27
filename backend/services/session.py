@@ -48,6 +48,11 @@ def _prompt_key(session_id: str) -> str:
     return f"session:{session_id}:prompt"
 
 
+def _scores_key(session_id: str) -> str:
+    """Последняя фоновая оценка этапов — от неё зависит порог допуска."""
+    return f"session:{session_id}:scores"
+
+
 class SessionStore:
     """Хранилище состояния сессий: Redis (онлайн-состояние) + Postgres (история)."""
 
@@ -253,11 +258,99 @@ class SessionStore:
         await self._redis.set(_prompt_key(session_id), prompt)
         return prompt
 
+    # --- Итоговый разбор --------------------------------------------------
+
+    async def get_transcript(self, session_id: str) -> list[dict]:
+        """Полная расшифровка из Postgres, в порядке разговора.
+
+        Не из Redis: итоговый разбор идёт уже после того, как онлайн-состояние
+        сессии очищено, а в базе история сохраняется навсегда.
+        """
+        assert self._pool is not None
+        rows = await self._pool.fetch(
+            'SELECT "role"::text AS role, "text" FROM "Message" '
+            'WHERE "sessionId" = $1 ORDER BY "createdAt" ASC',
+            session_id,
+        )
+        return [{"role": row["role"], "text": row["text"]} for row in rows]
+
+    async def get_patient_prompt(self, session_id: str) -> Optional[str]:
+        """Промпт пациента — тот же текст, что был у роли.
+
+        Итоговый оценщик проверяет условия согласия по нему, а не по своему
+        представлению о правильной продаже.
+        """
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            'SELECT p."prompt" FROM "Session" s '
+            'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
+            'WHERE s."id" = $1',
+            session_id,
+        )
+        return (row["prompt"] if row else None) or None
+
+    async def save_review(self, session_id: str, review: dict) -> None:
+        """Записывает разбор разговора. Существующий перезаписывает."""
+        assert self._pool is not None
+        await self._pool.execute(
+            'INSERT INTO "SessionReview" ('
+            '"id", "sessionId", "overallScore", "contactScore", '
+            '"iceBreakerScore", "needsScore", "objectionsScore", '
+            '"closingScore", "outcome", "strength", "growthPoint", '
+            '"judgeNotes", "createdAt") '
+            'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::"DealOutcome", '
+            "$10, $11, $12, NOW()) "
+            'ON CONFLICT ("sessionId") DO UPDATE SET '
+            '"overallScore" = EXCLUDED."overallScore", '
+            '"contactScore" = EXCLUDED."contactScore", '
+            '"iceBreakerScore" = EXCLUDED."iceBreakerScore", '
+            '"needsScore" = EXCLUDED."needsScore", '
+            '"objectionsScore" = EXCLUDED."objectionsScore", '
+            '"closingScore" = EXCLUDED."closingScore", '
+            '"outcome" = EXCLUDED."outcome", '
+            '"strength" = EXCLUDED."strength", '
+            '"growthPoint" = EXCLUDED."growthPoint", '
+            '"judgeNotes" = EXCLUDED."judgeNotes"',
+            str(uuid.uuid4()),
+            session_id,
+            review["overall"],
+            review["contact"],
+            review["iceBreaker"],
+            review["needs"],
+            review["objections"],
+            review["closing"],
+            review["outcome"],
+            review["strength"],
+            review["growthPoint"],
+            review["judgeNotes"],
+        )
+
+    # --- Оценка разговора ------------------------------------------------
+
+    async def set_stage_scores(self, session_id: str, scores: dict) -> None:
+        """Сохраняет свежую фоновую оценку этапов."""
+        assert self._redis is not None
+        await self._redis.set(_scores_key(session_id), json.dumps(scores))
+
+    async def get_stage_scores(self, session_id: str) -> Optional[dict]:
+        """Последняя известная оценка. None — фоновый оценщик ещё не отработал."""
+        assert self._redis is not None
+        raw = await self._redis.get(_scores_key(session_id))
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+
     # --- Очистка ---------------------------------------------------------
 
     async def clear_session(self, session_id: str) -> None:
         """Удаляет онлайн-данные сессии из Redis (история в БД сохраняется)."""
         assert self._redis is not None
         await self._redis.delete(
-            _status_key(session_id), _messages_key(session_id), _prompt_key(session_id)
+            _status_key(session_id),
+            _messages_key(session_id),
+            _prompt_key(session_id),
+            _scores_key(session_id),
         )
