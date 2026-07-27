@@ -13,6 +13,7 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
+import { deriveDealResult } from "./deal-result";
 
 const prisma = new PrismaClient();
 
@@ -32,11 +33,12 @@ interface Conversation {
   hour?: number;
   topic: string;
   durationSec: number;
-  overallScore: number;
   contactScore: number;
   iceBreakerScore: number;
   needsScore: number;
   objectionsScore: number;
+  /** Разговор не дошёл до предложения оплатить — исход not_asked */
+  notAsked?: boolean;
 }
 
 interface TeamMember {
@@ -53,6 +55,11 @@ interface TeamMember {
 // Профили специально разные: у Ольги рост по всем этапам, у Павла падение
 // на возражениях — иначе дельты в раскрытой карточке были бы нулевыми
 // и проверить их не вышло бы.
+//
+// Исход сделки руками не проставляем: он выводится из средней по этапам
+// (см. deal-result.ts). Поэтому у Ольги разговоры закрываются, у Алексея
+// и Павла — нет, и это следствие их оценок, а не отдельно нарисованная
+// картинка.
 export const TEAM: TeamMember[] = [
   {
     email: "alexey.morozov@podhod.tech",
@@ -62,14 +69,14 @@ export const TEAM: TeamMember[] = [
     strength: "Чёткая структура разговора, уверенно ведёт клиента к цели.",
     growthPoint: "Больше эмпатии в начале — не спешить сразу к делу.",
     thisWeek: [
-      { hoursAgo: 5, topic: "глаукома", durationSec: 228, overallScore: 7.5, contactScore: 7.1, iceBreakerScore: 6.4, needsScore: 7.0, objectionsScore: 6.5 },
-      { hoursAgo: 29, topic: "контроль давления", durationSec: 200, overallScore: 6.8, contactScore: 7.0, iceBreakerScore: 6.5, needsScore: 6.9, objectionsScore: 6.6 },
-      { hoursAgo: 53, topic: "повторный визит", durationSec: 242, overallScore: 6.1, contactScore: 7.2, iceBreakerScore: 6.3, needsScore: 7.1, objectionsScore: 6.4 },
+      { hoursAgo: 5, topic: "глаукома", durationSec: 228, contactScore: 7.1, iceBreakerScore: 6.4, needsScore: 7.0, objectionsScore: 6.5 },
+      { hoursAgo: 29, topic: "контроль давления", durationSec: 200, contactScore: 7.0, iceBreakerScore: 6.5, needsScore: 6.9, objectionsScore: 6.6 },
+      { hoursAgo: 53, topic: "повторный визит", durationSec: 242, contactScore: 7.2, iceBreakerScore: 6.3, needsScore: 7.1, objectionsScore: 6.4 },
     ],
     lastWeek: [
-      { dayOffset: 1, hour: 11, topic: "капли и режим", durationSec: 178, overallScore: 7.0, contactScore: 6.8, iceBreakerScore: 5.9, needsScore: 6.2, objectionsScore: 6.3 },
-      { dayOffset: 2, hour: 14, topic: "первая консультация", durationSec: 215, overallScore: 6.5, contactScore: 6.7, iceBreakerScore: 5.8, needsScore: 6.1, objectionsScore: 6.2 },
-      { dayOffset: 4, hour: 10, topic: "диагностика", durationSec: 190, overallScore: 6.9, contactScore: 6.9, iceBreakerScore: 6.0, needsScore: 6.3, objectionsScore: 6.4 },
+      { dayOffset: 1, hour: 11, topic: "капли и режим", durationSec: 178, contactScore: 6.8, iceBreakerScore: 5.9, needsScore: 6.2, objectionsScore: 6.3 },
+      { dayOffset: 2, hour: 14, topic: "первая консультация", durationSec: 215, contactScore: 6.7, iceBreakerScore: 5.8, needsScore: 6.1, objectionsScore: 6.2, notAsked: true },
+      { dayOffset: 4, hour: 10, topic: "диагностика", durationSec: 190, contactScore: 6.9, iceBreakerScore: 6.0, needsScore: 6.3, objectionsScore: 6.4 },
     ],
   },
   {
@@ -80,15 +87,15 @@ export const TEAM: TeamMember[] = [
     strength: "Стабильно высокие оценки на всех этапах, лидер отдела.",
     growthPoint: "Иногда затягивает разговор — работать над лаконичностью.",
     thisWeek: [
-      { hoursAgo: 4, topic: "близорукость", durationSec: 302, overallScore: 8.7, contactScore: 8.4, iceBreakerScore: 8.0, needsScore: 8.2, objectionsScore: 7.6 },
-      { hoursAgo: 26, topic: "подбор линз", durationSec: 288, overallScore: 8.3, contactScore: 8.5, iceBreakerScore: 8.1, needsScore: 8.3, objectionsScore: 7.7 },
-      { hoursAgo: 50, topic: "сухость глаз", durationSec: 252, overallScore: 7.9, contactScore: 8.3, iceBreakerScore: 7.9, needsScore: 8.1, objectionsScore: 7.5 },
-      { hoursAgo: 74, topic: "возражение по цене", durationSec: 330, overallScore: 8.0, contactScore: 8.4, iceBreakerScore: 8.0, needsScore: 8.2, objectionsScore: 7.6 },
+      { hoursAgo: 4, topic: "близорукость", durationSec: 302, contactScore: 8.4, iceBreakerScore: 8.0, needsScore: 8.2, objectionsScore: 7.6 },
+      { hoursAgo: 26, topic: "подбор линз", durationSec: 288, contactScore: 8.5, iceBreakerScore: 8.1, needsScore: 8.3, objectionsScore: 7.7 },
+      { hoursAgo: 50, topic: "сухость глаз", durationSec: 252, contactScore: 8.3, iceBreakerScore: 7.9, needsScore: 8.1, objectionsScore: 7.5 },
+      { hoursAgo: 74, topic: "возражение по цене", durationSec: 330, contactScore: 8.4, iceBreakerScore: 8.0, needsScore: 8.2, objectionsScore: 7.6 },
     ],
     lastWeek: [
-      { dayOffset: 1, hour: 9, topic: "повторный визит", durationSec: 295, overallScore: 8.4, contactScore: 8.0, iceBreakerScore: 7.4, needsScore: 7.9, objectionsScore: 6.7 },
-      { dayOffset: 3, hour: 13, topic: "первая консультация", durationSec: 310, overallScore: 7.6, contactScore: 7.9, iceBreakerScore: 7.3, needsScore: 7.8, objectionsScore: 6.6 },
-      { dayOffset: 4, hour: 16, topic: "страх операции", durationSec: 275, overallScore: 8.1, contactScore: 8.1, iceBreakerScore: 7.5, needsScore: 8.0, objectionsScore: 6.8 },
+      { dayOffset: 1, hour: 9, topic: "повторный визит", durationSec: 295, contactScore: 8.0, iceBreakerScore: 7.4, needsScore: 7.9, objectionsScore: 6.7 },
+      { dayOffset: 3, hour: 13, topic: "первая консультация", durationSec: 310, contactScore: 7.9, iceBreakerScore: 7.3, needsScore: 7.8, objectionsScore: 6.6 },
+      { dayOffset: 4, hour: 16, topic: "страх операции", durationSec: 275, contactScore: 8.1, iceBreakerScore: 7.5, needsScore: 8.0, objectionsScore: 6.8 },
     ],
   },
   {
@@ -99,12 +106,12 @@ export const TEAM: TeamMember[] = [
     strength: "Быстро осваивается, растёт от разговора к разговору.",
     growthPoint: "Отработка возражений — тренировать спокойные ответы на «дорого».",
     thisWeek: [
-      { hoursAgo: 7, topic: "ретинопатия", durationSec: 190, overallScore: 5.2, contactScore: 6.2, iceBreakerScore: 5.4, needsScore: 6.0, objectionsScore: 4.8 },
-      { hoursAgo: 31, topic: "первый звонок", durationSec: 165, overallScore: 6.1, contactScore: 6.3, iceBreakerScore: 5.5, needsScore: 6.1, objectionsScore: 4.9 },
+      { hoursAgo: 7, topic: "ретинопатия", durationSec: 190, contactScore: 6.2, iceBreakerScore: 5.4, needsScore: 6.0, objectionsScore: 4.8 },
+      { hoursAgo: 31, topic: "первый звонок", durationSec: 165, contactScore: 6.3, iceBreakerScore: 5.5, needsScore: 6.1, objectionsScore: 4.9, notAsked: true },
     ],
     lastWeek: [
-      { dayOffset: 2, hour: 12, topic: "страх операции", durationSec: 220, overallScore: 5.5, contactScore: 5.7, iceBreakerScore: 5.7, needsScore: 5.3, objectionsScore: 5.4 },
-      { dayOffset: 3, hour: 15, topic: "диагностика", durationSec: 150, overallScore: 6.0, contactScore: 5.9, iceBreakerScore: 5.8, needsScore: 5.4, objectionsScore: 5.3 },
+      { dayOffset: 2, hour: 12, topic: "страх операции", durationSec: 220, contactScore: 5.7, iceBreakerScore: 5.7, needsScore: 5.3, objectionsScore: 5.4 },
+      { dayOffset: 3, hour: 15, topic: "диагностика", durationSec: 150, contactScore: 5.9, iceBreakerScore: 5.8, needsScore: 5.4, objectionsScore: 5.3 },
     ],
   },
 ];
@@ -197,11 +204,11 @@ async function main() {
           },
           review: {
             create: {
-              overallScore: conversation.overallScore,
               contactScore: conversation.contactScore,
               iceBreakerScore: conversation.iceBreakerScore,
               needsScore: conversation.needsScore,
               objectionsScore: conversation.objectionsScore,
+              ...deriveDealResult(conversation, conversation.notAsked),
               strength: member.strength,
               growthPoint: member.growthPoint,
               createdAt: endedAt,
