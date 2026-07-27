@@ -804,6 +804,24 @@ async def session_ws(ws: WebSocket, session_id: str):
                 # Клиент локально обнаружил речь поверх воспроизведения
                 await manager.on_client_interrupt()
 
+            elif msg_type == "client_audio":
+                # Состояние плеера в браузере. Пишем в общий лог, чтобы
+                # застревание воспроизведения было видно рядом с таймингами
+                # хода: без этого клиентский сбой неотличим от серверного.
+                logger.info(
+                    "ПЛЕЕР сессия %s: %s%s поз=%s пауза=%s ready=%s "
+                    "буфер=%s диапазонов=%s очередь=%s",
+                    session_id,
+                    msg.get("event"),
+                    f" ({msg['detail']})" if msg.get("detail") else "",
+                    msg.get("currentTime"),
+                    msg.get("paused"),
+                    msg.get("readyState"),
+                    msg.get("bufferedEnd"),
+                    msg.get("ranges"),
+                    msg.get("queued"),
+                )
+
             elif msg_type == "pause":
                 await store.set_status(session_id, STATUS_PAUSED)
                 logger.info("Сессия %s: пауза", session_id)

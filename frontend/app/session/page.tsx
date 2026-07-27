@@ -330,7 +330,11 @@ function SessionScreen() {
       setSeconds(0);
 
       // Готовим плеер для голосовых ответов ИИ
-      playerRef.current = new AudioPlayer();
+      // Диагностика плеера уходит в тот же серверный лог, что и тайминги
+      // ходов: клиентский сбой воспроизведения иначе неотличим от серверного
+      playerRef.current = new AudioPlayer((data) =>
+        sendWs({ type: "client_audio", ...data })
+      );
       playerRef.current.setOutputDevice(outputId);
 
       // Проверочный захват больше не нужен — освобождаем устройство,
