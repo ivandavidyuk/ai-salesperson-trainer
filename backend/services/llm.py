@@ -8,6 +8,7 @@
 и типа тренировки (см. build_system_prompt) и приходит параметром.
 """
 
+import asyncio
 import json
 import logging
 from typing import AsyncIterator, Optional
@@ -21,6 +22,12 @@ logger = logging.getLogger(__name__)
 # Общий HTTP-клиент на модуль: переиспользует TCP/TLS-соединения между
 # запросами (экономит ~50-100 мс на рукопожатии для каждой реплики)
 _client = httpx.AsyncClient(timeout=30)
+
+# Сколько ждать первый токен, прежде чем сходить к модели заново.
+# Норма — 300–500 мс, худший замер на проде 1.5 с; три секунды это уже
+# не «медленно», а «зависла», и менеджер к этому моменту переспрашивает.
+_FIRST_TOKEN_TIMEOUT_SEC = 3.0
+_STREAM_ATTEMPTS = 2
 
 # Заголовок блока с инструкцией этапа сделки
 _STAGE_HEADER = "ЭТАП РАЗГОВОРА:"
@@ -109,7 +116,47 @@ async def stream_reply(history: list[dict], system_prompt: str) -> AsyncIterator
     history — список сообщений вида {"role": "user"|"assistant", "text": ...}
     в хронологическом порядке.
     system_prompt — роль пациента вместе с инструкцией этапа.
+
+    Первый токен ждём с коротким потолком и при просрочке ходим заново.
+    Повод из живого разговора: провайдер отдал заголовки за секунду и замолчал
+    на пять с половиной, менеджер не дождался и переспросил — ход отменился,
+    пациент промолчал. Тридцатисекундный таймаут httpx для голоса бесполезен:
+    к тому моменту разговор уже сломан.
     """
+    for attempt in range(1, _STREAM_ATTEMPTS + 1):
+        stream = _stream_once(history, system_prompt)
+        # Потолок вешаем только на первый токен: дальше модель уже говорит,
+        # и обрывать её на середине фразы нельзя. Повтор при этом безопасен
+        # по построению — до первой дельты в синтез ничего не ушло
+        try:
+            first = await asyncio.wait_for(
+                stream.__anext__(), _FIRST_TOKEN_TIMEOUT_SEC
+            )
+        except StopAsyncIteration:
+            await stream.aclose()
+            return  # модель не сказала ничего — повторять нечего
+        except asyncio.TimeoutError:
+            await stream.aclose()  # закрываем повисшее соединение
+            if attempt == _STREAM_ATTEMPTS:
+                logger.warning(
+                    "LLM молчала дольше %.1f с в обеих попытках",
+                    _FIRST_TOKEN_TIMEOUT_SEC,
+                )
+                raise
+            logger.warning(
+                "LLM молчит дольше %.1f с — идём заново",
+                _FIRST_TOKEN_TIMEOUT_SEC,
+            )
+            continue
+
+        yield first
+        async for delta in stream:
+            yield delta
+        return
+
+
+async def _stream_once(history: list[dict], system_prompt: str) -> AsyncIterator[str]:
+    """Один заход в модель: отдаёт дельты текста по мере генерации."""
     url, payload, headers = _build_request(history, system_prompt, stream=True)
 
     total_chars = 0
