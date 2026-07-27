@@ -662,12 +662,23 @@ class TurnManager:
             # None — маркер конца стрима
             sentences: asyncio.Queue[str | None] = asyncio.Queue()
 
+            # Разбивка задержки по стадиям. Одна цифра «до первого аудио»
+            # не отвечает на вопрос «где потеряли»: LLM думает, LLM дописывает
+            # первое предложение или TTS его синтезирует — это три разные
+            # починки, и без разбивки любая диагностика гадание
+            t_prompt_ms = (time.perf_counter() - t_start) * 1000
+            first_token_ms: float | None = None
+            first_sentence_ms: float | None = None
+
             async def produce_sentences() -> str:
                 """Читает LLM-стрим, кладёт предложения в очередь, возвращает весь ответ."""
+                nonlocal first_token_ms, first_sentence_ms
                 buffer = ""
                 full_reply = ""
                 try:
                     async for delta in llm.stream_reply(history, turn_prompt):
+                        if first_token_ms is None:
+                            first_token_ms = (time.perf_counter() - t_start) * 1000
                         buffer += delta
                         full_reply += delta
                         # Вырезаем из буфера готовые предложения
@@ -675,11 +686,17 @@ class TurnManager:
                             sentence, rest = split_first_sentence(buffer)
                             if sentence is None:
                                 break
+                            if first_sentence_ms is None:
+                                first_sentence_ms = (
+                                    time.perf_counter() - t_start
+                                ) * 1000
                             buffer = rest
                             await sentences.put(sentence)
                     # Остаток без завершающей пунктуации тоже озвучиваем
                     tail = buffer.strip()
                     if tail:
+                        if first_sentence_ms is None:
+                            first_sentence_ms = (time.perf_counter() - t_start) * 1000
                         await sentences.put(tail)
                 finally:
                     await sentences.put(None)
@@ -758,9 +775,13 @@ class TurnManager:
 
             total_ms = (time.perf_counter() - t_start) * 1000
             logger.info(
-                "ТАЙМИНГ сессия %s: до первого аудио=%.0f мс, всего(после STT)=%.0f мс",
+                "ТАЙМИНГ сессия %s: промпт=%.0f токен=%s предложение=%s "
+                "аудио=%.0f | всего(после STT)=%.0f мс",
                 session_id,
-                first_audio_ms if first_audio_ms is not None else -1,
+                t_prompt_ms,
+                "—" if first_token_ms is None else f"{first_token_ms:.0f}",
+                "—" if first_sentence_ms is None else f"{first_sentence_ms:.0f}",
+                first_audio_ms or 0,
                 total_ms,
             )
 

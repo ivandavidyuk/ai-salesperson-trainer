@@ -205,6 +205,10 @@ const STALL_AFTER_MS = 2000;
 const STALL_REBUILD_AFTER_MS = 4000;
 // Меньше этого «хвоста» в буфере — обычная тишина между ответами, не застревание
 const STALL_MIN_UNPLAYED_SEC = 0.25;
+// На сколько толкать позицию, когда данные есть, а элемент их не играет.
+// Кадр MP3 при 44.1 кГц — около 26 мс, так что это меньше двух кадров:
+// достаточно, чтобы конвейер пересобрался, и незаметно на слух
+const NUDGE_SEC = 0.05;
 // Периодический снимок состояния, чтобы видеть дрейф позиции и буфера
 const HEARTBEAT_TICKS = 10;
 // Предохранители пересборки: она сама создаёт элемент с теми же обработчиками
@@ -495,8 +499,12 @@ export class AudioPlayer {
     if (this.stalledSince === 0) {
       this.stalledSince = now;
       this._report("stall", `unplayed=${Math.round(unplayed * 100) / 100}`);
+      const before = audio.currentTime;
       this._healGap();
       this._ensurePlaying();
+      // Ни то, ни другое не сдвинуло позицию — значит это застревание
+      // «данные есть, играть отказывается». Расталкиваем перемоткой.
+      if (audio.currentTime === before) this._nudgePosition();
       return;
     }
 
@@ -689,6 +697,38 @@ export class AudioPlayer {
   // ломало единственный путь восстановления: застрявший MSE-элемент стоит
   // НЕ на паузе, он ждёт данных (paused === false, readyState низкий).
   // Проверка отсекала как раз тот случай, ради которого метод и нужен.
+  /**
+   * Микро-перемотка вперёд, чтобы расшевелить застрявший MediaSource.
+   *
+   * Все застревания в живых разговорах выглядели одинаково: элемент не на
+   * паузе, readyState 2 или 4, впереди в том же диапазоне лежит до восьми
+   * секунд речи — и позиция стоит. Ни один из прежних приёмов на этот случай
+   * не рассчитан: _healGap не видит дыры и выходит, а _ensurePlaying при
+   * readyState >= 3 не делает ничего.
+   *
+   * Перемотка на несколько миллисекунд заставляет элемент пересобрать
+   * конвейер декодирования. Теряется меньше двух MP3-кадров — на слух
+   * незаметно, в отличие от полной пересборки MediaSource, которая стоит
+   * пары секунд звука.
+   */
+  private _nudgePosition(): void {
+    const audio = this.audio;
+    const sb = this.sourceBuffer;
+    if (!audio || !sb) return;
+    try {
+      if (sb.buffered.length === 0) return;
+      const end = sb.buffered.end(sb.buffered.length - 1);
+      const target = audio.currentTime + NUDGE_SEC;
+      // За концом данных играть нечего — там перемотка только навредит,
+      // этот случай уже разбирает _healGap
+      if (target >= end) return;
+      audio.currentTime = target;
+      this._report("nudge");
+    } catch {
+      // Буфер пересобирают — попробуем на следующем тике сторожа
+    }
+  }
+
   private _ensurePlaying(): void {
     const audio = this.audio;
     if (!audio) return;
