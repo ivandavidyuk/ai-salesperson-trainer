@@ -47,7 +47,10 @@ jobs:
         run: npm run lint
 
   backend:
-    name: Backend — линт и тесты
+    # Имя джоба менять нельзя: оно указано как обязательная проверка
+    # в рулсете «main protection». Переименование блокирует мерж навсегда —
+    # GitHub ждёт проверку, которой больше нет.
+    name: Backend — тесты
     runs-on: ubuntu-latest
     defaults:
       run:
