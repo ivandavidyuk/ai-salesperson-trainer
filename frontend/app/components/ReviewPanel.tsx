@@ -1,11 +1,18 @@
-// Панель «Разбор разговора» справа от расшифровки: общая оценка,
-// оценки по этапам сделки, сильное место и точка роста.
+// Панель «Разбор разговора» справа от расшифровки: исход сделки, общая
+// оценка, оценки по пяти этапам, сильное место и точка роста.
 //
-// Механизма выставления оценок ещё нет, поэтому разбор есть только
-// у демо-разговоров. У реальных на этом месте — заглушка.
+// Чего здесь сознательно нет: цитат из разговора и списка невыполненных
+// условий согласия. Иначе менеджер получил бы готовую инструкцию на
+// следующую попытку, а тренажёр превратился бы в игру на запоминание
+// (см. DEAL-OUTCOME.md).
 
 import type { TranscriptReview } from "@/lib/transcript";
-import { SCORE_WARN_BELOW, STAGE_METRICS } from "@/lib/score";
+import {
+  OUTCOME_LABELS,
+  SCORE_WARN_BELOW,
+  STAGE_METRICS,
+  type DealOutcome,
+} from "@/lib/score";
 
 interface ReviewPanelProps {
   review: TranscriptReview | null;
@@ -51,6 +58,23 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
+/** Исход разговора крупно: закрыл, не закрыл или не дошёл до предложения. */
+function OutcomeBanner({ outcome }: { outcome: DealOutcome }) {
+  const { title, hint, tone } = OUTCOME_LABELS[outcome];
+  const styles = {
+    good: "border-good-surface bg-good-surface text-good",
+    bad: "border-danger-border bg-danger-soft text-danger-strong",
+    warn: "border-warn-border bg-warn-surface text-warn",
+  }[tone];
+
+  return (
+    <div className={`mb-4 rounded-xl border px-[18px] py-4 ${styles}`}>
+      <div className="text-[15px] font-semibold">{title}</div>
+      <p className="mt-1 text-[13px] leading-snug text-ink-body">{hint}</p>
+    </div>
+  );
+}
+
 export default function ReviewPanel({ review }: ReviewPanelProps) {
   return (
     <div className="flex-1 overflow-y-auto bg-surface-card px-7 py-8">
@@ -62,14 +86,19 @@ export default function ReviewPanel({ review }: ReviewPanelProps) {
 
       {!review ? (
         <div className="rounded-xl border border-line px-[18px] py-5">
-          <div className="text-sm font-semibold text-ink">Скоро будет оценка</div>
+          <div className="text-sm font-semibold text-ink">Разбора нет</div>
           <p className="mt-1.5 text-[13px] leading-normal text-ink-muted">
-            Автоматический разбор разговоров пока в работе. Когда он появится,
-            здесь будут оценки по этапам, сильные места и точки роста.
+            Обычно он появляется через несколько секунд после разговора.
+            Если его нет и позже — значит разговор был слишком коротким
+            либо разбор не удалось составить.
           </p>
         </div>
       ) : (
         <>
+          {/* Исход — главное, что менеджер должен увидеть первым:
+              разговор либо привёл к оплате, либо нет */}
+          {review.outcome && <OutcomeBanner outcome={review.outcome} />}
+
           <div className="rounded-xl border border-line p-[18px]">
             <div className="flex items-center gap-3.5">
               <ScoreRing score={review.overallScore} />
@@ -82,6 +111,19 @@ export default function ReviewPanel({ review }: ReviewPanelProps) {
             <div className="mt-[18px] flex flex-col gap-3">
               {STAGE_METRICS.map(({ key, label }) => {
                 const value = review[key];
+                // Закрытие не оценивалось у разговоров, разобранных до
+                // появления механизма исхода — там честнее прочерк, чем ноль
+                if (value === null || value === undefined) {
+                  return (
+                    <div key={key}>
+                      <div className="mb-1.5 flex justify-between gap-3 text-[12.5px] text-ink-muted">
+                        <span>{label}</span>
+                        <span className="font-mono text-ink-subtle">—</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-line-soft" />
+                    </div>
+                  );
+                }
                 return (
                   <div key={key}>
                     <div className="mb-1.5 flex justify-between gap-3 text-[12.5px] text-ink-muted">
