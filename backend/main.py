@@ -181,6 +181,19 @@ def split_first_sentence(text: str) -> tuple[str | None, str]:
 async def lifespan(app: FastAPI):
     """Инициализация и закрытие подключений на старте/остановке сервера."""
     await store.connect()
+
+    # Оценщик ходит в модель после каждого хода и с включённым размышлением.
+    # Стоя на одной модели с ролью, он забивает её лимит: половина оценок
+    # теряется на 429, а задержка разговора вырастает в разы. Симптом
+    # неочевидный — падает не оценщик, а голос, — поэтому говорим прямо.
+    settings = get_settings()
+    if settings.scorer_model == settings.llm_model:
+        logger.warning(
+            "SCORER_MODEL совпадает с LLM_MODEL (%s): оценщик и роль делят "
+            "один лимит провайдера — ждите 429 и просадку задержки",
+            settings.llm_model,
+        )
+
     logger.info("Сервер запущен")
     yield
     await store.close()

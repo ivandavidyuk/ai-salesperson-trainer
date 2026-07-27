@@ -103,6 +103,7 @@ docker compose up -d
 | `DATABASE_URL`, `REDIS_URL` | те же + `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL` |
 | `JWT_SECRET`, `JWT_EXPIRES_IN` | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_TTS_MODEL`, `ELEVENLABS_STT_MODEL` |
 | `FASTAPI_WS_URL` (`ws://localhost:8000`) | `JWT_SECRET` (тот же), `BARGE_IN_ENABLED` |
+| | `SCORER_MODEL` — **обязательно другая модель, чем `LLM_MODEL`** (почему — в [DEAL-OUTCOME.md](DEAL-OUTCOME.md)) |
 
 > На бесплатном тарифе ElevenLabs через API доступны только premade-голоса.
 
