@@ -179,6 +179,38 @@ function mseSupported(): boolean {
   );
 }
 
+/**
+ * Снимок состояния плеера для серверного лога.
+ *
+ * Появился после разбора сессии 37f584df: ИИ четыре минуты «молчал», хотя
+ * сервер исправно слал аудио. Понять это по серверным логам было нельзя —
+ * плеер не сообщал о себе ничего. Теперь сообщает.
+ */
+export interface PlayerDiagnostic {
+  event: string;
+  detail?: string;
+  currentTime?: number;
+  paused?: boolean;
+  readyState?: number;
+  bufferedEnd?: number;
+  ranges?: number;
+  queued?: number;
+}
+
+// Как часто сторож проверяет, идёт ли воспроизведение на самом деле
+const WATCHDOG_TICK_MS = 1000;
+// Позиция не двигается, а играть есть что — считаем это застреванием
+const STALL_AFTER_MS = 2000;
+// Мягкая починка не помогла — пересобираем MediaSource целиком
+const STALL_REBUILD_AFTER_MS = 4000;
+// Меньше этого «хвоста» в буфере — обычная тишина между ответами, не застревание
+const STALL_MIN_UNPLAYED_SEC = 0.25;
+// Периодический снимок состояния, чтобы видеть дрейф позиции и буфера
+const HEARTBEAT_TICKS = 10;
+// Предохранители пересборки: она сама создаёт элемент с теми же обработчиками
+const REBUILD_COOLDOWN_MS = 5000;
+const MAX_REBUILDS = 8;
+
 export class AudioPlayer {
   // --- Основной путь: MediaSource (звук с первого чанка) ---
   private useMse: boolean;
@@ -189,9 +221,6 @@ export class AudioPlayer {
   // Чанки, ожидающие appendBuffer (он асинхронный — аппендим по одному)
   private appendQueue: Uint8Array[] = [];
   private destroyed = false;
-  // При локальном barge-in отбрасываем чанки отменяемого ответа до серверного
-  // подтверждения. Таймаут не даст плееру зависнуть при потере соединения.
-  private ignoreIncomingUntil = 0;
   // appendBuffer мог уже выполняться в момент flush — после updateend нужно
   // перескочить за добавленный хвост отменённого ответа.
   private seekToBufferEndAfterUpdate = false;
@@ -211,11 +240,53 @@ export class AudioPlayer {
   /** Выбранный динамик. Запоминаем: в фолбэке элемент новый на каждое предложение. */
   private outputDeviceId: string | null = null;
 
-  constructor() {
+  // --- Сторож застревания ---
+  private onDiagnostic?: (data: PlayerDiagnostic) => void;
+  private watchdog: ReturnType<typeof setInterval> | null = null;
+  /** Когда сторож впервые увидел, что позиция стоит, а играть есть что */
+  private stalledSince = 0;
+  private ticks = 0;
+  private rebuilds = 0;
+  private lastRebuildAt = 0;
+
+  constructor(onDiagnostic?: (data: PlayerDiagnostic) => void) {
+    this.onDiagnostic = onDiagnostic;
     this.useMse = mseSupported();
     if (this.useMse) {
       this._initMse();
+      this.watchdog = setInterval(() => this._watch(), WATCHDOG_TICK_MS);
     }
+    this._report("init", this.useMse ? "mse" : "blob-fallback");
+  }
+
+  /** Снимок состояния — уходит в серверный лог рядом с таймингами хода. */
+  private _report(event: string, detail?: string): void {
+    if (!this.onDiagnostic) return;
+    const audio = this.audio;
+    const sb = this.sourceBuffer;
+    const round = (n: number) => Math.round(n * 100) / 100;
+
+    let ranges = 0;
+    let bufferedEnd: number | undefined;
+    try {
+      if (sb && sb.buffered.length > 0) {
+        ranges = sb.buffered.length;
+        bufferedEnd = round(sb.buffered.end(sb.buffered.length - 1));
+      }
+    } catch {
+      // буфер могли пересобрать между проверкой и чтением
+    }
+
+    this.onDiagnostic({
+      event,
+      detail,
+      currentTime: audio ? round(audio.currentTime) : undefined,
+      paused: audio?.paused,
+      readyState: audio?.readyState,
+      bufferedEnd,
+      ranges,
+      queued: this.appendQueue.length,
+    });
   }
 
   /**
@@ -240,7 +311,6 @@ export class AudioPlayer {
 
   // Добавляет очередной аудио-чанк текущего ответа
   pushChunk(base64: string): void {
-    if (performance.now() < this.ignoreIncomingUntil) return;
     const bytes = base64ToBytes(base64);
     if (this.useMse) {
       this.appendQueue.push(bytes);
@@ -266,16 +336,9 @@ export class AudioPlayer {
     }
   }
 
-  /** Мгновенно глушит ответ до подтверждения отмены сервером. */
-  interrupt(): void {
-    this.ignoreIncomingUntil = performance.now() + 1500;
-    this._flushPlayback();
-  }
-
   /** Звучит ли сейчас ответ ИИ — для индикатора на экране звонка. */
   isPlaying(): boolean {
     const now = performance.now();
-    if (now < this.ignoreIncomingUntil) return false;
     if (this._isActivelyPlaying()) {
       this.lastActivePlaybackAt = now;
       return true;
@@ -310,10 +373,10 @@ export class AudioPlayer {
     }
   }
 
-  /** Сервер подтвердил границу отменённого ответа — можно принимать следующий. */
+  /** Сервер оборвал ответ (barge_in) — недоигранный хвост уже не нужен. */
   confirmInterrupt(): void {
+    this._report("barge-in");
     this._flushPlayback();
-    this.ignoreIncomingUntil = 0;
   }
 
   // Сбрасывает недоигранный буфер, оставляя плеер готовым к следующему ответу.
@@ -356,7 +419,10 @@ export class AudioPlayer {
   // Останавливает воспроизведение и освобождает ресурсы (терминально)
   reset(): void {
     this.destroyed = true;
-    this.ignoreIncomingUntil = 0;
+    if (this.watchdog) {
+      clearInterval(this.watchdog);
+      this.watchdog = null;
+    }
     this.seekToBufferEndAfterUpdate = false;
     this.lastActivePlaybackAt = 0;
     this.lastPlaybackTime = -1;
@@ -385,15 +451,137 @@ export class AudioPlayer {
     }
   }
 
+  // --- Сторож застревания ---
+
+  /**
+   * Раз в секунду проверяет, идёт ли звук на самом деле.
+   *
+   * Признак беды: в буфере есть неигранный хвост (или ждут чанки), а позиция
+   * не двигается. Сначала пробуем мягко — вернуть позицию к данным и толкнуть
+   * play(). Если через несколько секунд не помогло, пересобираем MediaSource:
+   * пусть лучше пропадёт пара секунд звука, чем ИИ замолчит на минуты.
+   */
+  private _watch(): void {
+    if (this.destroyed || !this.useMse) return;
+    const audio = this.audio;
+    const sb = this.sourceBuffer;
+    if (!audio || !sb) return;
+
+    this.ticks += 1;
+    if (this.ticks % HEARTBEAT_TICKS === 0) this._report("heartbeat");
+
+    let unplayed = 0;
+    try {
+      if (sb.buffered.length > 0) {
+        unplayed = sb.buffered.end(sb.buffered.length - 1) - audio.currentTime;
+      }
+    } catch {
+      return;
+    }
+
+    // Играть нечего — обычная тишина между ответами, не застревание
+    if (unplayed <= STALL_MIN_UNPLAYED_SEC && this.appendQueue.length === 0) {
+      this.stalledSince = 0;
+      return;
+    }
+
+    const now = performance.now();
+    // Позиция двигалась недавно — звук идёт
+    if (now - this.lastActivePlaybackAt < STALL_AFTER_MS) {
+      this.stalledSince = 0;
+      return;
+    }
+
+    if (this.stalledSince === 0) {
+      this.stalledSince = now;
+      this._report("stall", `unplayed=${Math.round(unplayed * 100) / 100}`);
+      this._healGap();
+      this._ensurePlaying();
+      return;
+    }
+
+    if (now - this.stalledSince >= STALL_REBUILD_AFTER_MS) {
+      this._report("rebuild");
+      this._rebuildMse();
+    }
+  }
+
+  /**
+   * Полностью пересобирает MediaSource, сохраняя неотданные чанки.
+   *
+   * Пересборка создаёт новый элемент с теми же обработчиками, поэтому
+   * устойчивая ошибка декодирования закрутила бы бесконечный цикл. Отсюда
+   * пауза между попытками и общий предел на разговор: если не помогает,
+   * лучше остаться сломанным предсказуемо и увидеть это в логе.
+   */
+  private _rebuildMse(): void {
+    if (this.destroyed) return;
+
+    const now = performance.now();
+    if (now - this.lastRebuildAt < REBUILD_COOLDOWN_MS) return;
+    if (this.rebuilds >= MAX_REBUILDS) {
+      if (this.rebuilds === MAX_REBUILDS) {
+        this.rebuilds += 1; // сообщаем один раз, дальше молчим
+        this._report("rebuild-giving-up");
+      }
+      return;
+    }
+    this.lastRebuildAt = now;
+    this.rebuilds += 1;
+
+    const pending = this.appendQueue.slice();
+
+    if (this.audio) {
+      this.audio.pause();
+      this.audio.removeAttribute("src");
+      this.audio.load();
+      this.audio = null;
+    }
+    if (this.objectUrl) {
+      URL.revokeObjectURL(this.objectUrl);
+      this.objectUrl = null;
+    }
+    this.sourceBuffer = null;
+    this.mediaSource = null;
+    this.seekToBufferEndAfterUpdate = false;
+    this.lastPlaybackTime = -1;
+    // Даём новому элементу время раскрутиться, не считая это застреванием
+    this.lastActivePlaybackAt = performance.now();
+    this.stalledSince = 0;
+
+    this._initMse();
+    this.appendQueue = pending;
+    this._appendNext();
+  }
+
   // --- Внутренности MSE-пути ---
 
   private _initMse(): void {
     this.mediaSource = new MediaSource();
     this.objectUrl = URL.createObjectURL(this.mediaSource);
-    this.audio = new Audio(this.objectUrl);
-    void this._applySink(this.audio);
+    const audio = new Audio(this.objectUrl);
+    this.audio = audio;
+    void this._applySink(audio);
     // Единственный надёжный признак речи — что позиция реально растёт
-    this.audio.addEventListener("timeupdate", () => this._notePlaybackProgress());
+    audio.addEventListener("timeupdate", () => this._notePlaybackProgress());
+
+    // Раньше элемент молчал обо всём: ошибка декодирования, ожидание данных
+    // и остановка проходили незамеченными, а отказ play() глотался пустым
+    // catch. Именно поэтому клиентский сбой было не отличить от серверного.
+    audio.addEventListener("error", () => {
+      const code = audio.error?.code;
+      const names: Record<number, string> = {
+        1: "ABORTED",
+        2: "NETWORK",
+        3: "DECODE",
+        4: "SRC_NOT_SUPPORTED",
+      };
+      this._report("audio-error", code ? (names[code] ?? String(code)) : "unknown");
+      // Элемент с ошибкой мёртв навсегда — только пересборка
+      this._rebuildMse();
+    });
+    audio.addEventListener("stalled", () => this._report("stalled"));
+    audio.addEventListener("ended", () => this._report("ended"));
 
     this.mediaSource.addEventListener("sourceopen", () => {
       if (this.destroyed || !this.mediaSource) return;
@@ -442,8 +630,16 @@ export class AudioPlayer {
   private _healGap(): void {
     const sb = this.sourceBuffer;
     const audio = this.audio;
-    if (!sb || !audio || sb.buffered.length === 0) return;
-    for (let i = 0; i < sb.buffered.length; i++) {
+    if (!sb || !audio) return;
+    let count = 0;
+    try {
+      count = sb.buffered.length;
+    } catch {
+      return; // буфер пересобирают — вернёмся на следующем updateend
+    }
+    if (count === 0) return;
+
+    for (let i = 0; i < count; i++) {
       const start = sb.buffered.start(i);
       const end = sb.buffered.end(i);
       // Позиция внутри диапазона, где ещё есть что играть — всё в порядке
@@ -455,6 +651,18 @@ export class AudioPlayer {
         audio.currentTime = start;
         return;
       }
+    }
+
+    // Позиция ЗА концом всех данных. Раньше этот случай не обрабатывался, и
+    // плеер вставал намертво: новые чанки в режиме sequence ложатся в конец
+    // последнего диапазона, то есть позади позиции, а сама позиция назад
+    // не возвращается — играть оказывается нечего. Так ответы ИИ копились
+    // в буфере минутами, пока очередной append случайно не догонял позицию
+    // и всё не проигрывалось залпом.
+    const lastEnd = sb.buffered.end(count - 1);
+    if (audio.currentTime > lastEnd) {
+      audio.currentTime = lastEnd;
+      this._report("healed-past-end");
     }
   }
 
@@ -475,12 +683,25 @@ export class AudioPlayer {
     }
   }
 
-  // Запускает воспроизведение, если оно ещё не идёт
+  // Запускает воспроизведение, если оно ещё не идёт.
+  //
+  // Условия `!audio.paused` здесь раньше было достаточно, чтобы выйти, — и это
+  // ломало единственный путь восстановления: застрявший MSE-элемент стоит
+  // НЕ на паузе, он ждёт данных (paused === false, readyState низкий).
+  // Проверка отсекала как раз тот случай, ради которого метод и нужен.
   private _ensurePlaying(): void {
     const audio = this.audio;
-    if (!audio || !audio.paused) return;
-    audio.play().catch(() => {
-      // автоплей заблокирован — звук пойдёт после жеста пользователя
+    if (!audio) return;
+    // HAVE_FUTURE_DATA и выше при снятой паузе — звук идёт, дёргать незачем
+    if (!audio.paused && audio.readyState >= 3) return;
+
+    const started = audio.play();
+    if (!started || typeof started.catch !== "function") return;
+    started.catch((error: unknown) => {
+      const name = (error as { name?: string } | null)?.name ?? "unknown";
+      // AbortError — штатное следствие pause()/seek сразу после play()
+      if (name === "AbortError") return;
+      this._report("play-rejected", name);
     });
   }
 
