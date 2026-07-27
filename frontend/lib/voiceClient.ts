@@ -209,6 +209,14 @@ const STALL_MIN_UNPLAYED_SEC = 0.25;
 // Кадр MP3 при 44.1 кГц — около 26 мс, так что это меньше двух кадров:
 // достаточно, чтобы конвейер пересобрался, и незаметно на слух
 const NUDGE_SEC = 0.05;
+// Позиция не двигалась дольше этого, а звук в буфере есть — элемент
+// простаивает. Заметно короче паузы сторожа: смысл раннего толчка в том,
+// чтобы не ждать её вовсе. Больше интервала между timeupdate (~250 мс
+// в Chromium), иначе будем толкать посреди нормального воспроизведения
+const IDLE_BEFORE_KICK_MS = 500;
+// Звук приходит пачкой чанков, а позиции нужно мгновение, чтобы поехать —
+// без паузы мы толкали бы на каждый чанк подряд
+const KICK_COOLDOWN_MS = 300;
 // Периодический снимок состояния, чтобы видеть дрейф позиции и буфера
 const HEARTBEAT_TICKS = 10;
 // Предохранители пересборки: она сама создаёт элемент с теми же обработчиками
@@ -232,6 +240,8 @@ export class AudioPlayer {
   // предложениями ответа бывает короткая пауза (следующее ещё синтезируется) —
   // без этой отметки индикатор «Говорит клиент» мигал бы на каждом стыке.
   private lastActivePlaybackAt = 0;
+  // Когда в последний раз расталкивали воспроизведение после дописывания
+  private lastKickAt = 0;
   // Позиция на прошлом timeupdate — чтобы отличить продвижение от застревания
   private lastPlaybackTime = -1;
 
@@ -504,7 +514,7 @@ export class AudioPlayer {
       this._ensurePlaying();
       // Ни то, ни другое не сдвинуло позицию — значит это застревание
       // «данные есть, играть отказывается». Расталкиваем перемоткой.
-      if (audio.currentTime === before) this._nudgePosition();
+      if (audio.currentTime === before) this._nudgePosition("stall");
       return;
     }
 
@@ -612,6 +622,9 @@ export class AudioPlayer {
         this._healGap();
         this._cleanupPlayed();
         this._appendNext();
+        // Данные легли в буфер — самое время проверить, поехало ли
+        // воспроизведение, не дожидаясь сторожа
+        this._kickIfIdle();
       });
       this.sourceBuffer = sb;
       this._appendNext();
@@ -711,7 +724,7 @@ export class AudioPlayer {
    * незаметно, в отличие от полной пересборки MediaSource, которая стоит
    * пары секунд звука.
    */
-  private _nudgePosition(): void {
+  private _nudgePosition(reason: string): void {
     const audio = this.audio;
     const sb = this.sourceBuffer;
     if (!audio || !sb) return;
@@ -723,10 +736,49 @@ export class AudioPlayer {
       // этот случай уже разбирает _healGap
       if (target >= end) return;
       audio.currentTime = target;
-      this._report("nudge");
+      this._report("nudge", reason);
     } catch {
       // Буфер пересобирают — попробуем на следующем тике сторожа
     }
+  }
+
+  /**
+   * Проверка сразу после дописывания звука: поехало ли воспроизведение.
+   *
+   * Сторож ловит застревание честно, но по определению через две секунды
+   * после того, как позиция встала. В живом разговоре все семь застреваний
+   * случились в начале новой реплики: позиция стоит на конце прошлого
+   * ответа, приходит секунда нового звука, и Chromium сам его не начинает.
+   * Ждать сторожа там незачем — данные уже в буфере, и всё видно сразу.
+   *
+   * Те же три приёма в том же порядке, что и у сторожа: они себя показали,
+   * меняется только момент.
+   */
+  private _kickIfIdle(): void {
+    if (this.destroyed || !this.useMse) return;
+    const audio = this.audio;
+    const sb = this.sourceBuffer;
+    if (!audio || !sb) return;
+
+    const now = performance.now();
+    if (now - this.lastKickAt < KICK_COOLDOWN_MS) return;
+    // Позиция двигалась только что — звук идёт, лезть незачем
+    if (now - this.lastActivePlaybackAt < IDLE_BEFORE_KICK_MS) return;
+
+    let unplayed = 0;
+    try {
+      if (sb.buffered.length === 0) return;
+      unplayed = sb.buffered.end(sb.buffered.length - 1) - audio.currentTime;
+    } catch {
+      return; // буфер пересобирают
+    }
+    if (unplayed <= STALL_MIN_UNPLAYED_SEC) return;
+
+    this.lastKickAt = now;
+    const before = audio.currentTime;
+    this._healGap();
+    this._ensurePlaying();
+    if (audio.currentTime === before) this._nudgePosition("append");
   }
 
   private _ensurePlaying(): void {
