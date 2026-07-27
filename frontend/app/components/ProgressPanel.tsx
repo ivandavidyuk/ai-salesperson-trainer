@@ -108,7 +108,7 @@ export default function ProgressPanel({
                     key={metric.key}
                     className="min-w-0 flex-1 text-balance text-center text-[12.5px] font-medium leading-[1.35] tracking-[-.005em] text-ink-body"
                   >
-                    {metric.label}
+                    {metric.short}
                   </div>
                 ))}
               </div>

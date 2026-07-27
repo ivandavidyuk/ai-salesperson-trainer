@@ -1,6 +1,8 @@
 // Типы ответа GET /api/sessions/[id]/transcript — общие для страницы
 // расшифровки и её компонентов.
 
+import type { DealOutcome } from "@/lib/score";
+
 export interface TranscriptMessage {
   role: "user" | "assistant";
   text: string;
@@ -13,8 +15,13 @@ export interface TranscriptReview {
   iceBreakerScore: number;
   needsScore: number;
   objectionsScore: number;
+  /** null у разговоров, разобранных до появления механизма исхода */
+  closingScore: number | null;
+  outcome: DealOutcome | null;
   strength: string;
   growthPoint: string;
+  // judgeNotes сюда намеренно не попадает: разбор оценщика по условиям —
+  // это готовый чек-лист для следующей попытки, менеджеру его не отдаём
 }
 
 export interface TranscriptData {

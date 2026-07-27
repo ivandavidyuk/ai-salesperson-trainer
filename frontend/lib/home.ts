@@ -44,6 +44,8 @@ export interface HomeConversation {
 export interface ProgressMetric {
   key: string;
   label: string;
+  /** Короткая подпись для узких столбцов на главной */
+  short: string;
   /** Среднее за текущую неделю; null — данных нет */
   value: number | null;
   /** Разница с прошлой неделей; null — не с чем сравнивать */
@@ -127,6 +129,10 @@ export async function averageScores(userId: string, from: Date, to: Date) {
       iceBreakerScore: true,
       needsScore: true,
       objectionsScore: true,
+      // Пятый этап. У разговоров, разобранных до появления механизма исхода,
+      // он null — Prisma такие строки в среднем не учитывает, и это верно:
+      // «не измеряли» не должно тянуть среднюю вниз
+      closingScore: true,
       // Общая оценка нужна статистике отдела: по ней считается прирост
       // за неделю. «Прогресс» на главной это поле просто не читает.
       overallScore: true,
@@ -185,12 +191,13 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
     pickDaily(DailyContentKind.motivation, day),
   ]);
 
-  const metrics: ProgressMetric[] = PROGRESS_METRICS.map(({ key, label }) => {
+  const metrics: ProgressMetric[] = PROGRESS_METRICS.map(({ key, label, short }) => {
     const current = round1(currentWeekAvg[key] ?? null);
     const previous = round1(prevWeekAvg[key] ?? null);
     return {
       key,
       label,
+      short,
       value: current,
       // Дельту показываем только когда есть обе недели
       delta: current !== null && previous !== null ? round1(current - previous) : null,

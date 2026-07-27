@@ -36,8 +36,12 @@ export async function GET(
             iceBreakerScore: true,
             needsScore: true,
             objectionsScore: true,
+            closingScore: true,
+            outcome: true,
             strength: true,
             growthPoint: true,
+            // judgeNotes не отдаём: это разбор по обязательным условиям,
+            // то есть готовый ответ для следующей попытки
           },
         },
         messages: {
