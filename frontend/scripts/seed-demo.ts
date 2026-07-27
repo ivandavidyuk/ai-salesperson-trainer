@@ -12,9 +12,10 @@
 // Пароль не зашит в репозиторий: берётся из DEMO_PASSWORD либо генерируется
 // случайным и печатается один раз при создании.
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type DealOutcome } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
+import { deriveDealResult } from "./deal-result";
 
 const prisma = new PrismaClient();
 
@@ -121,27 +122,36 @@ interface DemoConversation {
   topic: string;
   durationSec: number;
   isFavorite: boolean;
+  /** Выводится из этапов, руками не задаётся — см. deal-result.ts */
   overallScore: number;
   contactScore: number;
   iceBreakerScore: number;
   needsScore: number;
   objectionsScore: number;
+  closingScore: number;
+  outcome: DealOutcome;
   strength: string;
   growthPoint: string;
 }
-
 // Разговоры этой недели: контакт и «топка льда» выше прошлой недели,
 // выявление потребности и возражения — ниже. Так в блоке «Прогресс»
 // видно и рост, и падение.
+//
+// Задаются только четыре этапа: закрытие, исход и общая оценка выводятся
+// из них (deal-result.ts). Иначе в демо легко нарисовать разговор, которого
+// система выдать не может, — например, закрытую сделку при средней 5.5.
 const THIS_WEEK = [
   {
     hoursAgo: 3,
     topic: "катаракта",
     durationSec: 278,
     isFavorite: true,
-    overallScore: 10,
-    contactScore: 8.1,
-    iceBreakerScore: 7.2,
+    // Единственный разговор, где порог взят и сделка закрылась. Контакт
+    // и «лёд» подняты ровно настолько, чтобы средняя перешла за 7:
+    // потребность и возражения не трогаем, иначе в «Прогрессе» пропадёт
+    // задуманное падение по этим этапам
+    contactScore: 9.0,
+    iceBreakerScore: 8.0,
     needsScore: 6.0,
     objectionsScore: 5.2,
     strength: "Тёплый первый контакт — клиент быстро проникся доверием.",
@@ -152,7 +162,6 @@ const THIS_WEEK = [
     topic: "очки для чтения",
     durationSec: 191,
     isFavorite: false,
-    overallScore: 7.2,
     contactScore: 7.6,
     iceBreakerScore: 6.8,
     needsScore: 6.4,
@@ -165,11 +174,13 @@ const THIS_WEEK = [
     topic: "первая консультация",
     durationSec: 320,
     isFavorite: false,
-    overallScore: 6.4,
     contactScore: 7.7,
     iceBreakerScore: 6.7,
     needsScore: 6.2,
     objectionsScore: 5.6,
+    // «Клиент ушёл без записи» — это и есть not_asked: предложения
+    // об оплате в разговоре не прозвучало вовсе
+    notAsked: true,
     strength: "Хорошо объяснили, что будет происходить на приёме.",
     growthPoint: "Не проговорили следующий шаг — клиент ушёл без записи.",
   },
@@ -178,7 +189,6 @@ const THIS_WEEK = [
     topic: "подбор линз",
     durationSec: 245,
     isFavorite: false,
-    overallScore: 6.9,
     contactScore: 7.8,
     iceBreakerScore: 6.9,
     needsScore: 6.2,
@@ -196,7 +206,6 @@ const LAST_WEEK = [
     topic: "возражение по цене",
     durationSec: 174,
     isFavorite: false,
-    overallScore: 5.8,
     contactScore: 7.1,
     iceBreakerScore: 5.6,
     needsScore: 6.7,
@@ -210,7 +219,6 @@ const LAST_WEEK = [
     topic: "повторный визит",
     durationSec: 290,
     isFavorite: true,
-    overallScore: 8.3,
     contactScore: 7.4,
     iceBreakerScore: 5.9,
     needsScore: 6.5,
@@ -224,7 +232,6 @@ const LAST_WEEK = [
     topic: "страх операции",
     durationSec: 335,
     isFavorite: false,
-    overallScore: 5.2,
     contactScore: 7.0,
     iceBreakerScore: 5.5,
     needsScore: 6.6,
@@ -238,7 +245,6 @@ const LAST_WEEK = [
     topic: "сравнение брендов",
     durationSec: 220,
     isFavorite: false,
-    overallScore: 7.6,
     contactScore: 7.3,
     iceBreakerScore: 5.8,
     needsScore: 6.6,
@@ -273,9 +279,11 @@ function buildConversations(): DemoConversation[] {
   for (const item of THIS_WEEK) {
     const startedAt = new Date(now.getTime() - item.hoursAgo * 3600_000);
     if (startedAt < weekStart) continue;
-    const { hoursAgo, ...rest } = item;
+    const { hoursAgo, notAsked, ...rest } = item as typeof item & {
+      notAsked?: boolean;
+    };
     void hoursAgo;
-    result.push({ ...rest, startedAt });
+    result.push({ ...rest, startedAt, ...deriveDealResult(rest, notAsked) });
   }
 
   // Прошлая неделя: привязываемся к её понедельнику, попадание гарантировано
@@ -286,7 +294,7 @@ function buildConversations(): DemoConversation[] {
     const { dayOffset, hour, ...rest } = item;
     void dayOffset;
     void hour;
-    result.push({ ...rest, startedAt });
+    result.push({ ...rest, startedAt, ...deriveDealResult(rest) });
   }
 
   return result;
@@ -358,6 +366,8 @@ async function main() {
             iceBreakerScore: item.iceBreakerScore,
             needsScore: item.needsScore,
             objectionsScore: item.objectionsScore,
+            closingScore: item.closingScore,
+            outcome: item.outcome,
             strength: item.strength,
             growthPoint: item.growthPoint,
             createdAt: endedAt,
