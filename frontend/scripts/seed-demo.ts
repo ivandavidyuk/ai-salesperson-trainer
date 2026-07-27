@@ -9,13 +9,13 @@
 // Безопасность: скрипт трогает ТОЛЬКО демо-аккаунт (по email ниже) и его
 // разговоры — данные остальных пользователей не затрагиваются. Повторный
 // запуск пересоздаёт историю заново, поэтому его можно гонять сколько угодно.
-// Пароль не зашит в репозиторий: берётся из DEMO_PASSWORD либо генерируется
-// случайным и печатается один раз при создании.
+// Пароль не зашит в репозиторий: генерируется случайным и печатается один
+// раз при создании аккаунта. У существующего аккаунта пароль не трогается —
+// иначе перезалив демо-данных ломал бы вход. Сменить намеренно: DEMO_PASSWORD.
 
 import { PrismaClient, type DealOutcome } from "@prisma/client";
-import bcrypt from "bcryptjs";
-import { randomBytes } from "crypto";
 import { deriveDealResult } from "./deal-result";
+import { seedPassword } from "./seed-password";
 
 const prisma = new PrismaClient();
 
@@ -24,8 +24,7 @@ const DEMO_FIRST_NAME = "Ирина";
 const DEMO_LAST_NAME = "Петрова";
 
 // Руководитель: автор заданий и владелец режима РОП.
-// Пароль берётся из HEAD_PASSWORD либо генерируется и печатается один раз —
-// так же, как у демо-аккаунта.
+// С паролем — так же, как у демо-аккаунта, только переменная HEAD_PASSWORD.
 const HEAD_EMAIL = "head@podhod.tech";
 const HEAD_FIRST_NAME = "Сергей";
 const HEAD_LAST_NAME = "Волков";
@@ -317,15 +316,18 @@ async function main() {
 
   // 2. Демо-пользователь
   const existing = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
-  const password = process.env.DEMO_PASSWORD || randomBytes(9).toString("base64url");
-  const passwordHash = await bcrypt.hash(password, 10);
+  const password = await seedPassword("DEMO_PASSWORD");
 
   const user = await prisma.user.upsert({
     where: { email: DEMO_EMAIL },
-    update: { firstName: DEMO_FIRST_NAME, lastName: DEMO_LAST_NAME, passwordHash },
+    update: {
+      firstName: DEMO_FIRST_NAME,
+      lastName: DEMO_LAST_NAME,
+      ...password.update,
+    },
     create: {
       email: DEMO_EMAIL,
-      passwordHash,
+      passwordHash: password.hash,
       firstName: DEMO_FIRST_NAME,
       lastName: DEMO_LAST_NAME,
     },
@@ -380,19 +382,19 @@ async function main() {
   console.log(`Создано разговоров: ${conversations.length}`);
 
   // 4. Задания от руководителя
-  const headPassword =
-    process.env.HEAD_PASSWORD || randomBytes(9).toString("base64url");
+  const existingHead = await prisma.user.findUnique({ where: { email: HEAD_EMAIL } });
+  const headPassword = await seedPassword("HEAD_PASSWORD");
   const head = await prisma.user.upsert({
     where: { email: HEAD_EMAIL },
     update: {
       firstName: HEAD_FIRST_NAME,
       lastName: HEAD_LAST_NAME,
       role: "head",
-      passwordHash: await bcrypt.hash(headPassword, 10),
+      ...headPassword.update,
     },
     create: {
       email: HEAD_EMAIL,
-      passwordHash: await bcrypt.hash(headPassword, 10),
+      passwordHash: headPassword.hash,
       firstName: HEAD_FIRST_NAME,
       lastName: HEAD_LAST_NAME,
       role: "head",
@@ -485,24 +487,18 @@ async function main() {
 
   console.log("\nВход в демо-аккаунт (менеджер):");
   console.log(`  email:  ${DEMO_EMAIL}`);
-  if (process.env.DEMO_PASSWORD) {
-    console.log("  пароль: (из переменной окружения DEMO_PASSWORD)");
-  } else {
-    console.log(`  пароль: ${password}`);
-  }
+  console.log(`  пароль: ${password.report(Boolean(existing))}`);
 
   console.log("\nВход под руководителем (режим РОП):");
   console.log(`  email:  ${HEAD_EMAIL}`);
-  if (process.env.HEAD_PASSWORD) {
-    console.log("  пароль: (из переменной окружения HEAD_PASSWORD)");
-  } else {
-    console.log(`  пароль: ${headPassword}`);
-  }
+  console.log(`  пароль: ${headPassword.report(Boolean(existingHead))}`);
 
-  if (!process.env.DEMO_PASSWORD || !process.env.HEAD_PASSWORD) {
-    console.log("\nСлучайные пароли показаны один раз — сохраните их.");
-    console.log("Чтобы задать свои: DEMO_PASSWORD=... HEAD_PASSWORD=... npm run seed:demo");
+  if (!existing || !existingHead) {
+    console.log("\nСгенерированный пароль показан один раз — сохраните его.");
   }
+  console.log(
+    "\nСменить пароль: DEMO_PASSWORD=... HEAD_PASSWORD=... npm run seed:demo"
+  );
 }
 
 main()
