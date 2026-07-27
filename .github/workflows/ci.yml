@@ -47,7 +47,7 @@ jobs:
         run: npm run lint
 
   backend:
-    name: Backend — тесты
+    name: Backend — линт и тесты
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -68,6 +68,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Линт
+        # Ловит то, что не ловят тесты: main.py они не импортируют, и
+        # необъявленное имя внутри WebSocket-цикла доезжало до прода,
+        # обрывая разговор на первой же реплике.
+        run: ruff check .
 
       - name: Тесты
         # Все настройки в core/config.py имеют значения по умолчанию,

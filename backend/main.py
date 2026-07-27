@@ -808,19 +808,25 @@ async def session_ws(ws: WebSocket, session_id: str):
                 # Состояние плеера в браузере. Пишем в общий лог, чтобы
                 # застревание воспроизведения было видно рядом с таймингами
                 # хода: без этого клиентский сбой неотличим от серверного.
-                logger.info(
-                    "ПЛЕЕР сессия %s: %s%s поз=%s пауза=%s ready=%s "
-                    "буфер=%s диапазонов=%s очередь=%s",
-                    session_id,
-                    msg.get("event"),
-                    f" ({msg['detail']})" if msg.get("detail") else "",
-                    msg.get("currentTime"),
-                    msg.get("paused"),
-                    msg.get("readyState"),
-                    msg.get("bufferedEnd"),
-                    msg.get("ranges"),
-                    msg.get("queued"),
-                )
+                # Диагностика не имеет права ронять разговор: любая ошибка
+                # здесь — это потерянная строка лога, а не оборванная сессия
+                try:
+                    detail = message.get("detail")
+                    logger.info(
+                        "ПЛЕЕР сессия %s: %s%s поз=%s пауза=%s ready=%s "
+                        "буфер=%s диапазонов=%s очередь=%s",
+                        session_id,
+                        message.get("event"),
+                        f" ({detail})" if detail else "",
+                        message.get("currentTime"),
+                        message.get("paused"),
+                        message.get("readyState"),
+                        message.get("bufferedEnd"),
+                        message.get("ranges"),
+                        message.get("queued"),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Не удалось записать состояние плеера: %s", exc)
 
             elif msg_type == "pause":
                 await store.set_status(session_id, STATUS_PAUSED)
