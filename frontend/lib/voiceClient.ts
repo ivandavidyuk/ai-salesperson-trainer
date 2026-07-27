@@ -509,12 +509,7 @@ export class AudioPlayer {
     if (this.stalledSince === 0) {
       this.stalledSince = now;
       this._report("stall", `unplayed=${Math.round(unplayed * 100) / 100}`);
-      const before = audio.currentTime;
-      this._healGap();
-      this._ensurePlaying();
-      // Ни то, ни другое не сдвинуло позицию — значит это застревание
-      // «данные есть, играть отказывается». Расталкиваем перемоткой.
-      if (audio.currentTime === before) this._nudgePosition("stall");
+      this._resumePlayback("stall");
       return;
     }
 
@@ -751,8 +746,8 @@ export class AudioPlayer {
    * ответа, приходит секунда нового звука, и Chromium сам его не начинает.
    * Ждать сторожа там незачем — данные уже в буфере, и всё видно сразу.
    *
-   * Те же три приёма в том же порядке, что и у сторожа: они себя показали,
-   * меняется только момент.
+   * Лечение общее со сторожем (_resumePlayback): причина одна, отличается
+   * только момент обнаружения.
    */
   private _kickIfIdle(): void {
     if (this.destroyed || !this.useMse) return;
@@ -775,10 +770,36 @@ export class AudioPlayer {
     if (unplayed <= STALL_MIN_UNPLAYED_SEC) return;
 
     this.lastKickAt = now;
+    this._resumePlayback("append");
+  }
+
+  /**
+   * Возвращает воспроизведение к жизни. Общее для сторожа и раннего толчка:
+   * причина застревания одна, отличается только момент обнаружения.
+   *
+   * Приёмы разведены по случаям, а не выполняются подряд. Раньше здесь
+   * стояла проверка «позиция не сдвинулась после _ensurePlaying» — она
+   * вводила в заблуждение: `play()` асинхронный, синхронно позиция
+   * измениться не может, и перемотка происходила всегда.
+   */
+  private _resumePlayback(reason: string): void {
+    const audio = this.audio;
+    if (!audio) return;
+
+    // Дыра в буфере: _healGap сам переведёт позицию к данным
     const before = audio.currentTime;
     this._healGap();
-    this._ensurePlaying();
-    if (audio.currentTime === before) this._nudgePosition("append");
+    if (audio.currentTime !== before) return;
+
+    // На паузе достаточно запустить — перемотка тут только съела бы звук
+    if (audio.paused) {
+      this._ensurePlaying();
+      return;
+    }
+
+    // Не на паузе, данные впереди, а позиция стоит. play() здесь бессилен:
+    // элемент считает, что уже играет. Помогает только перемотка.
+    this._nudgePosition(reason);
   }
 
   private _ensurePlaying(): void {
