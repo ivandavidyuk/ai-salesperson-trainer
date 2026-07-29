@@ -4,7 +4,7 @@
 // Вынесено из route handler, чтобы роут остался тонким, а логику подсчёта
 // (границы недели, средние, дельты) можно было читать и менять в одном месте.
 
-import { DailyContentKind } from "@prisma/client";
+import { DailyContentKind, DealOutcome } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { STAGE_METRICS } from "@/lib/score";
 
@@ -58,6 +58,8 @@ export interface HomeData {
     thisWeek: number;
     avgDurationSec: number | null;
     avgScore: number | null;
+    /** Разговоров с исходом `paid`. Знаменатель — total, см. getHomeData */
+    paidDeals: number;
   };
   recent: HomeConversation[];
   progress: {
@@ -165,6 +167,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
     currentWeekAvg,
     prevWeekAvg,
     lastReview,
+    paidCount,
   ] = await Promise.all([
     Promise.resolve(dayNumber(now)),
     prisma.session.count({ where: completed }),
@@ -181,6 +184,12 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
       where: { session: { userId } },
       orderBy: { createdAt: "desc" },
       select: { strength: true, growthPoint: true },
+    }),
+    // Закрытые сделки. Знаменатель — ВСЕ завершённые разговоры (total),
+    // а не только разобранные: незакрытая сделка не должна прятаться
+    // за «разбор пока не пришёл»
+    prisma.sessionReview.count({
+      where: { session: completed, outcome: DealOutcome.paid },
     }),
   ]);
 
@@ -212,6 +221,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
           ? null
           : Math.round(durationAgg._avg.durationSec),
       avgScore: round1(scoreAgg._avg.overallScore ?? null),
+      paidDeals: paidCount,
     },
     recent: recentRows,
     progress: {

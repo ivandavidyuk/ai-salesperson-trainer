@@ -5,7 +5,7 @@
 // средняя оценка и прогресс по этапам неделя к неделе.
 
 import { prisma } from "@/lib/db";
-import { UserRole } from "@prisma/client";
+import { DealOutcome, UserRole } from "@prisma/client";
 import { averageScores, round1, startOfWeek } from "@/lib/home";
 import { STAGE_METRICS } from "@/lib/score";
 
@@ -39,6 +39,8 @@ export interface TeamMemberStats {
   weekDelta: number | null;
   /** Лучшая оценка за всё время; null — разборов нет */
   bestScore: number | null;
+  /** Разговоров с исходом `paid`. Знаменатель — total, а не число разборов */
+  paidDeals: number;
   /** Разговоров по дням за последние 7 суток, от старого к сегодняшнему */
   activity: number[];
   stages: TeamStageMetric[];
@@ -91,6 +93,7 @@ export async function getTeamStats(): Promise<TeamMemberStats[]> {
         recentRows,
         lastReview,
         activityRows,
+        paidCount,
       ] = await Promise.all([
           prisma.session.count({ where: completed }),
           prisma.session.count({
@@ -124,6 +127,12 @@ export async function getTeamStats(): Promise<TeamMemberStats[]> {
           prisma.session.findMany({
             where: { ...completed, startedAt: { gte: activityStart } },
             select: { startedAt: true },
+          }),
+          // Закрытые сделки. Делится на total — все завершённые разговоры,
+          // а не только разобранные: незакрытая сделка не должна прятаться
+          // за «разбор пока не пришёл»
+          prisma.sessionReview.count({
+            where: { session: completed, outcome: DealOutcome.paid },
           }),
         ]);
 
@@ -166,6 +175,7 @@ export async function getTeamStats(): Promise<TeamMemberStats[]> {
             ? round1(thisWeekOverall - prevWeekOverall)
             : null,
         bestScore: round1(scoreAgg._max.overallScore),
+        paidDeals: paidCount,
         activity,
         stages,
         strength: lastReview?.strength ?? null,

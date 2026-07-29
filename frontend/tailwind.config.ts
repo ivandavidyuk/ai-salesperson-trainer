@@ -176,6 +176,43 @@ const config: Config = {
           "0%, 80%, 100%": { transform: "translateY(0)", opacity: "0.35" },
           "40%": { transform: "translateY(-5px)", opacity: "1" },
         },
+
+        // --- Плашка исхода сделки: печать впечатывается в разбор ---
+        //
+        // В макете эти кадры зациклены, чтобы анимацию было видно на статичной
+        // странице. В приложении она играет ОДИН раз при появлении разбора:
+        // исход — событие, а не состояние, и мигать им постоянно значит
+        // превратить награду в раздражитель.
+        //
+        // Диск печати: прилетает сверху уменьшенным и с наклоном
+        stampin: {
+          "0%": { transform: "scale(1.9) rotate(-11deg)", opacity: "0" },
+          "45%": { transform: "scale(0.93) rotate(3deg)", opacity: "1" },
+          "70%": { transform: "scale(1.03) rotate(-1deg)" },
+          "100%": { transform: "scale(1) rotate(0)" },
+        },
+        // Ударная волна от печати
+        shock: {
+          "0%": { transform: "scale(0.35)", opacity: "0.75" },
+          "100%": { transform: "scale(2.6)", opacity: "0" },
+        },
+        // Вспышка по плашке в момент удара
+        flashveil: {
+          "0%": { opacity: "0" },
+          "25%": { opacity: "0.45" },
+          "100%": { opacity: "0" },
+        },
+        // Фраза догоняет печать снизу
+        textrise: {
+          "0%": { transform: "translateY(7px)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+        // Оттиск «ОПЛАЧЕНО» справа
+        stampbadge: {
+          "0%": { transform: "rotate(-26deg) scale(1.7)", opacity: "0" },
+          "55%": { transform: "rotate(-3deg) scale(0.94)", opacity: "1" },
+          "100%": { transform: "rotate(-7deg) scale(1)", opacity: "1" },
+        },
       },
       animation: {
         "pulse-ring":
@@ -184,6 +221,12 @@ const config: Config = {
         barwave: "barwave 1s ease-in-out infinite",
         softpulse: "softpulse 2.4s ease-in-out infinite",
         dotwave: "dotwave 1.25s ease-in-out infinite",
+        // Плашка исхода — все кадры одноразовые (без infinite)
+        stampin: "stampin 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) both",
+        shock: "shock 0.9s ease-out both",
+        flashveil: "flashveil 0.7s ease-out both",
+        textrise: "textrise 0.45s ease-out 0.1s both",
+        stampbadge: "stampbadge 0.55s ease-out 0.08s both",
       },
     },
   },

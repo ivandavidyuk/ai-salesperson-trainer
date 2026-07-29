@@ -12,7 +12,7 @@ import Link from "next/link";
 import Loader from "@/app/components/Loader";
 import ScoreBadge from "@/app/components/ScoreBadge";
 import { formatConversationDate, formatDuration, initials } from "@/lib/format";
-import { SCORE_TEXT_CLASS, scoreTone } from "@/lib/score";
+import { SCORE_TEXT_CLASS, formatDealsRate, scoreTone } from "@/lib/score";
 import type { TeamMemberStats } from "@/lib/team";
 import { PLACE_BANNER, PLACE_PILL, placeLabel } from "@/lib/podium";
 
@@ -92,6 +92,8 @@ export default function TeamStatsModal({
       ? "text-ink-subtle"
       : SCORE_TEXT_CLASS[scoreTone(manager.avgScore)];
 
+  const dealsRate = formatDealsRate(manager.paidDeals, manager.total);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(12,26,24,.5)] p-8"
@@ -156,6 +158,10 @@ export default function TeamStatsModal({
             <Tile
               value={manager.bestScore === null ? "—" : String(manager.bestScore)}
               label="лучшая оценка"
+            />
+            <Tile
+              value={dealsRate.label}
+              label={dealsRate.hint ? "закрытых сделок · мало данных" : "закрытых сделок"}
             />
           </div>
 
