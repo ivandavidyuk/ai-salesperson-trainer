@@ -44,8 +44,6 @@ export interface HomeConversation {
 export interface ProgressMetric {
   key: string;
   label: string;
-  /** Короткая подпись для узких столбцов на главной */
-  short: string;
   /** Среднее за текущую неделю; null — данных нет */
   value: number | null;
   /** Разница с прошлой неделей; null — не с чем сравнивать */
@@ -191,13 +189,12 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
     pickDaily(DailyContentKind.motivation, day),
   ]);
 
-  const metrics: ProgressMetric[] = PROGRESS_METRICS.map(({ key, label, short }) => {
+  const metrics: ProgressMetric[] = PROGRESS_METRICS.map(({ key, label }) => {
     const current = round1(currentWeekAvg[key] ?? null);
     const previous = round1(prevWeekAvg[key] ?? null);
     return {
       key,
       label,
-      short,
       value: current,
       // Дельту показываем только когда есть обе недели
       delta: current !== null && previous !== null ? round1(current - previous) : null,
