@@ -120,6 +120,16 @@ export default function ProgressPanel({
           <>
             <div className="mb-3.5 mt-5 h-px shrink-0 bg-line-soft" />
 
+            {/* Источник выводов подписан намеренно. Они берутся из ОДНОГО
+                последнего разбора, а не усредняются за неделю, — но лежат
+                внутри панели с заголовком «неделя к неделе», и без подписи
+                читаются как итог недели. Тогда конкретная формулировка
+                («перебили, когда она заговорила про мужа») выглядит
+                непонятной, хотя она точная */}
+            <div className="mb-2 font-mono text-[10.5px] uppercase tracking-[.12em] text-ink-placeholder">
+              По последнему разговору
+            </div>
+
             {strength && (
               <div className="mb-2">
                 <span className="rounded-full bg-good-surface px-2.5 py-[3px] text-[10.5px] font-semibold uppercase tracking-[.08em] text-good">
