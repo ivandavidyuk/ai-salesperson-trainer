@@ -190,6 +190,15 @@ export default function TeamStatsModal({
             </div>
 
             <div className="flex min-w-[250px] flex-1 flex-col gap-4">
+              {/* Тот же случай, что в «Прогрессе» на главной: выводы взяты
+                  из одного последнего разбора, а рядом стоят показатели
+                  за неделю и за всё время. Без подписи руководитель читает
+                  их как характеристику менеджера вообще */}
+              {(manager.strength || manager.growthPoint) && (
+                <div className="font-mono text-[10.5px] uppercase tracking-[.12em] text-ink-placeholder">
+                  По последнему разговору
+                </div>
+              )}
               {manager.strength && (
                 <div>
                   <span className="rounded-full bg-good-surface px-2.5 py-[3px] text-[10.5px] font-semibold uppercase tracking-[.08em] text-good">
