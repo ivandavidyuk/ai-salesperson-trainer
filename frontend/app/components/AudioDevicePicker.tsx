@@ -27,8 +27,14 @@ interface AudioDevicePickerProps {
   onOutputChange: (id: string) => void;
   /** Текущая громкость в единицах PCM16 */
   level: number;
-  /** Слышали ли голос за последние секунды */
-  heard: boolean;
+  /**
+   * Состояний три, а не два, и это важно.
+   *
+   * `waiting` — человек ещё не начал говорить. Раньше этого состояния
+   * не было, и объяснение «этот вход почти не слышит» стояло по умолчанию:
+   * упрёк читался до того, как успевали открыть рот.
+   */
+  status?: "waiting" | "heard" | "silent";
   /** Перечитать список устройств: подключили гарнитуру во время выбора */
   onRefresh?: () => void;
   compact?: boolean;
@@ -95,7 +101,7 @@ export default function AudioDevicePicker({
   outputId,
   onOutputChange,
   level,
-  heard,
+  status = "waiting",
   onRefresh,
   compact = false,
 }: AudioDevicePickerProps) {
@@ -154,19 +160,20 @@ export default function AudioDevicePicker({
 
         <div
           className={`mt-2 text-[12.5px] leading-snug ${
-            heard ? "text-good" : "text-ink-subtle"
+            status === "heard" ? "text-good" : "text-ink-subtle"
           }`}
         >
-          {heard
-            ? "Голос перешагивает порог — вас слышно"
-            : compact
-              ? "Скажите что-нибудь — проверим микрофон"
-              : "Порог не перешагивается — этот вход почти не слышит. Так браузер выбирает устройство по умолчанию; выберите другой микрофон в списке выше."}
+          {status === "heard" && "Голос перешагивает порог — вас слышно"}
+          {status === "waiting" && "Ждём ваш голос — скажите пару слов"}
+          {status === "silent" &&
+            "Порог не перешагивается — похоже, этот вход почти не слышит. Так бывает, когда браузер выбрал устройство сам; попробуйте другой микрофон."}
         </div>
 
         {/* Устройство могли подключить уже на этом экране: без явного
-            обновления оно не появится, пока браузер не пришлёт devicechange */}
-        {onRefresh && !compact && (
+            обновления оно не появится, пока браузер не пришлёт devicechange.
+            Показываем, только когда стало ясно, что текущий вход не годится —
+            иначе это ещё одна строка в и без того плотной плашке */}
+        {onRefresh && !compact && status === "silent" && (
           <div className="mt-2 flex items-baseline gap-2 text-[12px] text-ink-placeholder">
             <span>Подключили новое устройство?</span>
             <button
