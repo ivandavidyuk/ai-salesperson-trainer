@@ -4,13 +4,14 @@
 пациента о согласии.
 """
 
+import json
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.llm import trust_instruction
-from services.scoring import StageScores, _clamp, format_transcript
+from services.scoring import StageScores, _clamp, _unfence, format_transcript
 
 
 def test_средняя_считается_по_четырём_этапам():
@@ -75,3 +76,19 @@ def test_расшифровка_подписывает_роли():
         ]
     )
     assert text == "Менеджер: Здравствуйте\nПациент: Добрый день"
+
+
+def test_заборчик_вокруг_json_снимается():
+    # claude-haiku-4.5 оборачивает ответ в ```json … ``` даже при явном
+    # response_format=json_object — из-за этого модель выглядела непригодной
+    fenced = '```json\n{"outcome": "paid", "contact": 8.5}\n```'
+    assert json.loads(_unfence(fenced)) == {"outcome": "paid", "contact": 8.5}
+
+
+def test_заборчик_без_языка_тоже_снимается():
+    assert json.loads(_unfence('```\n{"a": 1}\n```')) == {"a": 1}
+
+
+def test_обычный_json_не_портится():
+    plain = '{"outcome": "refused"}'
+    assert json.loads(_unfence(plain)) == {"outcome": "refused"}

@@ -136,7 +136,7 @@ def format_transcript(history: list[dict]) -> str:
 
 
 async def _ask(
-    messages: list[dict], *, purpose: str, attempts: int = 1
+    messages: list[dict], *, purpose: str, attempts: int = 1, final: bool = False
 ) -> Optional[dict]:
     """Запрос к модели-оценщику. Возвращает разобранный JSON или None.
 
@@ -146,6 +146,9 @@ async def _ask(
     оценщику хватает одной: он всё равно пересчитается на следующем ходу,
     а лишние попытки только добавляют нагрузки на тот же ключ. Итоговому
     повторы нужны — второго шанса у него нет.
+
+    @param final брать модель итогового оценщика вместо фонового. Требования
+    у них противоположные — см. core/config.py.
     """
     settings = get_settings()
     if not settings.llm_api_key:
@@ -153,7 +156,7 @@ async def _ask(
         return None
 
     payload = {
-        "model": settings.scorer_model,
+        "model": settings.final_scorer_model if final else settings.scorer_model,
         "messages": messages,
         "temperature": 0.2,  # судейство должно быть воспроизводимым
         "response_format": {"type": "json_object"},
@@ -207,7 +210,7 @@ async def _attempt(payload: dict, *, purpose: str, attempt: int) -> Optional[dic
         return None
 
     try:
-        return json.loads(content)
+        return json.loads(_unfence(content))
     except json.JSONDecodeError as exc:
         logger.warning(
             "Оценщик (%s), попытка %d: ответ не разобрался (%s), начало: %.120s",
@@ -217,6 +220,22 @@ async def _attempt(payload: dict, *, purpose: str, attempt: int) -> Optional[dic
             content,
         )
         return None
+
+
+def _unfence(content: str) -> str:
+    """Снимает markdown-заборчик вокруг JSON.
+
+    Часть моделей оборачивает ответ в ```json … ``` даже при явном
+    response_format=json_object — так делает, например, claude-haiku-4.5.
+    Ответ при этом полностью корректный, спотыкается только наш разбор,
+    и модель выглядит непригодной, хотя дело в одной строке кода.
+    """
+    text = content.strip()
+    if not text.startswith("```"):
+        return text
+    # Первая строка — открывающий забор с необязательным языком
+    without_open = text.split("\n", 1)[-1]
+    return without_open.rsplit("```", 1)[0].strip()
 
 
 async def score_stages(
@@ -367,6 +386,7 @@ async def review_conversation(
         ],
         purpose="итог",
         attempts=_ATTEMPTS,
+        final=True,
     )
     if result is None:
         return None
