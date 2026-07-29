@@ -29,6 +29,8 @@ interface AudioDevicePickerProps {
   level: number;
   /** Слышали ли голос за последние секунды */
   heard: boolean;
+  /** Перечитать список устройств: подключили гарнитуру во время выбора */
+  onRefresh?: () => void;
   compact?: boolean;
 }
 
@@ -94,6 +96,7 @@ export default function AudioDevicePicker({
   onOutputChange,
   level,
   heard,
+  onRefresh,
   compact = false,
 }: AudioDevicePickerProps) {
   const [testing, setTesting] = useState(false);
@@ -134,13 +137,52 @@ export default function AudioDevicePicker({
           />
         </div>
 
+        {/* Подписи под шкалой: без них засечка — просто чёрточка, и человек
+            не понимает, что именно должно её перешагнуть */}
+        {!compact && (
+          <div className="relative mt-1 h-[13px] text-[10px] text-ink-placeholder">
+            <span className="absolute left-0">тихо</span>
+            <span
+              style={{ left: `${(VOICE_RMS / FULL_SCALE_RMS) * 100}%` }}
+              className="absolute -translate-x-1/2 whitespace-nowrap"
+            >
+              порог голоса
+            </span>
+            <span className="absolute right-0">громко</span>
+          </div>
+        )}
+
         <div
-          className={`mt-1.5 text-[12.5px] ${heard ? "text-good" : "text-ink-subtle"}`}
+          className={`mt-2 text-[12.5px] leading-snug ${
+            heard ? "text-good" : "text-ink-subtle"
+          }`}
         >
-          {heard ? "Слышу вас" : "Скажите что-нибудь — проверим микрофон"}
+          {heard
+            ? "Голос перешагивает порог — вас слышно"
+            : compact
+              ? "Скажите что-нибудь — проверим микрофон"
+              : "Порог не перешагивается — этот вход почти не слышит. Так браузер выбирает устройство по умолчанию; выберите другой микрофон в списке выше."}
         </div>
+
+        {/* Устройство могли подключить уже на этом экране: без явного
+            обновления оно не появится, пока браузер не пришлёт devicechange */}
+        {onRefresh && !compact && (
+          <div className="mt-2 flex items-baseline gap-2 text-[12px] text-ink-placeholder">
+            <span>Подключили новое устройство?</span>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="font-semibold text-brand transition-colors hover:text-brand-hover"
+            >
+              Обновить
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* В Firefox и Safari нет setSinkId, поэтому список динамиков пуст.
+          Блок просто отсутствует: звук идёт в системное устройство,
+          и это ожидаемо, а не ошибка — гасить и объяснять нечего */}
       {outputs.length > 0 && (
         <div>
           {!compact && <span className={labelClass}>Динамик</span>}
@@ -167,7 +209,7 @@ export default function AudioDevicePicker({
               }}
               className="shrink-0 whitespace-nowrap rounded-input border border-line-strong bg-surface-card px-4 py-2.5 text-[13.5px] font-semibold text-ink transition-colors hover:bg-surface disabled:text-ink-subtle"
             >
-              Проверить
+              Проиграть звук
             </button>
           </div>
         </div>
