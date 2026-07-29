@@ -65,19 +65,98 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-/** Исход разговора крупно: закрыл, не закрыл или не дошёл до предложения. */
-function OutcomeBanner({ outcome }: { outcome: DealOutcome }) {
-  const { title, hint, tone } = OUTCOME_LABELS[outcome];
-  const styles = {
-    good: "border-good-surface bg-good-surface text-good",
-    bad: "border-danger-border bg-danger-soft text-danger-strong",
-    warn: "border-warn-border bg-warn-surface text-warn",
+/** Галочка и крестик для строки «Предложение оплаты». */
+function OfferMark({ offered }: { offered: boolean }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {offered ? <path d="M4 12.5l5 5L20 6.5" /> : <path d="M6 6l12 12M18 6L6 18" />}
+    </svg>
+  );
+}
+
+/**
+ * Исход разговора — первое, что читает менеджер, раньше оценок.
+ *
+ * Разложен на два факта: попросил ли менеджер оплату и что ответил пациент.
+ * Цветом при этом окрашены только иконка и полоска слева — «не закрыл»
+ * не должно кричать поверх приличных оценок.
+ */
+function OutcomeCard({ outcome }: { outcome: DealOutcome }) {
+  const { title, hint, tone, offered, answer } = OUTCOME_LABELS[outcome];
+  const accent = {
+    good: { bar: "border-l-good", chip: "bg-good-surface text-good", text: "text-good" },
+    warn: { bar: "border-l-warn", chip: "bg-warn-surface text-warn", text: "text-warn" },
+    bad: {
+      bar: "border-l-danger-strong",
+      chip: "bg-danger-soft text-danger-strong",
+      text: "text-danger-strong",
+    },
   }[tone];
 
   return (
-    <div className={`mb-4 rounded-xl border px-[18px] py-4 ${styles}`}>
-      <div className="text-[15px] font-semibold">{title}</div>
-      <p className="mt-1 text-[13px] leading-snug text-ink-body">{hint}</p>
+    <div
+      className={`mb-4 overflow-hidden rounded-xl border border-line border-l-[3px] ${accent.bar}`}
+    >
+      <div className="flex items-start gap-[13px] px-[17px] py-[15px]">
+        <span
+          className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] ${accent.chip}`}
+        >
+          <OfferMark offered={outcome === "paid"} />
+        </span>
+        <div className="min-w-0">
+          <div className="font-mono text-[10px] uppercase tracking-[.12em] text-ink-subtle">
+            Исход сделки
+          </div>
+          <div className="mt-1 text-[16.5px] font-semibold tracking-[-.005em] text-ink">
+            {title}
+          </div>
+          <p className="mt-[3px] text-pretty text-[12.5px] leading-snug text-ink-muted">
+            {hint}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-stretch border-t border-line-soft bg-surface">
+        <div className="min-w-0 flex-1 px-4 py-[9px]">
+          <div className="font-mono text-[9.5px] uppercase tracking-[.1em] text-ink-placeholder">
+            Предложение оплаты
+          </div>
+          <div
+            className={`mt-[3px] flex items-center gap-1.5 text-[12.5px] font-semibold ${
+              offered ? "text-good" : "text-danger-strong"
+            }`}
+          >
+            <OfferMark offered={offered} />
+            {offered ? "прозвучало" : "не прозвучало"}
+          </div>
+        </div>
+        <div className="w-px bg-line" />
+        <div className="min-w-0 flex-1 px-4 py-[9px]">
+          <div className="font-mono text-[9.5px] uppercase tracking-[.1em] text-ink-placeholder">
+            Ответ пациента
+          </div>
+          {/* Пусто не потому, что не знаем, а потому что отвечать было
+              нечего — так «не попросил» отличается от «отказали»
+              структурой, а не оттенком */}
+          <div
+            className={`mt-[3px] text-[12.5px] font-semibold ${
+              answer ? accent.text : "text-ink-muted"
+            }`}
+          >
+            {answer ?? "— нечего отвечать"}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -99,9 +178,9 @@ export default function ReviewPanel({ review, pending = false }: ReviewPanelProp
   return (
     <div className="flex-1 overflow-y-auto bg-surface-card px-7 py-8">
       <div className="text-base font-semibold text-ink">Разбор разговора</div>
-      <p className="mb-5 mt-1.5 text-[13px] leading-normal text-ink-subtle">
-        Автоматический разбор по этапам подхода: оценка, сильные места и точки
-        роста для следующего разговора.
+      <p className="mb-4 mt-1.5 text-[13px] leading-normal text-ink-subtle">
+        Сначала исход, затем оценки по этапам подхода и что забрать
+        в следующий разговор.
       </p>
 
       {pending && !review ? (
@@ -118,15 +197,19 @@ export default function ReviewPanel({ review, pending = false }: ReviewPanelProp
       ) : (
         <>
           {/* Исход — главное, что менеджер должен увидеть первым:
-              разговор либо привёл к оплате, либо нет */}
-          {review.outcome && <OutcomeBanner outcome={review.outcome} />}
+              оценки отвечают «как ты работал», исход — «получилось или нет».
+              У разборов старше механизма исхода нет вовсе, и тогда блока
+              просто не будет: это не четвёртое значение, а его отсутствие */}
+          {review.outcome && <OutcomeCard outcome={review.outcome} />}
 
           <div className="rounded-xl border border-line p-[18px]">
             <div className="flex items-center gap-3.5">
               <ScoreRing score={review.overallScore} />
               <div>
                 <div className="text-sm font-semibold text-ink">Общая оценка</div>
-                <div className="text-[12.5px] text-ink-subtle">из 10</div>
+                <div className="text-[12.5px] text-ink-subtle">
+                  среднее пяти этапов, из 10
+                </div>
               </div>
             </div>
 
