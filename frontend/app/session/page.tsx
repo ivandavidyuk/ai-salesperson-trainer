@@ -660,14 +660,16 @@ function SessionScreen() {
                   не перешагнётся никогда — и блокировка заперла бы человека
                   на экране без объяснения и без выхода. Там кнопка ведёт
                   на экран отказа с инструкцией */}
+              {/* Просто «Начать», без точки: точка стоит на «Начать
+                  тренировку» шагом раньше, и повторять её здесь — значит
+                  предлагать одно и то же действие дважды */}
               <button
                 type="button"
                 onClick={handleStart}
                 disabled={busy || (!micProven && !micError)}
-                className="inline-flex items-center gap-2.5 rounded-input bg-brand px-[30px] py-3.5 text-base font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
+                className="rounded-input bg-brand px-[30px] py-3.5 text-base font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
               >
-                <span className="inline-block h-2 w-2 rounded-full bg-white" />
-                Начать разговор
+                Начать
               </button>
               <button
                 type="button"
