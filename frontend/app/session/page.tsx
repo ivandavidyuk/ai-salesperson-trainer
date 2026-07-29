@@ -48,11 +48,17 @@ type MicAlert = "no-signal" | "too-quiet" | null;
 
 type ScreenState =
   | "idle"
+  | "check"
   | "connecting"
   | "active"
   | "paused"
   | "micError"
   | "completing";
+
+// Сколько молчания на экране проверки, прежде чем объяснить, что вход глухой.
+// Раньше объяснение стояло состоянием по умолчанию — человек читал упрёк
+// до того, как успевал открыть рот.
+const CHECK_SILENCE_MS = 6_000;
 
 interface Patient {
   id: string;
@@ -108,9 +114,6 @@ function SessionScreen() {
   const [inputId, setInputId] = useState<string | null>(savedInputId());
   const [outputId, setOutputId] = useState<string | null>(savedOutputId());
   const [micError, setMicError] = useState<MicErrorInfo | null>(null);
-  // Новому пользователю показываем списки сразу: он ещё ничего не выбирал.
-  // Тому, кто уже настроил, — свёрнутую строку.
-  const [settingsOpen, setSettingsOpen] = useState(() => savedInputId() === null);
   // Громкость последнего блока и момент, когда в неё последний раз попал голос
   const [level, setLevel] = useState(0);
   const lastVoiceAtRef = useRef(Date.now());
@@ -126,6 +129,14 @@ function SessionScreen() {
    * Сбрасывается при смене устройства: новый вход надо доказывать заново.
    */
   const [micProven, setMicProven] = useState(false);
+  /**
+   * Молчание на экране проверки затянулось — пора объяснить, что вход глухой.
+   *
+   * Отдельно от micProven: у плашки три состояния, а не два. Пока человек
+   * не начал говорить, она молчит и ждёт; упрёк «этот вход почти не слышит»
+   * появляется, только когда ждать уже нечего.
+   */
+  const [checkSilent, setCheckSilent] = useState(false);
   // Проверочный захват на экране до разговора
   const previewRef = useRef<MicRecorder | null>(null);
 
@@ -179,11 +190,12 @@ function SessionScreen() {
     };
   }, [chosenPatientId]);
 
-  // Проверочный захват на экране подготовки: человек видит, какое устройство
-  // его слушает и слышат ли его, ещё до начала разговора. Именно здесь
-  // вскрывается случай, когда браузер молча выбрал не тот вход.
+  // Проверочный захват — на шаге проверки звука, а не при открытии страницы.
+  // Так разрешение у браузера спрашивается по нажатию кнопки, а не молча
+  // на входе, и именно здесь вскрывается случай, когда браузер выбрал не тот
+  // вход: человек видит, какое устройство его слушает и слышат ли его.
   useEffect(() => {
-    if (screenState !== "idle") return;
+    if (screenState !== "check") return;
 
     let cancelled = false;
     const recorder = new MicRecorder();
@@ -227,6 +239,17 @@ function SessionScreen() {
 
   // Устройства втыкают и вынимают прямо во время работы
   useEffect(() => onDevicesChanged(() => void refreshDevices()), [refreshDevices]);
+
+  // Свой отсчёт на экране проверки: молчим — и через несколько секунд
+  // объясняем, почему полоса не двигается. До этого плашка ничего не требует
+  useEffect(() => {
+    if (screenState !== "check" || micProven) {
+      setCheckSilent(false);
+      return;
+    }
+    const id = setTimeout(() => setCheckSilent(true), CHECK_SILENCE_MS);
+    return () => clearTimeout(id);
+  }, [screenState, micProven, inputId]);
 
   // Сторож тишины: если микрофон долго не слышит ничего, человек об этом
   // узнает сразу, а не через десять минут разговора с пустотой
@@ -514,13 +537,6 @@ function SessionScreen() {
     [screenState, noteLevel]
   );
 
-  // Подпись текущего микрофона для свёрнутой строки. Пока разрешение не
-  // выдано, подписей у устройств нет — тогда говорим нейтрально.
-  const currentInputLabel =
-    inputs.find((device) => device.id === inputId)?.label ??
-    inputs[0]?.label ??
-    "Микрофон по умолчанию";
-
   const changeOutput = useCallback((id: string) => {
     saveOutputId(id);
     setOutputId(id);
@@ -528,7 +544,12 @@ function SessionScreen() {
   }, []);
 
   const inCall = screenState === "active" || screenState === "paused";
-  const canLeave = screenState === "idle" || screenState === "micError";
+  // Уйти со страницы можно, пока разговор не начался. Проверка звука сюда
+  // тоже входит: с неё есть своя «Назад», но и общий выход должен работать
+  const canLeave =
+    screenState === "idle" ||
+    screenState === "check" ||
+    screenState === "micError";
 
   return (
     <main className="flex h-screen flex-col bg-surface-card">
@@ -585,63 +606,46 @@ function SessionScreen() {
               </div>
             )}
 
-            {/* Проверка устройств до разговора. Свёрнута до одной строки:
-                постоянные два списка перед каждым звонком быстро надоели бы.
-                Но полоска уровня видна всегда — ради неё всё и делалось,
-                а спрятанную за кнопку проверку никто бы не открывал */}
-            <div className="mt-[22px] w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-4">
-              {settingsOpen ? (
-                <>
-                  <div className="mb-3">
-                    <div className="text-[15px] font-semibold text-ink">
-                      Проверим, что вас слышно
-                    </div>
-                    <p className="mt-1 text-pretty text-[12.5px] leading-snug text-ink-subtle">
-                      Скажите вслух пару слов. Полоса должна перешагивать
-                      засечку — тогда разговор пойдёт как надо.
-                    </p>
-                  </div>
-                  <AudioDevicePicker
-                    inputs={inputs}
-                    inputId={inputId}
-                    onInputChange={changeInput}
-                    outputs={outputs}
-                    outputId={outputId}
-                    onOutputChange={changeOutput}
-                    level={level}
-                    heard={micProven}
-                    onRefresh={() => void refreshDevices()}
-                  />
-                  <p className="mt-3 text-[12px] leading-snug text-ink-placeholder">
-                    Выбор устройств запомним для следующих разговоров
-                  </p>
-                </>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13.5px] text-ink-body">
-                      {currentInputLabel}
-                    </div>
-                    <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-line-soft">
-                      <div
-                        style={{
-                          width: `${Math.min(100, Math.round((level / 4000) * 100))}%`,
-                        }}
-                        className={`h-full rounded-full transition-[width] duration-75 ${
-                          level >= VOICE_RMS ? "bg-brand" : "bg-brand-sparkline"
-                        }`}
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSettingsOpen(true)}
-                    className="shrink-0 text-[13.5px] font-semibold text-brand transition-colors hover:text-brand-hover"
-                  >
-                    Настроить
-                  </button>
-                </div>
-              )}
+            {/* С карточки уходим на проверку звука, а не сразу в разговор.
+                Проверка — отдельный шаг: здесь и так карточка пациента
+                с анамнезом, и вдвоём они не помещались в экран */}
+            <button
+              type="button"
+              onClick={() => setScreenState("check")}
+              className="mt-6 inline-flex items-center gap-2.5 rounded-input bg-brand px-[30px] py-3.5 text-base font-semibold text-white transition-colors hover:bg-brand-hover"
+            >
+              <span className="inline-block h-2 w-2 rounded-full bg-white" />
+              Начать тренировку
+            </button>
+            <p className="mt-3 text-[12.5px] text-ink-placeholder">
+              Понадобится доступ к микрофону
+            </p>
+          </>
+        )}
+
+        {/* --- Проверка звука: отдельный шаг между карточкой и разговором --- */}
+        {screenState === "check" && (
+          <>
+            <div className="text-[21px] font-semibold text-ink">
+              Проверим, что вас слышно
+            </div>
+            <p className="mt-2 max-w-[420px] text-pretty text-center text-[14.5px] leading-normal text-ink-muted">
+              Скажите вслух пару слов. Полоса должна перешагивать засечку —
+              тогда разговор пойдёт как надо.
+            </p>
+
+            <div className="mt-6 w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-[18px]">
+              <AudioDevicePicker
+                inputs={inputs}
+                inputId={inputId}
+                onInputChange={changeInput}
+                outputs={outputs}
+                outputId={outputId}
+                onOutputChange={changeOutput}
+                level={level}
+                status={micProven ? "heard" : checkSilent ? "silent" : "waiting"}
+                onRefresh={() => void refreshDevices()}
+              />
               {micError && (
                 <p className="mt-3 text-[12.5px] leading-normal text-danger-text">
                   {micError.text}
@@ -649,44 +653,34 @@ function SessionScreen() {
               )}
             </div>
 
-            {/* Кнопка ждёт, пока микрофон перешагнёт порог голоса.
-                Раньше она была активна всегда — и разговор через линейный
-                вход звуковой карты шёл вхолостую десять минут, потому что
-                интерфейс о выборе устройства не сообщал ничего */}
-            <div className="mt-6 flex flex-col items-center gap-2.5">
-              <div className="flex items-center gap-3">
-                {/* Блокируем только когда микрофон работает, но молчит:
-                    это и есть случай линейного входа. При запрете доступа
-                    или отсутствии устройства уровень измерить нечем, порог
-                    не перешагнётся никогда — и блокировка заперла бы человека
-                    на экране, где нет ни объяснения, ни выхода. Там кнопка
-                    ведёт на экран отказа с инструкцией */}
-                <button
-                  type="button"
-                  onClick={handleStart}
-                  disabled={busy || (!micProven && !micError)}
-                  className="inline-flex items-center gap-2.5 rounded-input bg-brand px-[30px] py-3.5 text-base font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
-                >
-                  <span className="inline-block h-2 w-2 rounded-full bg-white" />
-                  Начать тренировку
-                </button>
-                {!micProven && !micError && !settingsOpen && (
-                  <button
-                    type="button"
-                    onClick={() => setSettingsOpen(true)}
-                    className="rounded-input border border-line-strong bg-surface-card px-5 py-3.5 text-[15px] font-semibold text-ink transition-colors hover:bg-surface"
-                  >
-                    Выбрать другой микрофон
-                  </button>
-                )}
-              </div>
-              {!micProven && !micError && (
-                <p className="max-w-[440px] text-center text-[12px] leading-snug text-ink-placeholder">
-                  Пока порог не перешагнут, «Начать тренировку» ждёт — это
-                  дешевле, чем разговор вхолостую
-                </p>
-              )}
+            <div className="mt-6 flex items-center gap-3">
+              {/* Блокируем только когда микрофон работает, но молчит:
+                  это и есть случай линейного входа. При запрете доступа
+                  или отсутствии устройства уровень измерить нечем, порог
+                  не перешагнётся никогда — и блокировка заперла бы человека
+                  на экране без объяснения и без выхода. Там кнопка ведёт
+                  на экран отказа с инструкцией */}
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={busy || (!micProven && !micError)}
+                className="inline-flex items-center gap-2.5 rounded-input bg-brand px-[30px] py-3.5 text-base font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
+              >
+                <span className="inline-block h-2 w-2 rounded-full bg-white" />
+                Начать разговор
+              </button>
+              <button
+                type="button"
+                onClick={() => setScreenState("idle")}
+                className="rounded-input border border-line-strong bg-surface-card px-6 py-3.5 text-base font-semibold text-ink transition-colors hover:bg-surface"
+              >
+                Назад
+              </button>
             </div>
+
+            <p className="mt-3 text-[12px] text-ink-placeholder">
+              Выбор устройств запомним для следующих разговоров
+            </p>
           </>
         )}
 
@@ -769,7 +763,7 @@ function SessionScreen() {
                       outputId={outputId}
                       onOutputChange={changeOutput}
                       level={level}
-                      heard={level >= VOICE_RMS}
+                      status={level >= VOICE_RMS ? "heard" : "waiting"}
                     />
                   </div>
                 )}
