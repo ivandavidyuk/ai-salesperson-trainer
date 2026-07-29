@@ -20,13 +20,14 @@ import Timer from "@/app/components/Timer";
 import { AudioPlayer, MicRecorder } from "@/lib/voiceClient";
 import {
   listDevices,
-  micErrorText,
+  describeMicError,
   onDevicesChanged,
   saveInputId,
   saveOutputId,
   savedInputId,
   savedOutputId,
   type AudioDevice,
+  type MicErrorInfo,
 } from "@/lib/audioDevices";
 
 // Порог голоса — тот же, что на бэкенде (_MIN_VOICE_RMS в services/stt.py)
@@ -106,7 +107,7 @@ function SessionScreen() {
   const [outputs, setOutputs] = useState<AudioDevice[]>([]);
   const [inputId, setInputId] = useState<string | null>(savedInputId());
   const [outputId, setOutputId] = useState<string | null>(savedOutputId());
-  const [micHint, setMicHint] = useState("");
+  const [micError, setMicError] = useState<MicErrorInfo | null>(null);
   // Новому пользователю показываем списки сразу: он ещё ничего не выбирал.
   // Тому, кто уже настроил, — свёрнутую строку.
   const [settingsOpen, setSettingsOpen] = useState(() => savedInputId() === null);
@@ -115,6 +116,16 @@ function SessionScreen() {
   const lastVoiceAtRef = useRef(Date.now());
   const lastSoundAtRef = useRef(Date.now());
   const [micAlert, setMicAlert] = useState<MicAlert>(null);
+  /**
+   * Микрофон уже перешагивал порог голоса на этом экране.
+   *
+   * Пока не перешагнул, «Начать разговор» неактивна. Ждать дешевле, чем
+   * разговор вхолостую: именно так у нас прошёл звонок через линейный вход
+   * звуковой карты — браузер выбрал его по умолчанию, а интерфейс молчал.
+   *
+   * Сбрасывается при смене устройства: новый вход надо доказывать заново.
+   */
+  const [micProven, setMicProven] = useState(false);
   // Проверочный захват на экране до разговора
   const previewRef = useRef<MicRecorder | null>(null);
 
@@ -127,6 +138,9 @@ function SessionScreen() {
     if (rms >= VOICE_RMS) {
       lastVoiceAtRef.current = now;
       setMicAlert(null);
+      // Микрофон доказал, что он живой. Флаг залипающий: человек сказал
+      // «раз-два», замолчал — и кнопка не должна снова гаснуть
+      setMicProven(true);
     }
   }, []);
 
@@ -193,11 +207,11 @@ function SessionScreen() {
           return;
         }
         previewRef.current = recorder;
-        setMicHint("");
+        setMicError(null);
         // Подписи устройств появляются только после выданного разрешения
         await refreshDevices();
       } catch (error) {
-        if (!cancelled) setMicHint(micErrorText(error));
+        if (!cancelled) setMicError(describeMicError(error));
       }
     })();
 
@@ -369,7 +383,7 @@ function SessionScreen() {
         } catch (error) {
           // Без микрофона разговор невозможен — показываем причину отказа,
           // а не общий экран, из которого ничего не понять
-          setMicHint(micErrorText(error));
+          setMicError(describeMicError(error));
           setScreenState("micError");
         }
       };
@@ -468,6 +482,9 @@ function SessionScreen() {
       lastVoiceAtRef.current = Date.now();
       lastSoundAtRef.current = Date.now();
       setMicAlert(null);
+      // Новый вход надо доказать заново: он может оказаться таким же
+      // глухим, как прежний
+      setMicProven(false);
 
       const restart = async (recorder: MicRecorder | null, live: boolean) => {
         if (!recorder) return;
@@ -489,9 +506,9 @@ function SessionScreen() {
         } else {
           await restart(previewRef.current, false);
         }
-        setMicHint("");
+        setMicError(null);
       } catch (error) {
-        setMicHint(micErrorText(error));
+        setMicError(describeMicError(error));
       }
     },
     [screenState, noteLevel]
@@ -574,16 +591,31 @@ function SessionScreen() {
                 а спрятанную за кнопку проверку никто бы не открывал */}
             <div className="mt-[22px] w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-4">
               {settingsOpen ? (
-                <AudioDevicePicker
-                  inputs={inputs}
-                  inputId={inputId}
-                  onInputChange={changeInput}
-                  outputs={outputs}
-                  outputId={outputId}
-                  onOutputChange={changeOutput}
-                  level={level}
-                  heard={level >= VOICE_RMS}
-                />
+                <>
+                  <div className="mb-3">
+                    <div className="text-[15px] font-semibold text-ink">
+                      Проверим, что вас слышно
+                    </div>
+                    <p className="mt-1 text-pretty text-[12.5px] leading-snug text-ink-subtle">
+                      Скажите вслух пару слов. Полоса должна перешагивать
+                      засечку — тогда разговор пойдёт как надо.
+                    </p>
+                  </div>
+                  <AudioDevicePicker
+                    inputs={inputs}
+                    inputId={inputId}
+                    onInputChange={changeInput}
+                    outputs={outputs}
+                    outputId={outputId}
+                    onOutputChange={changeOutput}
+                    level={level}
+                    heard={micProven}
+                    onRefresh={() => void refreshDevices()}
+                  />
+                  <p className="mt-3 text-[12px] leading-snug text-ink-placeholder">
+                    Выбор устройств запомним для следующих разговоров
+                  </p>
+                </>
               ) : (
                 <div className="flex items-center gap-3">
                   <div className="min-w-0 flex-1">
@@ -610,22 +642,51 @@ function SessionScreen() {
                   </button>
                 </div>
               )}
-              {micHint && (
+              {micError && (
                 <p className="mt-3 text-[12.5px] leading-normal text-danger-text">
-                  {micHint}
+                  {micError.text}
                 </p>
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={handleStart}
-              disabled={busy}
-              className="mt-6 inline-flex items-center gap-2.5 rounded-input bg-brand px-[30px] py-3.5 text-base font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
-            >
-              <span className="inline-block h-2 w-2 rounded-full bg-white" />
-              Начать тренировку
-            </button>
+            {/* Кнопка ждёт, пока микрофон перешагнёт порог голоса.
+                Раньше она была активна всегда — и разговор через линейный
+                вход звуковой карты шёл вхолостую десять минут, потому что
+                интерфейс о выборе устройства не сообщал ничего */}
+            <div className="mt-6 flex flex-col items-center gap-2.5">
+              <div className="flex items-center gap-3">
+                {/* Блокируем только когда микрофон работает, но молчит:
+                    это и есть случай линейного входа. При запрете доступа
+                    или отсутствии устройства уровень измерить нечем, порог
+                    не перешагнётся никогда — и блокировка заперла бы человека
+                    на экране, где нет ни объяснения, ни выхода. Там кнопка
+                    ведёт на экран отказа с инструкцией */}
+                <button
+                  type="button"
+                  onClick={handleStart}
+                  disabled={busy || (!micProven && !micError)}
+                  className="inline-flex items-center gap-2.5 rounded-input bg-brand px-[30px] py-3.5 text-base font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
+                >
+                  <span className="inline-block h-2 w-2 rounded-full bg-white" />
+                  Начать тренировку
+                </button>
+                {!micProven && !micError && !settingsOpen && (
+                  <button
+                    type="button"
+                    onClick={() => setSettingsOpen(true)}
+                    className="rounded-input border border-line-strong bg-surface-card px-5 py-3.5 text-[15px] font-semibold text-ink transition-colors hover:bg-surface"
+                  >
+                    Выбрать другой микрофон
+                  </button>
+                )}
+              </div>
+              {!micProven && !micError && (
+                <p className="max-w-[440px] text-center text-[12px] leading-snug text-ink-placeholder">
+                  Пока порог не перешагнут, «Начать тренировку» ждёт — это
+                  дешевле, чем разговор вхолостую
+                </p>
+              )}
+            </div>
           </>
         )}
 
@@ -759,37 +820,55 @@ function SessionScreen() {
         )}
 
         {/* --- Нет доступа к микрофону --- */}
-        {screenState === "micError" && (
+        {/* Экран отказа собирается по причине, а не один на все случаи.
+            Действия разные по существу: при запрете человек идёт в настройки
+            сайта, при отсутствии устройства разрешать нечего — надо сначала
+            его подключить, и шаги про замок только сбили бы с толку */}
+        {screenState === "micError" && micError && (
           <>
             <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-danger-border bg-danger-surface text-[40px] text-danger">
               🎙
             </div>
             <div className="mt-[18px] text-[21px] font-semibold text-ink">
-              Микрофон не включился
+              {micError.title}
             </div>
-            {/* Причина, а не догадка: раньше любой сбой выглядел как запрет
-                браузера, хотя устройство могло быть занято или отсутствовать */}
-            <p className="mt-2 max-w-[420px] text-center text-[14.5px] leading-normal text-ink-muted">
-              {micHint ||
-                "Не удалось включить микрофон. Проверьте устройство и попробуйте снова."}
+            <p className="mt-2 max-w-[420px] text-pretty text-center text-[14.5px] leading-normal text-ink-muted">
+              {micError.text}
             </p>
-            <div className="mt-5 w-full max-w-[440px] rounded-xl border border-line bg-surface px-4 py-3.5 text-[13px] leading-relaxed text-ink-label">
-              Если доступ заблокирован браузером:
-              <br />
-              1. Нажмите на значок 🔒 слева от адреса
-              <br />
-              2. Включите «Микрофон»
-              <br />
-              3. Вернитесь и нажмите «Повторить»
+
+            {micError.steps.length > 0 && (
+              <ol className="mt-5 w-full max-w-[440px] list-inside list-decimal rounded-xl border border-line bg-surface px-4 py-3.5 text-[13px] leading-relaxed text-ink-label">
+                {micError.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            )}
+
+            <div className="mt-6 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={busy}
+                className="rounded-input bg-brand px-7 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
+              >
+                {micError.retryLabel}
+              </button>
+              {micError.kind === "missing" && (
+                <button
+                  type="button"
+                  onClick={() => void refreshDevices()}
+                  className="rounded-input border border-line-strong bg-surface-card px-5 py-3 text-[15px] font-semibold text-ink transition-colors hover:bg-surface"
+                >
+                  Обновить список
+                </button>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={handleStart}
-              disabled={busy}
-              className="mt-6 rounded-input bg-brand px-7 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
-            >
-              Повторить
-            </button>
+
+            {micError.note && (
+              <p className="mt-3 max-w-[420px] text-center text-[12.5px] leading-snug text-ink-placeholder">
+                {micError.note}
+              </p>
+            )}
           </>
         )}
 
