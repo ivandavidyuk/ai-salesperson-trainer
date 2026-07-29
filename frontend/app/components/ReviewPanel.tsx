@@ -12,6 +12,7 @@ import {
   OUTCOME_LABELS,
   SCORE_WARN_BELOW,
   STAGE_METRICS,
+  isDealClosed,
   type DealOutcome,
 } from "@/lib/score";
 
@@ -65,98 +66,85 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-/** Галочка и крестик для строки «Предложение оплаты». */
-function OfferMark({ offered }: { offered: boolean }) {
-  return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {offered ? <path d="M4 12.5l5 5L20 6.5" /> : <path d="M6 6l12 12M18 6L6 18" />}
-    </svg>
-  );
-}
-
 /**
- * Исход разговора — первое, что читает менеджер, раньше оценок.
+ * Плашка исхода: печать впечатывается в разбор.
  *
- * Разложен на два факта: попросил ли менеджер оплату и что ответил пациент.
- * Цветом при этом окрашены только иконка и полоска слева — «не закрыл»
- * не должно кричать поверх приличных оценок.
+ * Одна фраза без пояснений — «получилось» или «не получилось». Раз текста
+ * почти нет, разницу держат плотность и движение: закрытая сделка это
+ * тёмно-бирюзовый блок с белой печатью, незакрытая — тот же удар, но по
+ * белому. Размер и вес у них одинаковые: упрёка в незакрытой сделке нет,
+ * только факт.
+ *
+ * Единственное место в интерфейсе, где мы позволяем себе праздновать.
+ * Анимация играет один раз при появлении разбора — все кадры объявлены
+ * без `infinite` (см. tailwind.config.ts).
  */
-function OutcomeCard({ outcome }: { outcome: DealOutcome }) {
-  const { title, hint, tone, offered, answer } = OUTCOME_LABELS[outcome];
-  const accent = {
-    good: { bar: "border-l-good", chip: "bg-good-surface text-good", text: "text-good" },
-    warn: { bar: "border-l-warn", chip: "bg-warn-surface text-warn", text: "text-warn" },
-    bad: {
-      bar: "border-l-danger-strong",
-      chip: "bg-danger-soft text-danger-strong",
-      text: "text-danger-strong",
-    },
-  }[tone];
+function OutcomeStamp({ outcome }: { outcome: DealOutcome }) {
+  const { title, stamp } = OUTCOME_LABELS[outcome];
+  const closed = isDealClosed(outcome);
 
   return (
     <div
-      className={`mb-4 overflow-hidden rounded-xl border border-line border-l-[3px] ${accent.bar}`}
+      className={`relative mb-4 flex items-center gap-[13px] overflow-hidden rounded-[14px] px-[18px] py-4 ${
+        closed ? "bg-brand" : "border border-line bg-surface-card"
+      }`}
     >
-      <div className="flex items-start gap-[13px] px-[17px] py-[15px]">
+      {/* Вспышка в момент удара: белая по тёмному, красная по белому */}
+      <span
+        aria-hidden="true"
+        className={`absolute inset-0 ${
+          closed ? "animate-flashveil bg-white" : "animate-flashveil bg-danger-strong"
+        }`}
+        style={closed ? undefined : { opacity: 0.12 }}
+      />
+
+      <span className="animate-stampin relative flex h-10 w-10 shrink-0 items-center justify-center">
+        {/* Ударная волна */}
         <span
-          className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] ${accent.chip}`}
+          aria-hidden="true"
+          className={`animate-shock absolute inset-0 rounded-full border-2 ${
+            closed ? "border-white/60" : "border-danger-border"
+          }`}
+        />
+        <span
+          aria-hidden="true"
+          className={`absolute inset-0 rounded-full ${
+            closed ? "bg-white" : "bg-danger-soft"
+          }`}
+        />
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={closed ? 3 : 2.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className={`relative ${closed ? "text-brand" : "text-danger-strong"}`}
         >
-          <OfferMark offered={outcome === "paid"} />
-        </span>
-        <div className="min-w-0">
-          <div className="font-mono text-[10px] uppercase tracking-[.12em] text-ink-subtle">
-            Исход сделки
-          </div>
-          <div className="mt-1 text-[16.5px] font-semibold tracking-[-.005em] text-ink">
-            {title}
-          </div>
-          <p className="mt-[3px] text-pretty text-[12.5px] leading-snug text-ink-muted">
-            {hint}
-          </p>
-        </div>
+          {closed ? <path d="M5 12.5l4.5 4.5L19 7" /> : <path d="M7 7l10 10M17 7L7 17" />}
+        </svg>
+      </span>
+
+      <div
+        className={`animate-textrise relative text-[18px] font-semibold tracking-[-.01em] ${
+          closed ? "text-white" : "text-ink"
+        }`}
+      >
+        {title}
       </div>
 
-      <div className="flex items-stretch border-t border-line-soft bg-surface">
-        <div className="min-w-0 flex-1 px-4 py-[9px]">
-          <div className="font-mono text-[9.5px] uppercase tracking-[.1em] text-ink-placeholder">
-            Предложение оплаты
-          </div>
-          <div
-            className={`mt-[3px] flex items-center gap-1.5 text-[12.5px] font-semibold ${
-              offered ? "text-good" : "text-danger-strong"
-            }`}
-          >
-            <OfferMark offered={offered} />
-            {offered ? "прозвучало" : "не прозвучало"}
-          </div>
-        </div>
-        <div className="w-px bg-line" />
-        <div className="min-w-0 flex-1 px-4 py-[9px]">
-          <div className="font-mono text-[9.5px] uppercase tracking-[.1em] text-ink-placeholder">
-            Ответ пациента
-          </div>
-          {/* Пусто не потому, что не знаем, а потому что отвечать было
-              нечего — так «не попросил» отличается от «отказали»
-              структурой, а не оттенком */}
-          <div
-            className={`mt-[3px] text-[12.5px] font-semibold ${
-              answer ? accent.text : "text-ink-muted"
-            }`}
-          >
-            {answer ?? "— нечего отвечать"}
-          </div>
-        </div>
-      </div>
+      <span
+        className={`animate-stampbadge absolute right-4 top-1/2 -mt-[13px] rounded-[7px] border-2 px-[9px] py-[3px] font-mono text-[11px] font-semibold tracking-[.14em] ${
+          closed
+            ? "border-white/45 text-white/80"
+            : "border-danger-border text-danger-strong"
+        }`}
+      >
+        {stamp}
+      </span>
     </div>
   );
 }
@@ -177,30 +165,41 @@ function PendingReview() {
 export default function ReviewPanel({ review, pending = false }: ReviewPanelProps) {
   return (
     <div className="flex-1 overflow-y-auto bg-surface-card px-7 py-8">
-      <div className="text-base font-semibold text-ink">Разбор разговора</div>
-      <p className="mb-4 mt-1.5 text-[13px] leading-normal text-ink-subtle">
-        Сначала исход, затем оценки по этапам подхода и что забрать
-        в следующий разговор.
-      </p>
+      <div className="mb-4 text-base font-semibold text-ink">Разбор разговора</div>
 
       {pending && !review ? (
         <PendingReview />
       ) : !review ? (
-        <div className="rounded-xl border border-line px-[18px] py-5">
-          <div className="text-sm font-semibold text-ink">Разбора нет</div>
-          <p className="mt-1.5 text-[13px] leading-normal text-ink-muted">
-            Обычно он появляется через несколько секунд после разговора.
-            Если его нет и позже — значит разговор был слишком коротким
-            либо разбор не удалось составить.
+        <div className="flex flex-col items-center rounded-xl border border-line bg-surface px-8 py-[18px]">
+          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-line-soft text-ink-subtle">
+            <svg
+              width="19"
+              height="19"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 4h11l3 3v13H5z" />
+              <path d="M9 12h6M9 16h4" />
+            </svg>
+          </span>
+          <div className="mt-3 text-[15px] font-semibold text-ink">Разбора нет</div>
+          <p className="mt-1.5 text-pretty text-center text-[13px] leading-normal text-ink-subtle">
+            Оценка по этому разговору не появилась. Расшифровка на месте —
+            её можно прочитать целиком.
           </p>
         </div>
       ) : (
         <>
           {/* Исход — главное, что менеджер должен увидеть первым:
               оценки отвечают «как ты работал», исход — «получилось или нет».
-              У разборов старше механизма исхода нет вовсе, и тогда блока
-              просто не будет: это не четвёртое значение, а его отсутствие */}
-          {review.outcome && <OutcomeCard outcome={review.outcome} />}
+              У разборов старше механизма исхода нет вовсе, и тогда плашки
+              просто не будет: это не третье состояние, а её отсутствие */}
+          {review.outcome && <OutcomeStamp outcome={review.outcome} />}
 
           <div className="rounded-xl border border-line p-[18px]">
             <div className="flex items-center gap-3.5">

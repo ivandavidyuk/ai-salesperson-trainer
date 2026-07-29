@@ -13,7 +13,12 @@ import Loader from "@/app/components/Loader";
 import TeamStatsModal from "@/app/components/TeamStatsModal";
 import { initials, plural } from "@/lib/format";
 import { PLACE_BANNER, PLACE_PILL, placeLabel } from "@/lib/podium";
-import { SCORE_TEXT_CLASS, scoreTone } from "@/lib/score";
+import {
+  DEALS_RATE_MIN_CONVERSATIONS,
+  SCORE_TEXT_CLASS,
+  formatDealsRate,
+  scoreTone,
+} from "@/lib/score";
 import type { TeamMemberStats } from "@/lib/team";
 
 /** Подписи дней под спарклайном: последний столбик — сегодня. */
@@ -80,7 +85,7 @@ function Sparkline({ activity }: { activity: number[] }) {
   );
 }
 
-function MiniStat({ value, label }: { value: number; label: string }) {
+function MiniStat({ value, label }: { value: number | string; label: string }) {
   return (
     <div className="flex-1 rounded-[11px] border border-line-soft bg-surface px-2 py-[11px] text-center">
       <div className="font-mono text-[19px] text-ink">{value}</div>
@@ -138,6 +143,14 @@ function PodiumCard({
           <div className="mt-[18px] flex gap-2.5">
             <MiniStat value={manager.total} label="разговоров" />
             <MiniStat value={manager.week} label="за неделю" />
+            {/* Процент намеренно без цвета: средняя оценка про технику,
+                процент про результат. Подкрасить его «в плохо» — и подиум
+                превращается в табло позора, хотя 20% для холодного трафика
+                может быть нормой */}
+            <MiniStat
+              value={formatDealsRate(manager.paidDeals, manager.total).label}
+              label="закрыто"
+            />
           </div>
 
           <div className="mt-[18px]">
@@ -208,6 +221,12 @@ function OtherRow({
         <div className="font-mono text-[19px] text-ink">{manager.week}</div>
         <div className="mt-0.5 text-[11px] text-ink-subtle">за неделю</div>
       </div>
+      <div className="w-[84px] text-center">
+        <div className="font-mono text-[19px] text-ink">
+          {formatDealsRate(manager.paidDeals, manager.total).label}
+        </div>
+        <div className="mt-0.5 text-[11px] text-ink-subtle">закрыто</div>
+      </div>
 
       <button
         type="button"
@@ -274,6 +293,15 @@ export default function StatsPage() {
     return Math.round((sum / scored.length) * 10) / 10;
   }, [ranked]);
 
+  // Процент по отделу считается по сумме разговоров, а не как среднее
+  // процентов: иначе менеджер с тремя разговорами весил бы столько же,
+  // сколько менеджер с тридцатью
+  const teamDeals = useMemo(() => {
+    const paid = ranked.reduce((acc, m) => acc + m.paidDeals, 0);
+    const total = ranked.reduce((acc, m) => acc + m.total, 0);
+    return formatDealsRate(paid, total);
+  }, [ranked]);
+
   // Награды. Каждая считается по своему показателю и каждая может
   // отсутствовать: «прирост» без прошлой недели выдумывать нельзя.
   const awards = useMemo<Award[]>(() => {
@@ -290,6 +318,11 @@ export default function StatsPage() {
     const grinder = leader((m) => m.week);
     const improver = leader((m) => m.weekDelta);
     const marathoner = leader((m) => m.total);
+    // «Закрыватель» — только среди тех, у кого разговоров достаточно:
+    // один закрытый из одного даёт 100% и забрал бы награду ни за что
+    const closer = leader((m) =>
+      m.total >= DEALS_RATE_MIN_CONVERSATIONS ? m.paidDeals / m.total : null
+    );
 
     const list: Award[] = [];
     if (grinder) {
@@ -314,6 +347,14 @@ export default function StatsPage() {
         label: "Марафонец",
         tone: "bg-surface-bubble text-ink-muted",
         metric: `${marathoner.total} ${plural(marathoner.total, "разговор", "разговора", "разговоров")} всего`,
+      });
+    }
+    if (closer) {
+      list.push({
+        manager: closer,
+        label: "Закрыватель",
+        tone: "bg-surface-accent text-brand-score",
+        metric: `${formatDealsRate(closer.paidDeals, closer.total).label} закрытых сделок`,
       });
     }
     return list;
@@ -409,6 +450,20 @@ export default function StatsPage() {
                       {team.length}{" "}
                       {plural(team.length, "менеджер", "менеджера", "менеджеров")} ·
                       за неделю
+                    </div>
+                  </div>
+
+                  {/* Процент по отделу — ориентир для менеджера: сравнение
+                      идёт с отделом, а не со ста процентами */}
+                  <div className="flex shrink-0 flex-col justify-center border-r border-line-soft pr-[26px]">
+                    <div className="text-[11px] uppercase tracking-[.06em] text-ink-subtle">
+                      Закрытых сделок
+                    </div>
+                    <div className="mt-1.5 font-mono text-[40px] font-medium leading-none text-ink">
+                      {teamDeals.label}
+                    </div>
+                    <div className="mt-[7px] whitespace-nowrap text-xs text-ink-subtle">
+                      {teamDeals.hint ?? "по всем разговорам отдела"}
                     </div>
                   </div>
 

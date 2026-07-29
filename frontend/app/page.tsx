@@ -15,35 +15,59 @@ import ProgressPanel from "@/app/components/ProgressPanel";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import type { HomeData } from "@/lib/home";
 import { formatDuration, greeting } from "@/lib/format";
+import { formatDealsRate } from "@/lib/score";
 
-// Карточка одного показателя статистики
+// Карточка одного показателя статистики.
+//
+// Сетка на шесть колонок: три обычных показателя по две колонки в первом
+// ряду, два акцентных по три — во втором. Пятая плитка появилась вместе
+// с процентом сделок, и делить шесть на два ряда оказалось честнее, чем
+// оставлять её одну в сетке 2×2.
 function StatCard({
   value,
   label,
+  suffix,
+  span,
   accent = false,
 }: {
   value: string;
   label: string;
+  /** Приписка мелким после значения: «/ 10», «%» */
+  suffix?: string;
+  span: 2 | 3;
   accent?: boolean;
 }) {
-  if (accent) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-line-accent bg-surface-accent px-4 py-3 text-center">
-        <div className="font-mono text-2xl text-brand-score">
-          {value}
-          {/* «/ 10» показываем только когда оценка есть */}
-          {value !== "—" && (
-            <span className="text-sm text-brand-score-muted"> / 10</span>
-          )}
-        </div>
-        <div className="mt-0.5 text-[11.5px] text-brand-score-label">{label}</div>
-      </div>
-    );
-  }
+  const cls = accent
+    ? "border-line-accent bg-surface-accent"
+    : "border-line bg-surface-card";
+
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-line bg-surface-card px-4 py-3 text-center">
-      <div className="font-mono text-[26px] text-ink">{value}</div>
-      <div className="mt-0.5 text-xs text-ink-muted">{label}</div>
+    <div
+      style={{ gridColumn: `span ${span}` }}
+      className={`flex flex-col items-center justify-center rounded-xl border px-3 py-[11px] text-center ${cls}`}
+    >
+      <div
+        className={`font-mono leading-[1.1] ${
+          accent ? "text-2xl text-brand-score" : "text-[26px] text-ink"
+        }`}
+      >
+        {value}
+        {/* Приписку прячем у прочерка: «— / 10» читается как поломка */}
+        {suffix && value !== "—" && (
+          <span
+            className={accent ? "text-[15px] text-brand-score-muted" : "text-sm text-ink-muted"}
+          >
+            {suffix}
+          </span>
+        )}
+      </div>
+      <div
+        className={`mt-[3px] whitespace-nowrap text-[11.5px] ${
+          accent ? "text-brand-score-label" : "text-ink-muted"
+        }`}
+      >
+        {label}
+      </div>
     </div>
   );
 }
@@ -93,6 +117,10 @@ export default function HomePage() {
   );
 
   const hasConversations = (data?.stats.total ?? 0) > 0;
+  const dealsRate = formatDealsRate(
+    data?.stats.paidDeals ?? 0,
+    data?.stats.total ?? 0
+  );
 
   return (
     <AppShell title="Главная">
@@ -151,17 +179,28 @@ export default function HomePage() {
                 <DailyCard tip={data.daily.tip} motivation={data.daily.motivation} />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard value={String(data.stats.total)} label="разговоров всего" />
-                <StatCard value={String(data.stats.thisWeek)} label="на этой неделе" />
+              <div className="grid grid-cols-6 gap-3">
+                <StatCard span={2} value={String(data.stats.total)} label="разговоров" />
+                <StatCard span={2} value={String(data.stats.thisWeek)} label="за неделю" />
                 <StatCard
+                  span={2}
                   value={formatDuration(data.stats.avgDurationSec)}
                   label="средняя длина"
                 />
                 <StatCard
+                  span={3}
                   accent
                   value={data.stats.avgScore === null ? "—" : String(data.stats.avgScore)}
+                  suffix=" / 10"
                   label="средняя оценка"
+                />
+                {/* Знаменатель — все разговоры, а не только разобранные.
+                    До пяти разговоров процент врёт, поэтому там «1 из 3» */}
+                <StatCard
+                  span={3}
+                  accent
+                  value={dealsRate.label}
+                  label={dealsRate.hint ? "закрытых сделок · мало данных" : "закрытых сделок"}
                 />
               </div>
             </div>
