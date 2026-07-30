@@ -50,12 +50,19 @@ export interface TeamMemberStats {
 }
 
 /**
- * Собирает статистику по всем менеджерам. Руководителей в списке нет:
- * страница про отдел продаж, а не про того, кто им руководит.
+ * Собирает статистику по менеджерам одной клиники. Руководителей в списке
+ * нет: страница про отдел продаж, а не про того, кто им руководит.
+ *
+ * `organizationId` обязателен параметром, а не берётся внутри: раньше функция
+ * считала по ВСЕМ менеджерам базы, и со второй клиникой руководитель увидел бы
+ * чужой отдел. Значение null тоже осмысленно — это менеджеры, ни к какой
+ * клинике не привязанные.
  */
-export async function getTeamStats(): Promise<TeamMemberStats[]> {
+export async function getTeamStats(
+  organizationId: string | null
+): Promise<TeamMemberStats[]> {
   const managers = await prisma.user.findMany({
-    where: { role: UserRole.manager },
+    where: { role: UserRole.manager, organizationId },
     orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
     select: {
       id: true,

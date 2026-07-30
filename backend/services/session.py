@@ -48,6 +48,28 @@ def _prompt_key(session_id: str) -> str:
     return f"session:{session_id}:prompt"
 
 
+# Роль пациента для сессии: сначала случай, собранный под клинику этого
+# пользователя, и лишь при его отсутствии — исходный промпт из сида.
+#
+# COALESCE и есть страховка на выкатку: пока руководитель не заполнил форму,
+# PatientCase пуст и разговор идёт ровно как раньше. Тем же порядком читает
+# итоговый оценщик — иначе он судил бы по офтальмологии разговор, который
+# роль вела про зубы.
+_PATIENT_PROMPT_SQL = (
+    'SELECT COALESCE(pc."prompt", p."prompt") AS patient_prompt, '
+    'p."name" AS patient_name, '
+    '(pc."prompt" IS NOT NULL) AS case_generated, '
+    't."prompt" AS type_prompt, t."title" AS type_title '
+    'FROM "Session" s '
+    'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
+    'LEFT JOIN "TrainingType" t ON t."id" = s."trainingTypeId" '
+    'LEFT JOIN "User" u ON u."id" = s."userId" '
+    'LEFT JOIN "PatientCase" pc ON pc."patientId" = s."patientId" '
+    '  AND pc."organizationId" = u."organizationId" '
+    'WHERE s."id" = $1'
+)
+
+
 def _scores_key(session_id: str) -> str:
     """Последняя фоновая оценка этапов — от неё зависит порог допуска."""
     return f"session:{session_id}:scores"
@@ -224,15 +246,7 @@ class SessionStore:
         if cached is not None:
             return cached or None
 
-        row = await self._pool.fetchrow(
-            'SELECT p."prompt" AS patient_prompt, p."name" AS patient_name, '
-            't."prompt" AS type_prompt, t."title" AS type_title '
-            'FROM "Session" s '
-            'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
-            'LEFT JOIN "TrainingType" t ON t."id" = s."trainingTypeId" '
-            'WHERE s."id" = $1',
-            session_id,
-        )
+        row = await self._pool.fetchrow(_PATIENT_PROMPT_SQL, session_id)
         if row is None:
             return None
 
@@ -249,10 +263,12 @@ class SessionStore:
         prompt = llm.build_system_prompt(row["patient_prompt"], row["type_prompt"])
 
         logger.info(
-            "Сессия %s: промпт собран — пациент «%s», тип «%s», %d символов",
+            "Сессия %s: промпт собран — пациент «%s», тип «%s», случай %s, "
+            "%d символов",
             session_id,
             row["patient_name"],
             row["type_title"] or "не задан",
+            "клиники" if row["case_generated"] else "исходный",
             len(prompt),
         )
         await self._redis.set(_prompt_key(session_id), prompt)
@@ -278,16 +294,14 @@ class SessionStore:
         """Промпт пациента — тот же текст, что был у роли.
 
         Итоговый оценщик проверяет условия согласия по нему, а не по своему
-        представлению о правильной продаже.
+        представлению о правильной продаже. Поэтому и случай клиники берётся
+        тот же самый: иначе оценщик судил бы по офтальмологии разговор,
+        который роль вела про зубы, и не нашёл бы ни одного выполненного
+        условия.
         """
         assert self._pool is not None
-        row = await self._pool.fetchrow(
-            'SELECT p."prompt" FROM "Session" s '
-            'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
-            'WHERE s."id" = $1',
-            session_id,
-        )
-        return (row["prompt"] if row else None) or None
+        row = await self._pool.fetchrow(_PATIENT_PROMPT_SQL, session_id)
+        return (row["patient_prompt"] if row else None) or None
 
     async def save_review(self, session_id: str, review: dict) -> None:
         """Записывает разбор разговора. Существующий перезаписывает."""

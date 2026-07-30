@@ -18,33 +18,21 @@
 Подробности механизма — в DEAL-OUTCOME.md.
 """
 
-import asyncio
-import json
 import logging
 from dataclasses import dataclass
 from typing import Optional
 
-import httpx
-
 from core.config import get_settings
+from services.llm_json import ask_json
 
 logger = logging.getLogger(__name__)
 
-# Отдельный клиент от llm.py: у оценщика длинные запросы и своя таймаутная
-# политика, и он не должен занимать соединения голосового пайплайна
-_client = httpx.AsyncClient(timeout=60)
+# Клиент, повторы и разбор ответа — в services/llm_json.py: тем же занят
+# генератор случая, и второй реализации быть не должно.
 
-# Потолок ответа. С включённым размышлением модель тратит бюджет на мысли
-# (в замере — 4000 токенов только на них), и без явного запаса JSON
-# обрывается на середине строки.
-_MAX_TOKENS = 8000
-
-# Провайдер отвечает HTTP 200, но кладёт внутрь finish_reason=error —
-# обычно это 429 «temporarily rate-limited upstream» от Google. Один такой
-# ответ не должен оставлять разговор без разбора: второй попытки у итогового
-# оценщика нет, в отличие от фонового, который повторится на следующем ходу.
+# Итоговому оценщику повторы нужны: второго шанса у него нет, в отличие
+# от фонового, который пересчитается на следующем ходу
 _ATTEMPTS = 3
-_RETRY_DELAY_SEC = 2.0
 
 # Этапы в том же порядке, что и в STAGE_METRICS на фронте
 STAGE_KEYS = ("contact", "iceBreaker", "needs", "objections")
@@ -135,109 +123,6 @@ def format_transcript(history: list[dict]) -> str:
     return "\n".join(lines)
 
 
-async def _ask(
-    messages: list[dict], *, purpose: str, attempts: int = 1, final: bool = False
-) -> Optional[dict]:
-    """Запрос к модели-оценщику. Возвращает разобранный JSON или None.
-
-    Никогда не бросает: оценка не имеет права влиять на разговор.
-
-    @param attempts сколько раз повторить при отказе провайдера. Фоновому
-    оценщику хватает одной: он всё равно пересчитается на следующем ходу,
-    а лишние попытки только добавляют нагрузки на тот же ключ. Итоговому
-    повторы нужны — второго шанса у него нет.
-
-    @param final брать модель итогового оценщика вместо фонового. Требования
-    у них противоположные — см. core/config.py.
-    """
-    settings = get_settings()
-    if not settings.llm_api_key:
-        logger.warning("Оценщик (%s): нет ключа LLM", purpose)
-        return None
-
-    payload = {
-        "model": settings.final_scorer_model if final else settings.scorer_model,
-        "messages": messages,
-        "temperature": 0.2,  # судейство должно быть воспроизводимым
-        "response_format": {"type": "json_object"},
-        # В отличие от роли, размышление здесь включено: задержка не важна,
-        # а устойчивость суждения — главное
-        "reasoning": {"enabled": True},
-        "max_tokens": _MAX_TOKENS,
-    }
-
-    for attempt in range(1, attempts + 1):
-        result = await _attempt(payload, purpose=purpose, attempt=attempt)
-        if result is not None:
-            return result
-        if attempt < attempts:
-            # Пауза растёт: при троттлинге сверху немедленный повтор
-            # упирается в тот же лимит
-            await asyncio.sleep(_RETRY_DELAY_SEC * attempt)
-
-    if attempts > 1:
-        logger.warning("Оценщик (%s): %d попытки подряд без ответа", purpose, attempts)
-    return None
-
-
-async def _attempt(payload: dict, *, purpose: str, attempt: int) -> Optional[dict]:
-    """Одна попытка. Возвращает разобранный JSON либо None с записью в лог."""
-    settings = get_settings()
-    try:
-        response = await _client.post(
-            f"{settings.llm_base_url}/chat/completions",
-            json=payload,
-            headers={"Authorization": f"Bearer {settings.llm_api_key}"},
-        )
-        response.raise_for_status()
-        choice = (response.json().get("choices") or [{}])[0]
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Оценщик (%s), попытка %d: запрос не прошёл: %s", purpose, attempt, exc)
-        return None
-
-    content = (choice.get("message") or {}).get("content")
-    if not content:
-        # Пустой content при HTTP 200 — это отказ провайдера, а не наш
-        # разбор ответа. Причину печатаем: без неё в логе оставалась
-        # загадочная «the JSON object must be str, not NoneType»
-        logger.warning(
-            "Оценщик (%s), попытка %d: пустой ответ (finish=%s, причина=%s)",
-            purpose,
-            attempt,
-            choice.get("finish_reason"),
-            str(choice.get("error") or "не указана")[:200],
-        )
-        return None
-
-    try:
-        return json.loads(_unfence(content))
-    except json.JSONDecodeError as exc:
-        logger.warning(
-            "Оценщик (%s), попытка %d: ответ не разобрался (%s), начало: %.120s",
-            purpose,
-            attempt,
-            exc,
-            content,
-        )
-        return None
-
-
-def _unfence(content: str) -> str:
-    """Снимает markdown-заборчик вокруг JSON.
-
-    Часть моделей оборачивает ответ в ```json … ``` даже при явном
-    response_format=json_object — так делает, например, claude-haiku-4.5.
-    Ответ при этом полностью корректный, спотыкается только наш разбор,
-    и модель выглядит непригодной, хотя дело в одной строке кода.
-    """
-    text = content.strip()
-    if not text.startswith("```"):
-        return text
-    # Первая строка — открывающий забор с необязательным языком
-    without_open = text.split("\n", 1)[-1]
-    return without_open.rsplit("```", 1)[0].strip()
-
-
 async def score_stages(
     history: list[dict], patient_role: Optional[str] = None
 ) -> Optional[StageScores]:
@@ -259,7 +144,7 @@ async def score_stages(
         if patient_role
         else ""
     )
-    result = await _ask(
+    result = await ask_json(
         [
             {"role": "system", "content": _RUBRIC + context},
             {
@@ -273,6 +158,7 @@ async def score_stages(
                 ),
             },
         ],
+        model=get_settings().scorer_model,
         purpose="этапы",
     )
     if result is None:
@@ -358,7 +244,7 @@ async def review_conversation(
     # «отказала из-за слабой техники» от «отказала из-за неснятого страха»,
     # а это разные советы менеджеру
     threshold = get_settings().deal_score_threshold
-    result = await _ask(
+    result = await ask_json(
         [
             {
                 "role": "system",
@@ -384,9 +270,9 @@ async def review_conversation(
                 ),
             },
         ],
+        model=get_settings().final_scorer_model,
         purpose="итог",
         attempts=_ATTEMPTS,
-        final=True,
     )
     if result is None:
         return None

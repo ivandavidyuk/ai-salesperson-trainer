@@ -14,10 +14,11 @@ import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 
+from core.auth import verify_token
 from core.config import get_settings
-from services import llm, scoring, tts
+from services import case_generator, llm, scoring, tts
 from services.session import (
     STATUS_ACTIVE,
     STATUS_COMPLETED,
@@ -217,6 +218,42 @@ app = FastAPI(title="AI Salesperson Trainer — WS Server", lifespan=lifespan)
 async def health():
     """Простой healthcheck."""
     return {"status": "ok"}
+
+
+@app.post("/cases/generate")
+async def generate_case_endpoint(request: Request):
+    """Собирает случай пациента под клинику. Зовёт Next.js при сохранении формы.
+
+    Генерация живёт здесь, а не во фронтенде, по двум причинам: тут ключ
+    и тут сетевая позиция (из России путь до OpenRouter другой). Но собирать
+    промпт из слоёв — работа фронтенда: сборщик написан на TypeScript,
+    и второй реализации на Python быть не должно, иначе они разъедутся.
+    Поэтому эндпоинт отдаёт слоты, а не готовый текст.
+
+    Проверяем подпись токена, но не роль: роль проверил вызывающий, а сюда
+    приходят только те данные, которые он же и прислал. Читать что-либо
+    из нашей базы эндпоинт не умеет.
+    """
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    if verify_token(token) is None:
+        raise HTTPException(status_code=401, detail="Недействительный токен")
+
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Некорректный запрос") from None
+
+    personality = body.get("personality")
+    clinic = body.get("clinic")
+    if not isinstance(personality, dict) or not isinstance(clinic, dict):
+        raise HTTPException(status_code=400, detail="Нужны personality и clinic")
+
+    case = await case_generator.generate_case(personality, clinic)
+    if case is None:
+        # Провайдер не ответил или ответ не прошёл проверку формы. Причина
+        # уже в логе; вызывающему важно одно — этот пациент не собрался
+        raise HTTPException(status_code=502, detail="Не удалось собрать случай")
+    return case
 
 
 async def safe_send(ws: WebSocket, message: dict) -> None:
