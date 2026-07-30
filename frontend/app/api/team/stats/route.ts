@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json(await getTeamStats());
+    // Считаем по клинике руководителя: чужой отдел ему не показываем
+    return NextResponse.json(await getTeamStats(head.organizationId));
   } catch (error) {
     console.error("Ошибка в /api/team/stats:", error);
     return NextResponse.json(

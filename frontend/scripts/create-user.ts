@@ -68,6 +68,36 @@ async function main() {
     process.exit(1);
   }
 
+  // Клиника. Регистрации в продукте нет, поэтому привязка происходит здесь:
+  // сам менеджер организацию не выбирает — иначе попал бы в чужую статистику
+  // отдела. Когда клиника одна, вопрос не задаём вовсе.
+  const organizations = await prisma.organization.findMany({
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, industry: true },
+  });
+
+  let organizationId: string | null = null;
+  if (organizations.length === 1) {
+    organizationId = organizations[0].id;
+    console.log(`\nКлиника: ${organizations[0].name} (единственная)`);
+  } else if (organizations.length > 1) {
+    console.log("\nКлиники:");
+    organizations.forEach((org, index) => {
+      console.log(`  ${index + 1}. ${org.name} — ${org.industry}`);
+    });
+    const choice = Number(await ask("Номер клиники: "));
+    const chosen = organizations[choice - 1];
+    if (!chosen) {
+      console.error("\nОшибка: такой клиники нет.");
+      process.exit(1);
+    }
+    organizationId = chosen.id;
+  } else {
+    // Пустая база: пользователь создастся без клиники, и это честно —
+    // выдумывать организацию скрипт не должен
+    console.log("\nКлиник в базе нет — пользователь создаётся без привязки.");
+  }
+
   // Хэшируем пароль (10 раундов соли — стандартный баланс скорость/безопасность)
   const passwordHash = await bcrypt.hash(password, 10);
 
@@ -78,13 +108,15 @@ async function main() {
       passwordHash,
       firstName,
       lastName,
+      organizationId,
     },
   });
 
   console.log(`\nПользователь создан успешно:`);
-  console.log(`  id:    ${user.id}`);
-  console.log(`  email: ${user.email}`);
-  console.log(`  имя:   ${user.firstName} ${user.lastName}`);
+  console.log(`  id:      ${user.id}`);
+  console.log(`  email:   ${user.email}`);
+  console.log(`  имя:     ${user.firstName} ${user.lastName}`);
+  console.log(`  клиника: ${organizationId ? organizations.find((o) => o.id === organizationId)?.name : "не задана"}`);
 }
 
 main()

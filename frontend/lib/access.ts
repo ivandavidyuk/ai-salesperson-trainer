@@ -11,6 +11,9 @@ import { getAuthUser } from "@/lib/auth";
 export interface AccessUser {
   id: string;
   role: UserRole;
+  // Клиника пользователя. Нужна там, где данные одной клиники не должны
+  // попадать в другую: статистика отдела, случаи пациентов, форма отрасли
+  organizationId: string | null;
 }
 
 /** Текущий пользователь вместе с ролью, либо null если не авторизован. */
@@ -22,7 +25,7 @@ export async function getUserWithRole(
 
   const user = await prisma.user.findUnique({
     where: { id: auth.sub },
-    select: { id: true, role: true },
+    select: { id: true, role: true, organizationId: true },
   });
   return user ?? null;
 }
