@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireHead } from "@/lib/access";
+import { rebuildCases } from "@/lib/cases";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -162,6 +163,18 @@ export async function PUT(request: NextRequest) {
 
       return organization.id;
     });
+
+    // Сборка случаев идёт после ответа: сто пациентов — сто вызовов модели,
+    // и держать HTTP-запрос открытым столько времени нельзя, его оборвут
+    // и Caddy, и браузер. Интерфейс вместо этого держит лоадер и опрашивает
+    // casesReady/casesTotal, которые пишет rebuildCases.
+    //
+    // Отпускаем без await намеренно, но с обработчиком: необработанное
+    // отклонение в Node роняет процесс, а сборка случаев не имеет права
+    // ронять сервер.
+    void rebuildCases(saved, head.id).catch((error) =>
+      console.error("Сборка случаев не удалась:", error)
+    );
 
     return NextResponse.json(await organizationWithServices(saved));
   } catch (error) {
