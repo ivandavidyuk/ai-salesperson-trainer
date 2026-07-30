@@ -8,7 +8,6 @@ import { useRouter } from "next/navigation";
 import AppShell, { PROFILE_UPDATED_EVENT } from "@/app/components/AppShell";
 import Alert from "@/app/components/Alert";
 import Button from "@/app/components/Button";
-import Field from "@/app/components/Field";
 import Loader from "@/app/components/Loader";
 import { compressAvatar } from "@/lib/avatar";
 import { initials } from "@/lib/format";
@@ -94,7 +93,6 @@ export default function ProfilePage() {
             <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto pr-1.5">
               {profile.role === "head" && <ClinicForm />}
               <PersonalForm profile={profile} onChange={setProfile} />
-              <PasswordForm />
             </div>
           </>
         )}
@@ -301,26 +299,46 @@ function AvatarCard({ profile, onChange }: CardProps) {
   );
 }
 
+// Личные данные вместе со сменой пароля.
+//
+// Отдельной карточки «Смена пароля» больше нет: по макету пароль живёт здесь
+// строкой с кнопкой «Изменить», которая разворачивает форму на месте. Так
+// правая колонка перестала быть лестницей из трёх почти одинаковых карточек.
 function PersonalForm({ profile, onChange }: CardProps) {
-  const [firstName, setFirstName] = useState(profile.firstName);
-  const [lastName, setLastName] = useState(profile.lastName);
+  // Имя и фамилия — одно поле, как в макете, а в базе две колонки. Режем
+  // по первому пробелу: «Анна Мария Петрова» станет именем «Анна» и фамилией
+  // «Мария Петрова». Не идеально, зато устойчиво — обратная склейка даёт
+  // ровно исходную строку, и повторное сохранение ничего не портит
+  const [fullName, setFullName] = useState(
+    `${profile.firstName} ${profile.lastName}`.trim()
+  );
   const [email, setEmail] = useState(profile.email);
   const [jobTitle, setJobTitle] = useState(profile.jobTitle ?? "");
-  const [clinic, setClinic] = useState(profile.clinic ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
     setSaved(false);
+
+    const trimmed = fullName.trim();
+    const space = trimmed.indexOf(" ");
+    if (space < 0) {
+      setError("Укажите имя и фамилию");
+      return;
+    }
+    const firstName = trimmed.slice(0, space);
+    const lastName = trimmed.slice(space + 1).trim();
+
     setBusy(true);
     try {
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, email, jobTitle, clinic }),
+        body: JSON.stringify({ firstName, lastName, email, jobTitle }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -345,38 +363,49 @@ function PersonalForm({ profile, onChange }: CardProps) {
       <div className="text-[15.5px] font-semibold text-ink">Личные данные</div>
 
       <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3.5">
-        <Field
-          label="Имя"
-          value={firstName}
-          onChange={(e) => setFirstName(e.target.value)}
-          autoComplete="given-name"
-        />
-        <Field
-          label="Фамилия"
-          value={lastName}
-          onChange={(e) => setLastName(e.target.value)}
-          autoComplete="family-name"
-        />
-        <Field
-          label="E-mail"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="email"
-        />
-        <Field
-          label="Должность"
-          value={jobTitle}
-          onChange={(e) => setJobTitle(e.target.value)}
-          placeholder="Менеджер по продажам"
-        />
-        <Field
-          label="Клиника"
-          value={clinic}
-          onChange={(e) => setClinic(e.target.value)}
-          placeholder="Название клиники"
-          className="col-span-2"
-        />
+        <div>
+          <FieldLabel>Имя и фамилия</FieldLabel>
+          <TextInput
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            autoComplete="name"
+          />
+        </div>
+        <div>
+          <FieldLabel>E-mail</FieldLabel>
+          <TextInput
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+          />
+        </div>
+        <div>
+          <FieldLabel>Должность</FieldLabel>
+          <TextInput
+            value={jobTitle}
+            onChange={(e) => setJobTitle(e.target.value)}
+            placeholder="Менеджер по продажам"
+          />
+        </div>
+        <div>
+          <FieldLabel>Пароль</FieldLabel>
+          {/* Пока форма развёрнута, ячейка остаётся на месте, но пустеет:
+              управление уезжает вниз, к самим полям, и второй кнопки,
+              делающей то же самое, не появляется */}
+          <div className="flex h-[43px] items-center gap-3 rounded-[11px] border border-line-strong pl-3.5 pr-1.5">
+            <span className="min-w-0 flex-1 text-[13.5px] text-ink-muted">••••••••</span>
+            {!changingPassword && (
+              <button
+                type="button"
+                onClick={() => setChangingPassword(true)}
+                className="shrink-0 whitespace-nowrap rounded-lg border border-line-strong bg-surface-card px-3.5 py-[7px] text-[13px] font-semibold text-ink transition-colors hover:bg-surface-bubble"
+              >
+                Изменить
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {error && <Alert className="mt-4">{error}</Alert>}
@@ -389,7 +418,121 @@ function PersonalForm({ profile, onChange }: CardProps) {
           Сохранить
         </Button>
       </div>
+
+      {changingPassword && (
+        <PasswordFields onDone={() => setChangingPassword(false)} />
+      )}
     </form>
+  );
+}
+
+// Смена пароля. Живёт внутри карточки личных данных и разворачивается
+// по кнопке: отдельной карточкой она занимала треть колонки ради действия,
+// которое совершают раз в год.
+//
+// Своей формы у неё нет — она внутри формы личных данных, и вложенные <form>
+// в HTML недопустимы. Поэтому отправка по кнопке, а не по submit.
+function PasswordFields({ onDone }: { onDone: () => void }) {
+  const [currentPassword, setCurrent] = useState("");
+  const [newPassword, setNew] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSave() {
+    setError("");
+    // Совпадение проверяем здесь: серверу второй экземпляр не нужен
+    if (newPassword !== repeat) {
+      setError("Пароли не совпадают");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const res = await fetch("/api/profile/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Не удалось обновить пароль");
+        return;
+      }
+      onDone();
+    } catch {
+      setError("Не удалось обновить пароль");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      // Поля лежат внутри формы личных данных, и Enter в них отправил бы её —
+      // пользователь менял пароль, а сохранились бы имя и почта
+      onKeyDown={(event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        if (!busy) void handleSave();
+      }}
+      className="mt-5 border-t border-line-soft pt-[18px]"
+    >
+      <div className="text-[13.5px] font-semibold text-ink">Смена пароля</div>
+      <p className="mt-1 text-[12.5px] text-ink-subtle">
+        Не менее 8 символов, буквы и цифры.
+      </p>
+
+      <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-3.5">
+        <div className="col-span-2">
+          <FieldLabel>Текущий пароль</FieldLabel>
+          <TextInput
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrent(e.target.value)}
+            autoComplete="current-password"
+          />
+        </div>
+        <div>
+          <FieldLabel>Новый пароль</FieldLabel>
+          <TextInput
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNew(e.target.value)}
+            autoComplete="new-password"
+          />
+        </div>
+        <div>
+          <FieldLabel>Повторите пароль</FieldLabel>
+          <TextInput
+            type="password"
+            value={repeat}
+            onChange={(e) => setRepeat(e.target.value)}
+            autoComplete="new-password"
+          />
+        </div>
+      </div>
+
+      {error && <Alert className="mt-3.5">{error}</Alert>}
+
+      <div className="mt-4 flex items-center justify-end gap-3">
+        <button
+          type="button"
+          onClick={onDone}
+          className="text-[13.5px] font-medium text-ink-muted hover:text-ink"
+        >
+          Отмена
+        </button>
+        <Button
+          type="button"
+          onClick={handleSave}
+          loading={busy}
+          className="px-5 py-[10px] text-[14px]"
+        >
+          Обновить пароль
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -945,101 +1088,5 @@ function FailedModal({
         </div>
       </div>
     </div>
-  );
-}
-
-function PasswordForm() {
-  const [currentPassword, setCurrent] = useState("");
-  const [newPassword, setNew] = useState("");
-  const [repeat, setRepeat] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    setDone(false);
-
-    // Совпадение проверяем здесь: серверу второй экземпляр не нужен
-    if (newPassword !== repeat) {
-      setError("Пароли не совпадают");
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const res = await fetch("/api/profile/password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Не удалось обновить пароль");
-        return;
-      }
-      setCurrent("");
-      setNew("");
-      setRepeat("");
-      setDone(true);
-    } catch {
-      setError("Не удалось обновить пароль");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-2xl border border-line bg-surface-card px-6 py-[22px]"
-    >
-      <div className="text-[15.5px] font-semibold text-ink">Смена пароля</div>
-      <div className="mt-1 text-[13px] text-ink-subtle">
-        Не менее 8 символов, буквы и цифры.
-      </div>
-
-      <div className="mt-4 flex flex-col gap-3.5">
-        <Field
-          label="Текущий пароль"
-          type="password"
-          value={currentPassword}
-          onChange={(e) => setCurrent(e.target.value)}
-          autoComplete="current-password"
-        />
-        <div className="grid grid-cols-2 gap-4">
-          <Field
-            label="Новый пароль"
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNew(e.target.value)}
-            placeholder="Введите новый пароль"
-            autoComplete="new-password"
-          />
-          <Field
-            label="Повторите пароль"
-            type="password"
-            value={repeat}
-            onChange={(e) => setRepeat(e.target.value)}
-            placeholder="Повторите новый пароль"
-            autoComplete="new-password"
-          />
-        </div>
-      </div>
-
-      {error && <Alert className="mt-4">{error}</Alert>}
-
-      <div className="mt-[18px] flex items-center justify-end gap-3">
-        {done && !error && (
-          <span className="text-[13px] font-medium text-good">
-            Пароль обновлён
-          </span>
-        )}
-        <Button type="submit" loading={busy} className="px-6 py-[11px] text-[14.5px]">
-          Обновить пароль
-        </Button>
-      </div>
-    </form>
   );
 }
