@@ -227,6 +227,30 @@ async def safe_send(ws: WebSocket, message: dict) -> None:
         logger.warning("Не удалось отправить сообщение клиенту: %s", exc)
 
 
+def _describe(exc: BaseException) -> str:
+    """Читаемое описание исключения для лога.
+
+    У части исключений строковое представление пустое — у asyncio.TimeoutError
+    в первую очередь. Из-за этого запись обрывалась на двоеточии, и разбирать
+    сбой приходилось по соседним строкам вместо самой записи об ошибке.
+    """
+    text = str(exc).strip()
+    name = type(exc).__name__
+    return f"{name}: {text}" if text else name
+
+
+def _user_message(exc: BaseException) -> str:
+    """Что показать менеджеру на экране, когда ход сорвался.
+
+    Менеджеру нужно знать, что делать дальше, а не как называется исключение.
+    Известные сбои поэтому объясняются словами, а для остальных остаётся тип:
+    пустая надпись «Ошибка обработки:» не говорит ни ему, ни нам ничего.
+    """
+    if isinstance(exc, asyncio.TimeoutError):
+        return "Пациент не ответил вовремя — повторите реплику"
+    return f"Ошибка обработки: {_describe(exc)}"
+
+
 class TurnManager:
     """Оркестратор ходов диалога поверх STT-коммитов.
 
@@ -806,10 +830,12 @@ class TurnManager:
             raise
         except Exception as exc:  # noqa: BLE001
             # Любой сбой шага не роняет сервер — сообщаем клиенту
-            logger.error("Ошибка пайплайна (сессия %s): %s", session_id, exc)
+            logger.error(
+                "Ошибка пайплайна (сессия %s): %s", session_id, _describe(exc)
+            )
             await safe_send(
                 ws,
-                {"type": "error", "message": f"Ошибка обработки: {exc}"},
+                {"type": "error", "message": _user_message(exc)},
             )
         finally:
             if producer is not None and not producer.done():
