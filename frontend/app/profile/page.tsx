@@ -682,7 +682,10 @@ function ClinicForm() {
             Пациенты пересобраны под «{saved.industry}» — все {saved.casesTotal}.
           </div>
         )}
-        {outcome === "failed" && partial && (
+        {/* Плашка говорит о состоянии, а не о нажатой кнопке: недособранная
+            организация должна быть видна и после перезагрузки страницы,
+            иначе часть пациентов молча останется с чужой отраслью */}
+        {partial && !progress && (
           <div className="flex items-start gap-2.5 border-b border-warn-border bg-warn-surface px-6 py-[13px] text-[13.5px] leading-normal text-warn">
             <div>
               <span className="font-semibold">
