@@ -45,8 +45,8 @@ import {
 // говорит. Намеренная правка промпта — значит обновить эти два числа тем же
 // коммитом, и это видно в диффе.
 const TAMARA_BASELINE = {
-  length: 5256,
-  md5: "e0b7e898605343e2686ffbb4336b95a1",
+  length: 5245,
+  md5: "43357e28335045750c0ed36233baf1b9",
 };
 
 const md5 = (text: string) => createHash("md5").update(text, "utf8").digest("hex");
