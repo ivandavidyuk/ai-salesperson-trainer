@@ -26,7 +26,8 @@ backend/
     config.py          # настройки из .env
     auth.py            # проверка JWT
   scripts/
-    diag_latency.py    # замер задержек сети, LLM и TTS в изоляции от голоса
+    sim_conversation.py # прогон разговора целиком, без голоса
+    sim_scene.py        # одна сцена много раз: проходит ли и с какой частотой
   tests/               # pytest
   requirements.txt
   requirements-dev.txt # pytest

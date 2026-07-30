@@ -5,25 +5,27 @@
 не говорит о частоте: правка промпта может работать в трёх случаях из четырёх
 и это будет выглядеть как успех.
 
-Здесь история до сцены задана фикстурой (обязательные условия отработаны,
-порог взят), и повторяется только сама сцена. Восемь прогонов одной сцены
-дешевле и информативнее одного полного разговора.
-
-Сейчас зашита сцена с согласующим у Тамары — та, на которой сделка трижды
-не закрылась в живых разговорах. Понадобится другая — правится SCENE и HISTORY;
-формат намеренно не обобщён, пока сцена одна.
+История до сцены задана фикстурой (обязательные условия отработаны, порог
+взят), и повторяется только сама сцена. Восемь прогонов одной сцены дешевле
+и информативнее одного полного разговора.
 
 Запуск внутри backend-контейнера (потолок первого токена настроен под сетевой
 путь DE, локально он ложно срабатывает):
 
     python scripts/sim_scene.py <промпт.txt> [сколько прогонов]
+    python scripts/sim_scene.py <промпт.txt> 8 --сцена scenes/dentistry-husband.json
+    python scripts/sim_scene.py <промпт.txt> --сухой   # без обращений к модели
+
+Фикстуры лежат в scripts/scenes/. По умолчанию берётся офтальмологическая —
+та, на которой сцена с согласующим отлаживалась.
 
 Три оговорки, без которых легко сделать неверный вывод:
 
-  * ИСТОРИЯ ЗАШИТА ОФТАЛЬМОЛОГИЧЕСКОЙ. Подставить сюда чужой случай и решить,
-    что слои разделены, нельзя: беседа всё равно про зрение, и роль возьмёт
-    отраслевые слова из неё, а не из промпта. Чистота слоя личности
-    проверяется статически, в npm run check:prompts.
+  * ФИКСТУРА ДОЛЖНА СООТВЕТСТВОВАТЬ ПРОМПТУ. Офтальмологическая история против
+    стоматологического промпта измерит не то: беседа всё равно про зрение,
+    и роль возьмёт отраслевые слова из неё, а не из промпта. Скрипт проверяет
+    это сам — по списку «маркёры» в фикстуре — и ругается, если не сходится.
+    Чистота слоя личности проверяется отдельно, в npm run check:prompts.
   * МЕТКИ РЯДОМ С ОТВЕТАМИ — ПОДСКАЗКА, А НЕ ВЕРДИКТ. Отказ и согласие
     по-русски говорятся десятком способов; отличать их регуляркой надёжно
     не получается. Ответы короткие, их десятки — читать глазами.
@@ -39,6 +41,7 @@
 """
 
 import asyncio
+import json
 import os
 import re
 import sys
@@ -57,53 +60,54 @@ _RETRY_PAUSE_SEC = 3.0
 # и сам себе устраивает лимит запросов
 _TURN_PAUSE_SEC = 1.5
 
-# Фикстура: обязательные условия отработаны, порог взят. Сцена с согласующим —
-# единственное, что осталось. Правится вместе с промптом, если меняется случай
-HISTORY = [
-    ("user", "Тамара Михайловна, здравствуйте! Иван, администратор клиники."),
-    ("assistant", "Здравствуйте, Иван. Спасибо."),
-    ("user", "Расскажите, что вас беспокоит со зрением?"),
-    ("assistant", "Последние лет пять хуже стало. И вдаль, и вблизи. Вблизи в очках вообще не вижу — снимаю и подношу к самому носу."),
-    ("user", "А в быту что стало труднее?"),
-    ("assistant", "Вязать тяжело, петли путаю. И читать — буквы плывут. Внуки просят связать, а я откладываю."),
-    ("user", "Операция идёт минут двадцать, под капельной анестезией, без общего наркоза. Боли нет. И 62 года для неё обычный возраст, у нас и в 80 оперируются."),
-    ("assistant", "Хм. А восстанавливаться долго?"),
-    ("user", "Пару недель. В стоимость входит хрусталик, работа хирурга и два осмотра. Хрусталики есть простые и с двумя фокусами. Есть рассрочка на полгода без процентов."),
-    ("assistant", "Понятно. Сумма, конечно, серьёзная."),
-]
-
-SCENE = [
-    (
-        "ошибка: отпустил домой",
-        "Ну вот, в общем-то, хорошо. Обсудите с мужем, и приходите, когда решитесь.",
-    ),
-    (
-        "конкретный способ — ждём помеху",
-        "А давайте так: позвоните ему прямо сейчас, я рядом посижу.",
-    ),
-    (
-        "снимаем помеху — сцена должна пройти",
-        "Так разговор буквально на две минуты — вы ему только скажете, что были "
-        "у нас, а объяснять я всё сам буду. А если ему нужно увидеть своими "
-        "глазами — приезжайте вместе завтра, я всё покажу при нём.",
-    ),
-    (
-        "прямое предложение оплатить",
-        "Тогда давайте оформим и оплатим сегодня, а на завтра запишу вас обоих?",
-    ),
-]
-
-# Подсказки для чтения вывода, не вердикт — см. оговорку в докстринге
-_PASSED_HINTS = ("поговорила", "он не против", "посоветовалась", "не возражает")
-_AGREED_HINTS = ("давайте оформ", "согласна", "оформляйте", "давайте сделаем")
+_SCENES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scenes")
+_DEFAULT_SCENE = os.path.join(_SCENES_DIR, "ophthalmology-husband.json")
 
 
-def _mentions(text: str, stems: tuple[str, ...]) -> bool:
+class Fixture:
+    """История до сцены, сама сцена и подсказки для чтения вывода."""
+
+    def __init__(self, data: dict, path: str):
+        self.path = path
+        self.title = data.get("название", os.path.basename(path))
+        self.markers: list[str] = data.get("маркёры", [])
+        self.history: list[tuple[str, str]] = [tuple(row) for row in data["история"]]
+        self.scene: list[tuple[str, str]] = [tuple(row) for row in data["сцена"]]
+        hints = data.get("подсказки", {})
+        self.passed_hints: tuple[str, ...] = tuple(hints.get("пройдена", ()))
+        self.agreed_hints: tuple[str, ...] = tuple(hints.get("согласилась", ()))
+
+
+def load_fixture(path: str) -> Fixture:
+    with open(path, encoding="utf-8") as fh:
+        return Fixture(json.load(fh), path)
+
+
+def mentions(text: str, stems) -> bool:
     """Есть ли корень с начала слова. Подстрокой нельзя: «беру» есть в «выберу»."""
     return any(
         re.search(rf"(?<![А-Яа-яЁёA-Za-z]){re.escape(stem)}", text, re.I)
         for stem in stems
     )
+
+
+def check_fit(prompt: str, fixture: Fixture) -> tuple[list[str], list[str], bool]:
+    """Какие маркёры фикстуры нашлись в промпте: (нашлись, нет, годится ли).
+
+    Ровно та ошибка, ради которой проверка написана: прогнать офтальмологическую
+    историю против стоматологического промпта и решить, что измерил сцену.
+    Разговор в таком прогоне идёт про зрение — из истории, а не из промпта,
+    и результат не значит ничего.
+
+    Хватает половины маркёров, а не всех. Требовать все — ложная тревога
+    на законном случае: сгенерированный стоматологический промпт 30.07 говорил
+    «зуб» и «имплант» по четыре раза, а «коронку» не упоминал вовсе. Чужая
+    отрасль при этом не проходит с запасом — у неё совпадений ноль.
+    """
+    found = [stem for stem in fixture.markers if mentions(prompt, [stem])]
+    missing = [stem for stem in fixture.markers if stem not in found]
+    fits = not fixture.markers or len(found) * 2 >= len(fixture.markers)
+    return found, missing, fits
 
 
 async def collect_reply(history: list[dict], prompt: str) -> str:
@@ -125,32 +129,88 @@ async def collect_reply(history: list[dict], prompt: str) -> str:
     return ""
 
 
+def parse_args(argv: list[str]) -> tuple[str, int, str, bool]:
+    if not argv:
+        sys.exit(__doc__)
+    prompt_path = argv[0]
+    scene_path = _DEFAULT_SCENE
+    dry = False
+    runs = 5
+    rest = argv[1:]
+    i = 0
+    while i < len(rest):
+        arg = rest[i]
+        if arg == "--сцена":
+            i += 1
+            scene_path = rest[i]
+        elif arg == "--сухой":
+            dry = True
+        else:
+            runs = int(arg)
+        i += 1
+    return prompt_path, runs, scene_path, dry
+
+
 async def main() -> None:
-    runs = int(sys.argv[2]) if len(sys.argv) > 2 else 5
-    with open(sys.argv[1], encoding="utf-8") as fh:
+    prompt_path, runs, scene_path, dry = parse_args(sys.argv[1:])
+
+    with open(prompt_path, encoding="utf-8") as fh:
         role = fh.read()
+    fixture = load_fixture(scene_path)
 
     # Порог взят: обязательные условия в фикстуре отработаны
     prompt = f"{role}\n\n{llm.trust_instruction(True)}"
-    print(f"промпт: {len(role)} символов | модель: {get_settings().llm_model}")
+
+    print(f"промпт:  {len(role)} символов — {prompt_path}")
+    print(f"фикстура: {fixture.title} — {os.path.basename(fixture.path)}")
+    print(f"модель:  {get_settings().llm_model}")
+
+    found, missing, fits = check_fit(prompt, fixture)
+    total = len(fixture.markers)
+    if not fits:
+        print(
+            f"\n!! ФИКСТУРА НЕ СООТВЕТСТВУЕТ ПРОМПТУ: маркёров {len(found)} из {total}"
+        )
+        print("   нет в промпте: " + ", ".join(f"«{stem}»" for stem in missing))
+        print(
+            "   Разговор пойдёт по отрасли из истории, а не из промпта, "
+            "и замер ничего не будет значить.\n"
+            "   Возьмите фикстуру своей отрасли из scripts/scenes/ "
+            "или напишите новую."
+        )
+        if not dry:
+            sys.exit(1)
+    else:
+        tail = (
+            "" if not missing else " (нет: " + ", ".join(f"«{s}»" for s in missing) + ")"
+        )
+        print(f"сходится: маркёров {len(found)} из {total}{tail}")
+
+    if dry:
+        print(f"\nсухой прогон: {len(fixture.history)} реплик истории, "
+              f"{len(fixture.scene)} шагов сцены, к модели не обращаемся")
+        for label, line in fixture.scene:
+            print(f"  [{label}]\n  М: {line}")
+        return
+
     print(f"прогонов: {runs}\n")
 
     passed = 0
     for run in range(1, runs + 1):
         print(f"{'=' * 74}\nПРОГОН {run}")
-        history = [{"role": role_, "text": text} for role_, text in HISTORY]
+        history = [{"role": role_, "text": text} for role_, text in fixture.history]
         scene_passed = False
 
-        for label, line in SCENE:
+        for label, line in fixture.scene:
             history.append({"role": "user", "text": line})
             reply = await collect_reply(history, prompt)
             history.append({"role": "assistant", "text": reply})
 
             hints = []
-            if _mentions(reply, _PASSED_HINTS):
+            if mentions(reply, fixture.passed_hints):
                 hints.append("похоже, сцена пройдена")
                 scene_passed = True
-            if _mentions(reply, _AGREED_HINTS):
+            if mentions(reply, fixture.agreed_hints):
                 hints.append("похоже, согласилась")
             tail = ("  ← " + ", ".join(hints)) if hints else ""
 
