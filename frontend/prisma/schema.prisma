@@ -327,6 +327,11 @@ model Organization {
   casesTotal     Int       @default(0)
   casesReady     Int       @default(0)
   casesUpdatedAt DateTime?
+  // Когда последний раз сохраняли форму. По нему «Собрать заново» продолжает
+  // с места обрыва, а не идёт по кругу: случай, собранный позже этой отметки,
+  // уже отвечает текущим данным клиники и пересобирать его незачем.
+  // На сотне пациентов разница — вдвое меньше вызовов модели после обрыва
+  formSavedAt    DateTime?
 
   createdAt DateTime @default(now())
 }

@@ -70,7 +70,8 @@ async function generateOne(
 // дольше, но руководитель ждёт с лоадером один раз, а не каждый разговор.
 export async function rebuildCases(
   organizationId: string,
-  headId: string
+  headId: string,
+  { resume = false }: { resume?: boolean } = {}
 ): Promise<void> {
   const names = Object.keys(LAYERED_ROLES);
 
@@ -87,6 +88,7 @@ export async function rebuildCases(
     select: {
       name: true,
       industry: true,
+      formSavedAt: true,
       services: {
         orderBy: { position: "asc" },
         select: { name: true, price: true, description: true },
@@ -97,14 +99,36 @@ export async function rebuildCases(
 
   // Пациенты, переведённые на слои. Остальные — заглушки в одно предложение,
   // из которых случай не собрать: генератору нужна личность
-  const patients = await prisma.patient.findMany({
+  const all = await prisma.patient.findMany({
     where: { name: { in: names } },
-    select: { id: true, name: true },
+    select: {
+      id: true,
+      name: true,
+      cases: {
+        where: { organizationId },
+        select: { generatedAt: true },
+      },
+    },
   });
+
+  // «Собрать заново» после обрыва продолжает с места, а не идёт по кругу:
+  // случай, собранный позже последнего сохранения формы, уже отвечает текущим
+  // данным клиники. На сотне пациентов это вдвое меньше вызовов модели,
+  // а отказы провайдера — обычное дело.
+  const savedAt = organization.formSavedAt;
+  const isFresh = (patient: (typeof all)[number]) =>
+    Boolean(savedAt && patient.cases[0] && patient.cases[0].generatedAt >= savedAt);
+
+  const patients = resume ? all.filter((p) => !isFresh(p)) : all;
+  const alreadyDone = resume ? all.length - patients.length : 0;
 
   await prisma.organization.update({
     where: { id: organizationId },
-    data: { casesTotal: patients.length, casesReady: 0, casesUpdatedAt: new Date() },
+    data: {
+      casesTotal: all.length,
+      casesReady: alreadyDone,
+      casesUpdatedAt: new Date(),
+    },
   });
 
   const clinic: ClinicPayload = {
@@ -119,7 +143,7 @@ export async function rebuildCases(
     lastName: head.lastName,
   });
 
-  let ready = 0;
+  let ready = alreadyDone;
   for (const patient of patients) {
     const role = LAYERED_ROLES[patient.name];
     try {

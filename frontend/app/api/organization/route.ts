@@ -128,11 +128,11 @@ export async function PUT(request: NextRequest) {
       const organization = organizationId
         ? await tx.organization.update({
             where: { id: organizationId },
-            data: { name, industry },
+            data: { name, industry, formSavedAt: new Date() },
             select: { id: true },
           })
         : await tx.organization.create({
-            data: { name, industry },
+            data: { name, industry, formSavedAt: new Date() },
             select: { id: true },
           });
 
