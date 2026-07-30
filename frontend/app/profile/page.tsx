@@ -18,9 +18,25 @@ interface Profile {
   email: string;
   firstName: string;
   lastName: string;
+  // Роль решает, показывать ли карточку клиники: отрасль и прайс —
+  // данные организации, менеджеру их менять нечего
+  role: "manager" | "head";
   jobTitle: string | null;
   clinic: string | null;
   avatarUpdatedAt: string | null;
+}
+
+interface ServiceRow {
+  name: string;
+  price: string;
+  description: string;
+}
+
+interface Organization {
+  id: string;
+  name: string;
+  industry: string;
+  services: ServiceRow[];
 }
 
 export default function ProfilePage() {
@@ -68,6 +84,7 @@ export default function ProfilePage() {
             <AvatarCard profile={profile} onChange={setProfile} />
 
             <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto pr-1.5">
+              {profile.role === "head" && <ClinicForm />}
               <PersonalForm profile={profile} onChange={setProfile} />
               <PasswordForm />
             </div>
@@ -364,6 +381,177 @@ function PersonalForm({ profile, onChange }: CardProps) {
           Сохранить
         </Button>
       </div>
+    </form>
+  );
+}
+
+// Карточка клиники: отрасль и услуги. По ним собирается слой «случай»
+// у пациентов, поэтому от качества этих данных зависит, во что играет
+// тренажёр. Вёрстка временная — по образцу соседних карточек, пока
+// не придёт макет.
+function ClinicForm() {
+  const [organization, setOrganization] = useState<Organization | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [services, setServices] = useState<ServiceRow[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/organization");
+        if (!res.ok) return;
+        const data = (await res.json()) as Organization | null;
+        if (cancelled) return;
+        setOrganization(data);
+        setName(data?.name ?? "");
+        setIndustry(data?.industry ?? "");
+        setServices(data?.services ?? []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function updateService(index: number, patch: Partial<ServiceRow>) {
+    setServices((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, ...patch } : row))
+    );
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setSaved(false);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/organization", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, industry, services }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Не удалось сохранить");
+        return;
+      }
+      setOrganization(data);
+      setServices(data.services ?? []);
+      setSaved(true);
+    } catch {
+      setError("Не удалось сохранить");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-line bg-surface-card px-6 py-[22px]">
+        <div className="text-[15.5px] font-semibold text-ink">Клиника</div>
+        <p className="mt-3 text-[13.5px] text-ink-muted">Загружаем…</p>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-2xl border border-line bg-surface-card px-6 py-[22px]"
+    >
+      <div className="text-[15.5px] font-semibold text-ink">Клиника</div>
+      <p className="mt-1.5 text-[13px] text-ink-muted">
+        По отрасли и услугам собираются случаи пациентов — то, с чем они
+        приходят к менеджеру.
+      </p>
+
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3.5">
+        <Field
+          label="Название"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Клиника «Зрение»"
+        />
+        <Field
+          label="Отрасль"
+          value={industry}
+          onChange={(e) => setIndustry(e.target.value)}
+          placeholder="офтальмология"
+        />
+      </div>
+
+      <div className="mt-5 text-[13.5px] font-semibold text-ink">Услуги</div>
+      {services.length === 0 && (
+        <p className="mt-1.5 text-[13px] text-ink-muted">
+          Ни одной услуги не добавлено. Пациенту нечего будет оплачивать.
+        </p>
+      )}
+
+      <div className="mt-2.5 flex flex-col gap-3">
+        {services.map((service, index) => (
+          <div key={index} className="grid grid-cols-[1fr_150px_auto] gap-x-3">
+            <Field
+              label={index === 0 ? "Название" : ""}
+              value={service.name}
+              onChange={(e) => updateService(index, { name: e.target.value })}
+              placeholder="Замена хрусталика"
+            />
+            <Field
+              label={index === 0 ? "Цена" : ""}
+              value={service.price}
+              onChange={(e) => updateService(index, { price: e.target.value })}
+              placeholder="от 60 000 ₽"
+            />
+            <button
+              type="button"
+              onClick={() => setServices((rows) => rows.filter((_, i) => i !== index))}
+              className={`${index === 0 ? "mt-[26px]" : ""} h-[46px] rounded-input px-3 text-[13px] text-ink-muted hover:text-danger-text`}
+            >
+              Убрать
+            </button>
+            <Field
+              label=""
+              value={service.description}
+              onChange={(e) => updateService(index, { description: e.target.value })}
+              placeholder="Что входит: срок, гарантия, рассрочка"
+              className="col-span-3"
+            />
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          setServices((rows) => [...rows, { name: "", price: "", description: "" }])
+        }
+        className="mt-3 text-[13.5px] font-medium text-brand hover:underline"
+      >
+        + Добавить услугу
+      </button>
+
+      {error && <Alert className="mt-4">{error}</Alert>}
+
+      <div className="mt-[18px] flex items-center justify-end gap-3">
+        {saved && !error && (
+          <span className="text-[13px] font-medium text-good">Сохранено</span>
+        )}
+        <Button type="submit" loading={busy} className="px-6 py-[11px] text-[14.5px]">
+          Сохранить
+        </Button>
+      </div>
+      {organization && (
+        <p className="mt-2 text-right text-[12px] text-ink-muted">
+          Услуг сохранено: {organization.services.length}
+        </p>
+      )}
     </form>
   );
 }
