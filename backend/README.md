@@ -85,7 +85,7 @@ Healthcheck: `GET http://localhost:8000/health`.
 1. Клиент шлёт `audio_chunk` (PCM 16 kHz mono, base64).
 2. **STT** (ElevenLabs Realtime): семантический коммит при завершающей
    пунктуации + короткой тишине; иначе VAD-фолбэк (0.65 с) → `transcript_user`.
-3. **LLM** (OpenRouter, `gemini-2.5-flash-lite`) стримит токены; готовые
+3. **LLM** (OpenRouter, `gemini-3.1-flash-lite`) стримит токены; готовые
    предложения сразу уходят в TTS → `transcript_ai` (после полного ответа).
 4. **TTS** (ElevenLabs flash, WebSocket на сессию) стримит MP3 по предложениям
    → `audio_chunk` + `audio_end` на каждое предложение.
