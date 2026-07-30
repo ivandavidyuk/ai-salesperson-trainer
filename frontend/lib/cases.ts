@@ -144,6 +144,28 @@ export async function rebuildCases(
   });
 
   let ready = alreadyDone;
+  try {
+    ready = await generateAll(patients, organizationId, clinic, token, ready);
+  } finally {
+    // Флаг снимаем в любом исходе. Оставить его поднятым после падения —
+    // это вечный лоадер у руководителя: страница будет считать, что сборка
+    // всё ещё идёт, и никогда не покажет, что часть пациентов не собралась
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { casesRunning: false, casesUpdatedAt: new Date() },
+    });
+  }
+}
+
+/** Собирает случаи по одному, возвращает, сколько получилось. */
+async function generateAll(
+  patients: { id: string; name: string }[],
+  organizationId: string,
+  clinic: ClinicPayload,
+  token: string,
+  alreadyDone: number
+): Promise<number> {
+  let ready = alreadyDone;
   for (const patient of patients) {
     const role = LAYERED_ROLES[patient.name];
     try {
@@ -196,4 +218,5 @@ export async function rebuildCases(
       data: { casesReady: ready, casesUpdatedAt: new Date() },
     });
   }
+  return ready;
 }

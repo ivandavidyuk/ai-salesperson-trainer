@@ -38,6 +38,9 @@ interface Organization {
   services: ServiceRow[];
   casesTotal: number;
   casesReady: number;
+  // Идёт ли сборка прямо сейчас. Сервер отдаёт не голый флаг, а живость:
+  // задачу мог оборвать рестарт, и снять флаг тогда уже некому
+  casesRunning: boolean;
 }
 
 /** Прогресс пересборки: сколько пациентов готово из скольких. */
@@ -604,9 +607,12 @@ function ClinicForm() {
       if (!data) return;
       setSaved(data);
       setProgress({ ready: data.casesReady, total: data.casesTotal });
-      if (data.casesReady >= data.casesTotal) {
+      // Конец сборки виден по флагу, а не по счётчику: счётчик замирает
+      // и когда часть пациентов не собралась, и лоадер крутился бы вечно.
+      // Флаг снимает сама сборка, а протухший гасит сервер по времени
+      if (!data.casesRunning) {
         setProgress(null);
-        setOutcome("done");
+        setOutcome(data.casesReady >= data.casesTotal ? "done" : "failed");
       }
     }, 1200);
     return () => clearInterval(timer);
@@ -656,10 +662,12 @@ function ClinicForm() {
   }
 
   function stopWaiting() {
-    // Вкладку закрыли или нажали «Позже»: сборка на сервере продолжается,
-    // но ждать её мы перестаём. Незавершённое видно по счётчику
+    // Перестали ждать — это не обрыв: сборка на сервере продолжается.
+    // Поэтому окно просто закрывается, а «Сборка прервалась» показывается
+    // только когда сборка правда кончилась — это решает флаг с сервера.
+    // Сколько собрано, видно по плашке в карточке
     setProgress(null);
-    setOutcome("failed");
+    setOutcome(null);
   }
 
   if (loading) {

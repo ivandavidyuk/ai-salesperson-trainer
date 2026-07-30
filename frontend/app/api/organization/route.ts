@@ -29,8 +29,15 @@ interface OrganizationBody {
   services?: ServiceBody[];
 }
 
-function organizationWithServices(id: string) {
-  return prisma.organization.findUnique({
+// Сколько ждать движения счётчика, прежде чем считать сборку мёртвой.
+// Один пациент занимает до полутора минут: до шести обращений к модели —
+// три попытки провайдера с паузами и два повтора на негодную форму.
+// Порог берём с запасом, ложно объявить живую сборку мёртвой хуже:
+// руководитель увидит «прервалось», пока оно идёт
+const STALE_AFTER_MS = 3 * 60 * 1000;
+
+async function organizationWithServices(id: string) {
+  const organization = await prisma.organization.findUnique({
     where: { id },
     select: {
       id: true,
@@ -39,12 +46,24 @@ function organizationWithServices(id: string) {
       casesTotal: true,
       casesReady: true,
       casesUpdatedAt: true,
+      casesRunning: true,
       services: {
         orderBy: { position: "asc" },
         select: { id: true, name: true, price: true, description: true },
       },
     },
   });
+  if (!organization) return null;
+
+  // Флаг в одиночку врёт: рестарт контейнера посреди сборки обрывает задачу,
+  // а снять флаг уже некому — он останется поднятым навсегда, и лоадер
+  // будет крутиться при мёртвом процессе. Живой считаем только ту сборку,
+  // у которой недавно двигался счётчик
+  const moved = organization.casesUpdatedAt?.getTime() ?? 0;
+  const running =
+    organization.casesRunning && Date.now() - moved < STALE_AFTER_MS;
+
+  return { ...organization, casesRunning: running };
 }
 
 export async function GET(request: NextRequest) {
@@ -172,6 +191,15 @@ export async function PUT(request: NextRequest) {
     // Отпускаем без await намеренно, но с обработчиком: необработанное
     // отклонение в Node роняет процесс, а сборка случаев не имеет права
     // ронять сервер.
+    // Флаг поднимаем здесь, а не внутри rebuildCases: ответ уходит сразу,
+    // а сборка стартует асинхронно — успей она поднять флаг после ответа,
+    // страница получила бы «сборка не идёт» и показала окно обрыва
+    // на живом процессе
+    await prisma.organization.update({
+      where: { id: saved },
+      data: { casesRunning: true, casesUpdatedAt: new Date() },
+    });
+
     void rebuildCases(saved, head.id).catch((error) =>
       console.error("Сборка случаев не удалась:", error)
     );
