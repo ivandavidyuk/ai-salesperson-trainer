@@ -10,6 +10,7 @@
 import asyncio
 import base64
 import logging
+import re
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
@@ -152,6 +153,39 @@ def _meaningful_words(text: str) -> list[str]:
 def _is_backchannel_only(text: str) -> bool:
     """Реплика состоит только из поддакиваний (непустая, но без смысла)."""
     return bool(_norm_words(text)) and not _meaningful_words(text)
+
+
+# Разметка и ремарки, которые модель вставляет вопреки запрету в промпте.
+# Замер 31.07.2026 на четырёх моделях: чистой нет ни одной. Gemini пишет
+# скобочные ремарки («(Прищуривается, внимательно слушает.)»), gpt-5.4-nano —
+# Markdown с жирным и списками, qwen — и то, и другое сразу: «*(Молча беру
+# у вас папку, достаёт лупу)*».
+#
+# Запрет в промпте оставляем — он работает, просто не всегда. А это страховка
+# на выходе: до синтеза ремарка доходить не должна ни от какой модели, иначе
+# TTS произнесёт её вслух как реплику пациента.
+_MARKDOWN_CHARS = str.maketrans("", "", "*_`#")
+
+
+def strip_for_speech(text: str) -> str:
+    """Убирает из реплики всё, что нельзя произнести вслух.
+
+    Работает по готовому предложению, а не по дельтам стрима: дельта режется
+    где попало, и «**» приезжает половинками.
+
+    Скобки чистятся и незакрытые тоже: предложение отрезается по точке, и
+    ремарка из двух предложений разрывается пополам — «(Молча беру папку.»
+    в одном, «Достаёт лупу.)» в другом. Обе половины одинаково не нужны.
+    """
+    # Парные скобки целиком
+    text = re.sub(r"\([^()]*\)", " ", text)
+    # Хвост незакрытой скобки и начало неоткрытой — остатки разорванной ремарки
+    text = re.sub(r"\([^()]*$", " ", text)
+    text = re.sub(r"^[^()]*\)", " ", text)
+    text = text.translate(_MARKDOWN_CHARS)
+    # Нумерация списка в начале строки: «1) », «2. » — читается вслух нелепо
+    text = re.sub(r"(?m)^\s*\d+[.)]\s+", "", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def split_first_sentence(text: str) -> tuple[str | None, str]:
@@ -757,21 +791,28 @@ class TurnManager:
                             sentence, rest = split_first_sentence(buffer)
                             if sentence is None:
                                 break
+                            buffer = rest
+                            # Ремарка целым предложением после чистки исчезает
+                            # вовсе — синтезировать нечего, ждём следующего
+                            sentence = strip_for_speech(sentence)
+                            if not sentence:
+                                continue
                             if first_sentence_ms is None:
                                 first_sentence_ms = (
                                     time.perf_counter() - t_start
                                 ) * 1000
-                            buffer = rest
                             await sentences.put(sentence)
                     # Остаток без завершающей пунктуации тоже озвучиваем
-                    tail = buffer.strip()
+                    tail = strip_for_speech(buffer)
                     if tail:
                         if first_sentence_ms is None:
                             first_sentence_ms = (time.perf_counter() - t_start) * 1000
                         await sentences.put(tail)
                 finally:
                     await sentences.put(None)
-                return full_reply.strip()
+                # Расшифровка должна совпадать с тем, что прозвучало: ремарки
+                # в ней — мусор и для менеджера, и для оценщика
+                return strip_for_speech(full_reply)
 
             first_audio_ms: float | None = None
 
