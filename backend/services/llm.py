@@ -38,6 +38,19 @@ _client = httpx.AsyncClient(timeout=30)
 _FIRST_TOKEN_TIMEOUT_SEC = 2.0
 _STREAM_ATTEMPTS = 2
 
+
+class ProviderRefused(RuntimeError):
+    """Провайдер ответил HTTP 200, но текста не дал.
+
+    Так приходит 429 «temporarily rate-limited upstream»: заголовки успешные,
+    внутри потока — choices[0].finish_reason=error и ни одной дельты.
+
+    Отдельный класс нужен, потому что от честного пустого ответа этот случай
+    отличается лечением: пустой ответ повторять бессмысленно, отказ провайдера
+    повторить надо. Раньше их не различали, и ход терялся молча —
+    см. stream_reply.
+    """
+
 # Заголовок блока с инструкцией этапа сделки
 _STAGE_HEADER = "ЭТАП РАЗГОВОРА:"
 
@@ -143,7 +156,17 @@ async def stream_reply(history: list[dict], system_prompt: str) -> AsyncIterator
             )
         except StopAsyncIteration:
             await stream.aclose()
-            return  # модель не сказала ничего — повторять нечего
+            # Честный пустой ответ: повторять нечего, но молчать о нём нельзя —
+            # для менеджера это пропавший ход, и в логах должен остаться след
+            logger.warning("LLM вернула пустой ответ без ошибки")
+            return
+        except ProviderRefused as exc:
+            await stream.aclose()
+            if attempt == _STREAM_ATTEMPTS:
+                logger.warning("LLM отказала в обеих попытках: %s", exc)
+                raise
+            logger.warning("LLM отказала (%s) — идём заново", exc)
+            continue
         except asyncio.TimeoutError:
             await stream.aclose()  # закрываем повисшее соединение
             if attempt == _STREAM_ATTEMPTS:
@@ -183,9 +206,23 @@ async def _stream_once(history: list[dict], system_prompt: str) -> AsyncIterator
             except ValueError:
                 continue
             choices = chunk.get("choices") or []
+            choice = choices[0] if choices else {}
+            # Отказ провайдера приезжает внутри успешного ответа: HTTP 200,
+            # finish_reason=error и ни одной дельты. Пока эту ветку не читали,
+            # поток просто кончался, stream_reply видел «модель ничего
+            # не сказала» и выходил без лога и без повтора — ход исчезал
+            # бесследно. Ровно так теряется каждый третий ход при 429 у Google
+            refusal = chunk.get("error") or choice.get("error")
+            if choice.get("finish_reason") == "error" or (refusal and not choices):
+                if total_chars:
+                    # На середине фразы повтор небезопасен: часть текста уже
+                    # ушла в синтез. Обрываем и оставляем след в логе
+                    logger.warning("LLM оборвалась после %d симв.: %s", total_chars, refusal)
+                    return
+                raise ProviderRefused(str(refusal or "причина не указана")[:200])
             if not choices:
                 continue
-            delta = (choices[0].get("delta") or {}).get("content")
+            delta = (choice.get("delta") or {}).get("content")
             if delta:
                 total_chars += len(delta)
                 yield delta
