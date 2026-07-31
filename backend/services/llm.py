@@ -145,8 +145,18 @@ async def stream_reply(history: list[dict], system_prompt: str) -> AsyncIterator
     пациент промолчал. Тридцатисекундный таймаут httpx для голоса бесполезен:
     к тому моменту разговор уже сломан.
     """
+    settings = get_settings()
+    # Второй заход — резервной моделью другого вендора. Повтор той же попадёт
+    # в тот же шторм: отказы у провайдера приходят пачками, а не поодиночке
+    модели = [settings.llm_model]
+    if settings.fallback_model:
+        модели.append(settings.fallback_model)
+    else:
+        модели.append(settings.llm_model)
+
     for attempt in range(1, _STREAM_ATTEMPTS + 1):
-        stream = _stream_once(history, system_prompt)
+        model = модели[min(attempt, len(модели)) - 1]
+        stream = _stream_once(history, system_prompt, model)
         # Потолок вешаем только на первый токен: дальше модель уже говорит,
         # и обрывать её на середине фразы нельзя. Повтор при этом безопасен
         # по построению — до первой дельты в синтез ничего не ушло
@@ -156,28 +166,47 @@ async def stream_reply(history: list[dict], system_prompt: str) -> AsyncIterator
             )
         except StopAsyncIteration:
             await stream.aclose()
-            # Честный пустой ответ: повторять нечего, но молчать о нём нельзя —
-            # для менеджера это пропавший ход, и в логах должен остаться след
-            logger.warning("LLM вернула пустой ответ без ошибки")
-            return
+            # Пустой ответ без ошибки. Раньше здесь стоял выход по причине
+            # «модель сказала ничего — повторять нечего», и это стоило нам
+            # от двух до пяти ходов из десяти: HTTP 200, finish_reason=stop
+            # и ноль символов — так у Gemini выглядит сбой, а не решение
+            # промолчать. Резерв на маршрутизации OpenRouter такое не ловит:
+            # для него ответ успешен. Поэтому ловим сами и идём к резерву
+            if attempt == _STREAM_ATTEMPTS:
+                logger.warning("LLM (%s) вернула пустой ответ и на повторе", model)
+                return
+            logger.warning(
+                "LLM (%s) вернула пустой ответ — идём к резерву (%s)",
+                model,
+                модели[attempt],
+            )
+            continue
         except ProviderRefused as exc:
             await stream.aclose()
             if attempt == _STREAM_ATTEMPTS:
-                logger.warning("LLM отказала в обеих попытках: %s", exc)
+                logger.warning("LLM (%s) отказала и на повторе: %s", model, exc)
                 raise
-            logger.warning("LLM отказала (%s) — идём заново", exc)
+            logger.warning(
+                "LLM (%s) отказала (%s) — идём к резерву (%s)",
+                model,
+                exc,
+                модели[attempt],
+            )
             continue
         except asyncio.TimeoutError:
             await stream.aclose()  # закрываем повисшее соединение
             if attempt == _STREAM_ATTEMPTS:
                 logger.warning(
-                    "LLM молчала дольше %.1f с в обеих попытках",
+                    "LLM (%s) молчала дольше %.1f с и на повторе",
+                    model,
                     _FIRST_TOKEN_TIMEOUT_SEC,
                 )
                 raise
             logger.warning(
-                "LLM молчит дольше %.1f с — идём заново",
+                "LLM (%s) молчит дольше %.1f с — идём к резерву (%s)",
+                model,
                 _FIRST_TOKEN_TIMEOUT_SEC,
+                модели[attempt],
             )
             continue
 
@@ -187,9 +216,13 @@ async def stream_reply(history: list[dict], system_prompt: str) -> AsyncIterator
         return
 
 
-async def _stream_once(history: list[dict], system_prompt: str) -> AsyncIterator[str]:
+async def _stream_once(
+    history: list[dict], system_prompt: str, model: str | None = None
+) -> AsyncIterator[str]:
     """Один заход в модель: отдаёт дельты текста по мере генерации."""
     url, payload, headers = _build_request(history, system_prompt, stream=True)
+    if model:
+        payload["model"] = model
 
     total_chars = 0
     async with _client.stream("POST", url, json=payload, headers=headers) as response:
