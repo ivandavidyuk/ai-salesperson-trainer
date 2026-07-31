@@ -1,0 +1,33 @@
+// Пациент как он лежит в репозитории: личность, досье для РОПа и — если уже
+// собран — случай.
+//
+// По файлу на пациента: двадцать одна личность в seed-patients.ts нечитаема,
+// а искать нужного в одном полотне на три тысячи строк невозможно.
+
+import type { PatientDifficulty } from "@prisma/client";
+import type { PatientCase, PatientPersonality } from "../patient-prompt";
+
+export interface PatientProfile {
+  /** Имя на экране: «Имя Отчество», как у Тамары. Фамилия живёт в identity */
+  name: string;
+  difficulty: PatientDifficulty;
+  personality: PatientPersonality;
+  /**
+   * Случай: отрасль и повод обращения. У пациентов Димы его пишет генератор
+   * по данным клиники, поэтому до первой сборки поля нет — и пациент лежит
+   * неактивным: без случая промпт неполон, в нём нет «зачем пришла».
+   */
+  case?: PatientCase;
+  /**
+   * Видимые отраслевые поля. У Тамары написаны руками вместе с её случаем,
+   * у остальных их пишет генератор — поэтому здесь их нет до первой сборки.
+   */
+  description?: string;
+  anamnesis?: string;
+  objections?: string[];
+  // Досье для руководителя. Менеджеру API эти поля не отдаёт: «как выиграть
+  // клиента» — это ответ на задачу, которую он тренирует
+  character: string;
+  decisionMaker: string;
+  approach: string;
+}

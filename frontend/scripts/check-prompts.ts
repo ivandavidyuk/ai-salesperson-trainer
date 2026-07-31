@@ -25,7 +25,8 @@ import { writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-import { LAYERED_ROLES, PATIENTS } from "./seed-patients";
+import { LAYERED_ROLES } from "./seed-patients";
+import { PROFILES } from "./patients";
 import {
   MECHANIC_BLOCKS,
   buildRolePrompt,
@@ -230,11 +231,11 @@ function main(): void {
       `офтальмологии не осталось`,
   );
 
-  // 5. Сколько ещё на заглушках — чтобы не забылось молча
-  const stubs = PATIENTS.filter((p) => !(p.name in LAYERED_ROLES));
-  console.log(`\nНа слоях: ${layered} из ${PATIENTS.length} пациентов`);
-  if (stubs.length > 0) {
-    console.log(`Заглушки: ${stubs.map((p) => p.name).join(", ")}`);
+  // 5. Кто ещё ждёт случая — чтобы не забылось молча
+  const waiting = PROFILES.filter((p) => !p.case);
+  console.log(`\nСо случаем: ${layered} из ${PROFILES.length} пациентов`);
+  if (waiting.length > 0) {
+    console.log(`Ждут генератора: ${waiting.map((p) => p.name).join(", ")}`);
   }
 
   if (problems.length > 0) {
