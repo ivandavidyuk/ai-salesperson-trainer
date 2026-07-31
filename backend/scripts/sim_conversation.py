@@ -23,6 +23,7 @@ scoring.score_stages, scoring.review_conversation. Поэтому проверя
 
 import asyncio
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -85,11 +86,22 @@ async def collect_reply(history: list[dict], system_prompt: str) -> str:
     return ""
 
 
+def имя_роли(role: str) -> str:
+    """Подпись пациента в логе — из первой строки промпта «Ты — Имя ...».
+
+    Раньше здесь стояло жёсткое «ТАМАРА», и все двадцать один пациент
+    подписывались её именем: в пачке логов не разобрать, кто ответил.
+    """
+    совпадение = re.search(r"Ты\s+—\s+([А-ЯЁ][а-яё]+)", role)
+    return (совпадение.group(1) if совпадение else "ПАЦИЕНТ").upper()
+
+
 async def main() -> None:
     role_path, lines_path = sys.argv[1], sys.argv[2]
     with open(role_path, encoding="utf-8") as fh:
         role = fh.read()
     lines = load_lines(lines_path)
+    подпись = имя_роли(role)
 
     settings = get_settings()
     threshold = settings.deal_score_threshold
@@ -122,7 +134,7 @@ async def main() -> None:
             continue
 
         history.append({"role": "assistant", "text": reply})
-        print(f"     ТАМАРА    {reply}")
+        print(f"     {подпись:<9} {reply}")
 
         await asyncio.sleep(_TURN_PAUSE_SEC)
         scores = await scoring.score_stages(history, role) or scores
