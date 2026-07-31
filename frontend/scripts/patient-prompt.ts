@@ -92,6 +92,14 @@ export interface PatientPersonality {
   // Страхи: проявляются поведением, вслух не называются. Здесь форма страха
   // («в моём возрасте это опасно»), а чем именно рискуют — в случае
   fears: string[];
+  // Отношение к деньгам: рассрочка, кредит, наличные, переплата. Отдельно
+  // от быта, потому что это не краска характера, а рычаг закрытия: человеку,
+  // считающему переплату, и человеку с наличными в портфеле нужны разные
+  // условия. По этому блоку генератор пишет условие про деньги.
+  //
+  // Необязательное: пациент без прописанных финансовых привычек — нормальный
+  // пациент, и пустой блок в промпт не выводится
+  finances?: string[];
   // Реакция на манеру менеджера
   warmsUp: string[];
   closesUp: string[];
@@ -156,12 +164,19 @@ export function buildRolePrompt(role: PatientRole): string {
     .map((text, i) => `${i + 2}. ${text}`)
     .join("\n");
 
+  // Блок финансов необязателен, и пустой не выводится вовсе: иначе добавление
+  // слота переписало бы промпты всем, у кого его нет, — включая эталонный
+  const finances = personality.finances?.length
+    ? [`ОТНОШЕНИЕ К ДЕНЬГАМ:\n${bullets(personality.finances)}`]
+    : [];
+
   return [
     personality.identity,
     `РЕЧЕВАЯ МАНЕРА:\n${personality.manner}\n- Примеры:\n${patientCase.mannerExamples}`,
     `ЗАЧЕМ ПРИШЛА:\n${patientCase.situation}`,
     `ПОВЕДЕНИЕ ПО СИТУАЦИИ:\n${patientCase.calmWhile}`,
     `СТРАХИ (проявляй через поведение, не озвучивай прямо):\n${bullets(personality.fears)}`,
+    ...finances,
     `КОГДА ТЕПЛЕТЬ:\n${bullets(personality.warmsUp)}`,
     `КОГДА ЗАКРЫВАТЬСЯ:\n${bullets(personality.closesUp)}`,
     OBJECTIONS_TIMING,
@@ -185,6 +200,7 @@ export function personalityText(personality: PatientPersonality): string {
     personality.identity,
     personality.manner,
     ...personality.fears,
+    ...(personality.finances ?? []),
     ...personality.warmsUp,
     ...personality.closesUp,
     ...personality.conditions,
