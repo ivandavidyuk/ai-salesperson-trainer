@@ -106,13 +106,21 @@ async def main() -> None:
         prompt = f"{role}\n\n{llm.trust_instruction(reached)}"
 
         print(f"[{number:2d}] МЕНЕДЖЕР  {line}")
+        # Реплика менеджера уходит в историю ДО запроса — как в TurnManager
+        # (main.py:759). Иначе роль отвечает на предыдущий ход, а история
+        # заканчивается сообщением ассистента: чередование ролей нарушено.
+        # gemini-2.5-flash-lite такое прощала, отвечая ПУСТО, а
+        # gemini-3.5-flash-lite отвергает с HTTP 400. Отсюда взялись «два-пять
+        # пустых ходов из десяти», которые я месяц приписывал нестабильности
+        # модели: в бою их не было, они были только здесь
+        history.append({"role": "user", "text": line})
         try:
             reply = await collect_reply(history, prompt)
         except Exception as exc:  # noqa: BLE001
             print(f"     СБОЙ РОЛИ: {type(exc).__name__}: {exc}\n")
+            history.pop()  # ход не состоялся — не оставляем его в истории
             continue
 
-        history.append({"role": "user", "text": line})
         history.append({"role": "assistant", "text": reply})
         print(f"     ТАМАРА    {reply}")
 
