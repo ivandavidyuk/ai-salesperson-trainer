@@ -151,7 +151,14 @@ class _КлиентЗаглушка:
         return _Контекст()
 
 
-def _прогнать_поток(строки):
+def _прогнать_поток(строки, monkeypatch):
+    # Подменяем сборку запроса: предмет теста — разбор SSE, а ключа
+    # к провайдеру в CI нет и быть не должно
+    monkeypatch.setattr(
+        llm, "_build_request", lambda *a, **kw: ("http://ключ-не-нужен", {}, {})
+    )
+    monkeypatch.setattr(llm, "_client", _КлиентЗаглушка(строки))
+
     async def go():
         return [d async for d in llm._stream_once([], "роль")]
 
@@ -165,9 +172,8 @@ def test_429_в_потоке_поднимает_отказ(monkeypatch):
         '"error":{"code":429,"message":"rate-limited upstream"}}]}',
         "data: [DONE]",
     ]
-    monkeypatch.setattr(llm, "_client", _КлиентЗаглушка(строки))
     with pytest.raises(llm.ProviderRefused) as exc:
-        _прогнать_поток(строки)
+        _прогнать_поток(строки, monkeypatch)
     assert "429" in str(exc.value)
 
 
@@ -178,8 +184,7 @@ def test_обычный_поток_отдаёт_дельты(monkeypatch):
         'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
         "data: [DONE]",
     ]
-    monkeypatch.setattr(llm, "_client", _КлиентЗаглушка(строки))
-    assert _прогнать_поток(строки) == ["Здрав", "ствуйте."]
+    assert _прогнать_поток(строки, monkeypatch) == ["Здрав", "ствуйте."]
 
 
 def test_обрыв_после_текста_не_поднимает_отказ(monkeypatch):
@@ -189,5 +194,4 @@ def test_обрыв_после_текста_не_поднимает_отказ(m
         'data: {"choices":[{"delta":{},"finish_reason":"error","error":{"code":429}}]}',
         "data: [DONE]",
     ]
-    monkeypatch.setattr(llm, "_client", _КлиентЗаглушка(строки))
-    assert _прогнать_поток(строки) == ["Здравствуйте"]
+    assert _прогнать_поток(строки, monkeypatch) == ["Здравствуйте"]
