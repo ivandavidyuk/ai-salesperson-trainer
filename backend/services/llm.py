@@ -102,6 +102,32 @@ def build_system_prompt(
     return f"{role}\n\n{_STAGE_HEADER}\n{stage}"
 
 
+# Ручка размышления у каждого вендора своя, и одно значение на всех
+# не работает. Замерено 31.07.2026:
+#
+#   gemini-2.5-flash-lite  enabled=false 409 мс; effort=minimal ломает ответ
+#                          до шестнадцати символов
+#   gemini-3.5-flash-lite  enabled=false — HTTP 400 «Reasoning is mandatory»;
+#                          effort=minimal 430 мс
+#   claude-haiku-4.5       exclude=true 997 мс, ровнее прочих по хвосту
+#
+# Пока значение было одно, замер кандидатов мерил не модели, а нашу
+# конфигурацию: часть их думала, когда не просили, часть получала отказ.
+_РАЗМЫШЛЕНИЕ: dict[str, dict] = {
+    "google/gemini-3.5": {"effort": "minimal"},
+    "anthropic/": {"exclude": True},
+}
+_РАЗМЫШЛЕНИЕ_ПО_УМОЛЧАНИЮ = {"enabled": False}
+
+
+def reasoning_for(model: str) -> dict:
+    """Настройка размышления под конкретную модель."""
+    for префикс, значение in _РАЗМЫШЛЕНИЕ.items():
+        if model.startswith(префикс):
+            return значение
+    return _РАЗМЫШЛЕНИЕ_ПО_УМОЛЧАНИЮ
+
+
 def _build_request(
     history: list[dict], system_prompt: str, stream: bool
 ) -> tuple[str, dict, dict]:
@@ -123,9 +149,10 @@ def _build_request(
         # 200 токенов хватает с запасом, а генерация не затягивается
         "max_tokens": 200,
         "stream": stream,
-        # Отключаем reasoning: для ролевого диалога он не нужен, а без него
-        # первый токен приходит за ~300-500 мс вместо 1-3+ с (замер на проде)
-        "reasoning": {"enabled": False},
+        # Размышление глушим: для ролевого диалога оно не нужно, а без него
+        # первый токен приходит за ~400 мс вместо 1-3+ с. Ручка зависит
+        # от модели — см. reasoning_for
+        "reasoning": reasoning_for(settings.llm_model),
     }
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
     url = f"{settings.llm_base_url}/chat/completions"
@@ -222,7 +249,9 @@ async def _stream_once(
     """Один заход в модель: отдаёт дельты текста по мере генерации."""
     url, payload, headers = _build_request(history, system_prompt, stream=True)
     if model:
+        # Резервная модель другого вендора — и ручка размышления у неё своя
         payload["model"] = model
+        payload["reasoning"] = reasoning_for(model)
 
     total_chars = 0
     async with _client.stream("POST", url, json=payload, headers=headers) as response:

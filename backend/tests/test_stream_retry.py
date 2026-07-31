@@ -214,3 +214,11 @@ def test_обрыв_после_текста_не_поднимает_отказ(m
         "data: [DONE]",
     ]
     assert _прогнать_поток(строки, monkeypatch) == ["Здравствуйте"]
+
+
+def test_ручка_размышления_зависит_от_модели():
+    # Одно значение на всех не работает: 3.5-flash-lite отвечает HTTP 400
+    # на «enabled: false», а 2.5 ломается на «effort: minimal»
+    assert llm.reasoning_for("google/gemini-2.5-flash-lite") == {"enabled": False}
+    assert llm.reasoning_for("google/gemini-3.5-flash-lite") == {"effort": "minimal"}
+    assert llm.reasoning_for("anthropic/claude-haiku-4.5") == {"exclude": True}
