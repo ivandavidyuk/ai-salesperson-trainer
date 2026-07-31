@@ -13,7 +13,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { signToken } from "@/lib/auth";
 import { buildRolePrompt, type PatientCase } from "@/scripts/patient-prompt";
-import { LAYERED_ROLES } from "@/scripts/seed-patients";
+import { PROFILES } from "@/scripts/patients";
 
 interface ClinicPayload {
   name: string;
@@ -73,7 +73,10 @@ export async function rebuildCases(
   headId: string,
   { resume = false }: { resume?: boolean } = {}
 ): Promise<void> {
-  const names = Object.keys(LAYERED_ROLES);
+  // Все, у кого написана личность, — им и собираем случай. Брать список
+  // из тех, у кого случай уже есть, нельзя: ровно те, ради кого запускают
+  // сборку, в него и не попадут
+  const names = PROFILES.map((p) => p.name);
 
   // Токен подписываем от имени руководителя, который сохранил форму: backend
   // проверяет подпись, и анонимный вызов туда пройти не должен
@@ -97,8 +100,8 @@ export async function rebuildCases(
   });
   if (!organization) return;
 
-  // Пациенты, переведённые на слои. Остальные — заглушки в одно предложение,
-  // из которых случай не собрать: генератору нужна личность
+  // Только те, кто есть в репозитории. Пациент, оставшийся в базе от прежних
+  // версий, личности не имеет — собирать ему случай не из чего
   const all = await prisma.patient.findMany({
     where: { name: { in: names } },
     select: {
@@ -165,9 +168,10 @@ async function generateAll(
   token: string,
   alreadyDone: number
 ): Promise<number> {
+  const byName = new Map(PROFILES.map((p) => [p.name, p]));
   let ready = alreadyDone;
   for (const patient of patients) {
-    const role = LAYERED_ROLES[patient.name];
+    const role = byName.get(patient.name)!;
     try {
       const generated = await generateOne(role.personality, clinic, token);
       if (generated) {
