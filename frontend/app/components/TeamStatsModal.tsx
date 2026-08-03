@@ -92,7 +92,9 @@ export default function TeamStatsModal({
       ? "text-ink-subtle"
       : SCORE_TEXT_CLASS[scoreTone(manager.avgScore)];
 
-  const dealsRate = formatDealsRate(manager.paidDeals, manager.total);
+  // Знаменатель — разговоры, где сделка могла случиться: этапные тренировки
+  // в процент закрытых не входят
+  const dealsRate = formatDealsRate(manager.paidDeals, manager.dealTotal);
 
   return (
     <div

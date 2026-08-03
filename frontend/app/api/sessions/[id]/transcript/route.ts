@@ -41,6 +41,7 @@ export async function GET(
             objectionsScore: true,
             closingScore: true,
             outcome: true,
+            drillPassed: true,
             strength: true,
             growthPoint: true,
             // judgeNotes не отдаём: это разбор по обязательным условиям,

@@ -20,7 +20,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Sequence
 
 from core.config import get_settings
 from services.llm_json import ask_json
@@ -37,21 +37,23 @@ _ATTEMPTS = 3
 # Этапы в том же порядке, что и в STAGE_METRICS на фронте
 STAGE_KEYS = ("contact", "iceBreaker", "needs", "objections")
 
-_RUBRIC = """Ты оцениваешь работу менеджера по продажам медицинских услуг.
+_SCALE = """Ты оцениваешь работу менеджера по продажам медицинских услуг.
 
-Шкала 0–10 по каждому этапу, ОБЯЗАТЕЛЬНО с одним знаком после запятой.
+Шкала 0–10, ОБЯЗАТЕЛЬНО с одним знаком после запятой.
 Круглое число почти всегда значит, что ты не разглядел разницу: 7.2 и 7.9 —
 это разные разговоры, и путать их нельзя.
 
-0–3 — этап фактически провален или не состоялся
+0–3 — фактически провалено или не состоялось
 4–6 — сделано формально, без глубины
 7–8 — сделано профессионально
 9–10 — образцово
 
 Внутри полосы обязательно различай: 7.1 — едва дотянул до полосы,
-7.9 — почти образцово.
+7.9 — почти образцово."""
 
-ЭТАПЫ:
+# Рубрика полного разговора. У этапных тренировок вместо неё приходит своя,
+# из TrainingType.rubric: там мерят одно упражнение, а не весь путь сделки.
+_FULL_STAGES = """ЭТАПЫ:
 - contact: установка контакта. Поздоровался, представился, задал тон;
   говорил спокойно, не давил, не перебивал.
 - iceBreaker: снятие напряжения. Расположил к себе, дал человеку
@@ -59,32 +61,60 @@ _RUBRIC = """Ты оцениваешь работу менеджера по пр
 - needs: выявление потребности. Открытые вопросы, слушание; докопался
   до того, что мешает пациенту в его жизни, а не только до симптомов.
 - objections: отработка возражений. Услышал возражение, ответил по сути
-  фактами и выгодой, а не отмахнулся и не начал давить.
+  фактами и выгодой, а не отмахнулся и не начал давить."""
 
-КАК ОЦЕНИВАТЬ:
+_HOW_TO_SCORE = """КАК ОЦЕНИВАТЬ:
 - Расшифровка растёт: тебя вызывают заново после каждой пары реплик.
   Оценка обязана учитывать ПОСЛЕДНИЕ реплики, а не только начало разговора.
   Сделал менеджер в конце что-то заметное — оценка сдвигается.
-- По каждому этапу найди самый сильный и самый слабый момент и ставь
-  оценку между ними, ближе к тому, чего было больше.
-- Этап, до которого разговор ещё не дошёл, оценивай в 0.
+- Найди самый сильный и самый слабый момент и ставь оценку между ними,
+  ближе к тому, чего было больше.
 - Оценивай только то, что видно в расшифровке. Не додумывай интонации."""
+
+# Только для полного разговора: там этапы идут по очереди, и до дальних
+# разговор к середине ещё не дошёл. В этапной тренировке этапов нет вовсе —
+# есть одно упражнение, и оно идёт с первой реплики
+_NOT_REACHED = "- Этап, до которого разговор ещё не дошёл, оценивай в 0."
+
+
+def build_rubric(custom: Optional[str] = None) -> str:
+    """Собирает рубрику: общая шкала плюс либо этапы сделки, либо своя.
+
+    Пустая строка и None означают одно и то же — «бери полный разговор».
+    В сиде у `full` рубрика пустая именно поэтому: писать ей копию того,
+    что и так лежит здесь, значило бы держать текст в двух местах.
+    """
+    if custom and custom.strip():
+        return f"{_SCALE}\n\n{custom.strip()}\n\n{_HOW_TO_SCORE}"
+    return f"{_SCALE}\n\n{_FULL_STAGES}\n\n{_HOW_TO_SCORE}\n{_NOT_REACHED}"
 
 
 @dataclass
 class StageScores:
-    contact: float
-    iceBreaker: float  # noqa: N815 — совпадает с ключом в JSON и на фронте
-    needs: float
-    objections: float
+    """Оценки этапов. Любая может отсутствовать — и это не то же, что ноль.
+
+    В этапной тренировке считается только тренируемый этап: остальных в
+    разговоре просто не было, и ноль соврал бы про менеджера, утянув ему
+    недельный «Прогресс». Поэтому None означает «не измеряли», и до базы
+    он доходит как NULL, который Prisma в средних не учитывает.
+    """
+
+    contact: Optional[float] = None
+    iceBreaker: Optional[float] = None  # noqa: N815 — ключ в JSON и на фронте
+    needs: Optional[float] = None
+    objections: Optional[float] = None
 
     @property
-    def average(self) -> float:
-        """Средняя по четырём этапам — она и сравнивается с порогом.
+    def average(self) -> Optional[float]:
+        """Средняя по измеренным этапам — она и сравнивается с порогом.
 
-        Закрытие сюда не входит: до закрытия оценивать нечего.
+        Закрытие сюда не входит: до закрытия оценивать нечего. Если не измерен
+        ни один этап, средней нет — не ноль: ноль означал бы «всё плохо»,
+        а правда в том, что мерить было нечего.
         """
-        values = (self.contact, self.iceBreaker, self.needs, self.objections)
+        values = [v for v in self.as_dict().values() if v is not None]
+        if not values:
+            return None
         return round(sum(values) / len(values), 2)
 
     def as_dict(self) -> dict:
@@ -96,13 +126,9 @@ class StageScores:
         }
 
     @classmethod
-    def from_dict(cls, raw: dict) -> "StageScores":
-        return cls(
-            contact=_clamp(raw.get("contact")),
-            iceBreaker=_clamp(raw.get("iceBreaker")),
-            needs=_clamp(raw.get("needs")),
-            objections=_clamp(raw.get("objections")),
-        )
+    def from_dict(cls, raw: dict, keys: Sequence[str] = STAGE_KEYS) -> "StageScores":
+        """Берёт из ответа только запрошенные ключи, остальные оставляет None."""
+        return cls(**{key: _clamp(raw.get(key)) for key in keys})
 
 
 def _clamp(value: object) -> float:
@@ -128,6 +154,10 @@ async def score_stages(
 ) -> Optional[StageScores]:
     """Фоновая оценка четырёх этапов по накопленной расшифровке.
 
+    Зовётся только для полного разговора: её единственный потребитель —
+    порог доверия, а в этапной тренировке до предложения оплаты дело не
+    доходит и решать роли нечего.
+
     `patient_role` — роль пациента: что его беспокоит и чего он боится.
     Без неё нельзя судить, докопался ли менеджер до настоящей боли, а не
     до симптомов. Рубрика при этом остаётся общей — иначе оценки разных
@@ -146,7 +176,7 @@ async def score_stages(
     )
     result = await ask_json(
         [
-            {"role": "system", "content": _RUBRIC + context},
+            {"role": "system", "content": build_rubric() + context},
             {
                 "role": "user",
                 "content": (
@@ -168,15 +198,21 @@ async def score_stages(
 
 @dataclass
 class FinalReview:
-    """Итог разговора: исход, пять оценок и выводы."""
+    """Итог разговора.
 
-    outcome: str  # paid | refused | not_asked
+    У полного разговора это исход сделки, пять оценок и выводы.
+    У этапной тренировки сделки нет вовсе: `outcome` и `closing` остаются
+    пустыми, зато появляется `drill_passed` — отработан этап или нет.
+    """
+
+    outcome: Optional[str]  # paid | refused | not_asked | None у тренировки
     stages: StageScores
-    closing: float
+    closing: Optional[float]
     overall: float
     strength: str
     growth_point: str
     judge_notes: str
+    drill_passed: Optional[bool] = None
 
 
 _OUTCOMES = ("paid", "refused", "not_asked")
@@ -227,18 +263,66 @@ paymentOffered=false может означать только "not_asked".
 judgeNotes — служебное поле, менеджер его не увидит. Перечисли, какие
 обязательные условия пациента сняты, а какие нет, и одной фразой почему."""
 
+# Инструкции для этапной тренировки. Сделки здесь нет: менеджер отрабатывает
+# один навык, и вопрос ровно один — отработал или нет.
+_DRILL_INSTRUCTIONS = """Это не полный разговор, а тренировка одного навыка.
+Сделки в ней нет: менеджер не должен предлагать оплату, и исход не оценивается.
+
+Поставь ОДНУ оценку за упражнение — поле score.
+
+Отдельно ответь, отработан ли этап, — поле passed. Вот чем это определяется,
+и другого критерия нет:
+
+{done_when}
+
+Критерий строгий: «почти получилось» — это passed=false. Оценка при этом может
+быть высокой, одно другому не противоречит.
+
+ВЫВОДЫ для менеджера:
+- strength — что действительно получилось. Честно: если упражнение провалено,
+  назови то, что вышло, но не выдумывай похвалу.
+- growthPoint — направление роста, опираясь на конкретный момент разговора.
+  НЕ инструкция, что сказать в следующий раз: менеджер не должен получить
+  готовый ответ. Если этап не отработан — целься в то, чего не хватило
+  по критерию выше.
+
+judgeNotes — служебное поле, менеджер его не увидит. Здесь разбор по критерию:
+что из требуемого прозвучало, что нет, и в какой реплике. Это единственное
+место, где решение «отработан или нет» можно потом перепроверить, — пиши
+с опорой на реплики, а не общими словами."""
+
 
 async def review_conversation(
-    history: list[dict], patient_prompt: str
+    history: list[dict],
+    patient_prompt: str,
+    *,
+    rubric: Optional[str] = None,
+    done_when: Optional[str] = None,
+    scores_deal: bool = True,
+    stage_key: Optional[str] = None,
 ) -> Optional[FinalReview]:
     """Итоговый разбор после разговора.
 
     Получает промпт пациента целиком — тот же текст, что был у роли, включая
     условия согласия. Проверка идёт по тем же условиям, которые были
     у персонажа, а не по вкусу модели.
+
+    `scores_deal` разводит два разных разбора. У полного разговора всё как
+    было: исход, четыре этапа, закрытие. У этапной тренировки — одна оценка
+    и ответ «отработан ли этап» по критерию `done_when`; исхода нет, потому
+    что предлагать оплату там никто и не собирался.
+
+    `stage_key` говорит, в какую полосу этапов ложится оценка упражнения.
+    У профилактики и перехвата его нет: этапа сделки под них не существует,
+    и в базу идёт только общая оценка.
     """
     if not history:
         return None
+
+    if not scores_deal:
+        return await _review_drill(
+            history, patient_prompt, rubric, done_when, stage_key
+        )
 
     # Порог подставляется в инструкции: без него оценщик не сможет отличить
     # «отказала из-за слабой техники» от «отказала из-за неснятого страха»,
@@ -249,7 +333,7 @@ async def review_conversation(
             {
                 "role": "system",
                 "content": (
-                    f"{_RUBRIC}\n\n"
+                    f"{build_rubric()}\n\n"
                     f"{_FINAL_INSTRUCTIONS.replace('{threshold}', str(threshold))}"
                 ),
             },
@@ -306,8 +390,10 @@ async def review_conversation(
     stages = StageScores.from_dict(result)
     closing = _clamp(result.get("closing"))
     # Общая оценка включает закрытие: она про весь разговор, в отличие
-    # от средней-порога, которая смотрит только на работу до закрытия
-    overall = round((sum(stages.as_dict().values()) + closing) / 5, 1)
+    # от средней-порога, которая смотрит только на работу до закрытия.
+    # Здесь все четыре этапа заполнены — это полный разговор
+    measured = [v for v in stages.as_dict().values() if v is not None]
+    overall = round((sum(measured) + closing) / (len(measured) + 1), 1)
 
     return FinalReview(
         outcome=outcome,
@@ -317,4 +403,84 @@ async def review_conversation(
         strength=str(result.get("strength", "")).strip(),
         growth_point=str(result.get("growthPoint", "")).strip(),
         judge_notes=str(result.get("judgeNotes", "")).strip(),
+    )
+
+
+async def _review_drill(
+    history: list[dict],
+    patient_prompt: str,
+    rubric: Optional[str],
+    done_when: Optional[str],
+    stage_key: Optional[str],
+) -> Optional[FinalReview]:
+    """Разбор этапной тренировки: одна оценка и «отработан или нет».
+
+    Роль пациента сюда тоже приходит: без неё не понять, была ли у менеджера
+    возможность сделать требуемое. Раскопать «что-то своё» в человеке можно
+    только если у человека это записано.
+    """
+    if not done_when or not done_when.strip():
+        # Критерия нет — судить не по чему. Записать выдуманный вердикт хуже,
+        # чем не записать никакого: менеджер поверит цифре
+        logger.warning("У типа тренировки не задан doneWhen — разбор пропущен")
+        return None
+
+    result = await ask_json(
+        [
+            {
+                "role": "system",
+                "content": (
+                    f"{build_rubric(rubric)}\n\n"
+                    f"{_DRILL_INSTRUCTIONS.replace('{done_when}', done_when.strip())}"
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "КОГО ИГРАЛ ПАЦИЕНТ — по этому тексту видно, что менеджер "
+                    "мог из него вытянуть. Оцениваешь всё равно менеджера:\n\n"
+                    f"{patient_prompt}\n\n"
+                    "РАСШИФРОВКА РАЗГОВОРА:\n\n"
+                    f"{format_transcript(history)}\n\n"
+                    "Верни JSON: {"
+                    '"score": число, "passed": true | false, '
+                    '"strength": "строка", "growthPoint": "строка", '
+                    '"judgeNotes": "строка"}'
+                ),
+            },
+        ],
+        model=get_settings().final_scorer_model,
+        purpose="итог этапа",
+        attempts=_ATTEMPTS,
+    )
+    if result is None:
+        return None
+
+    score = _clamp(result.get("score"))
+    passed = result.get("passed")
+    if not isinstance(passed, bool):
+        # Вердикт — единственное, ради чего эта тренировка и затевалась.
+        # Догадываться о нём по оценке нельзя: строгий критерий и высокий балл
+        # уживаются, «почти получилось» — это провал при оценке 8
+        logger.warning("Оценщик не вернул passed булевым: %r", passed)
+        return None
+
+    # Оценка ложится и в полосу этапа, если он у упражнения есть: тренировка
+    # контакта должна двигать менеджеру полосу контакта, а не висеть отдельно.
+    # Значение приходит строкой из базы, поэтому сверяем: опечатка в сиде
+    # не должна ронять разбор целиком — общая оценка важнее полосы
+    if stage_key and stage_key not in STAGE_KEYS:
+        logger.warning("Неизвестный stageKey %r — оценка пойдёт только в общую", stage_key)
+        stage_key = None
+    stages = StageScores(**{stage_key: score}) if stage_key else StageScores()
+
+    return FinalReview(
+        outcome=None,
+        stages=stages,
+        closing=None,
+        overall=score,
+        strength=str(result.get("strength", "")).strip(),
+        growth_point=str(result.get("growthPoint", "")).strip(),
+        judge_notes=str(result.get("judgeNotes", "")).strip(),
+        drill_passed=passed,
     )

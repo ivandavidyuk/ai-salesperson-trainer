@@ -570,7 +570,11 @@ export default function TrainingSetupModal({
               </div>
               <div>
                 <GroupTitle>{GROUP_LABELS.stage}</GroupTitle>
-                <div className="grid grid-cols-2 gap-2.5">
+                {/* Списком, а не сеткой по два: этапов стало пять, и в сетке
+                    последний висел бы полупустым рядом. Карусель здесь тоже
+                    не годится — модалка узкая (660px), а карточки списочные:
+                    в них радиокнопка и текст, а не плитка */}
+                <div className="flex flex-col gap-2.5">
                   {typesByGroup("stage").map(renderTypeCard)}
                 </div>
               </div>

@@ -58,8 +58,15 @@ export interface HomeData {
     thisWeek: number;
     avgDurationSec: number | null;
     avgScore: number | null;
-    /** Разговоров с исходом `paid`. Знаменатель — total, см. getHomeData */
+    /** Разговоров с исходом `paid`. Знаменатель — dealTotal, не total */
     paidDeals: number;
+    /**
+     * Сколько было разговоров, в которых сделка вообще могла случиться.
+     * Отличается от total: этапные тренировки в него не входят — менеджер
+     * там не доходит до предложения оплаты, и считать их непроданными
+     * значило бы наказывать за учёбу.
+     */
+    dealTotal: number;
   };
   recent: HomeConversation[];
   progress: {
@@ -157,6 +164,19 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
   // и текущие искажали бы и счётчики, и среднюю длительность.
   const completed = { userId, status: "completed" as const };
 
+  // Разговоры, в которых сделка вообще могла случиться. Этапные тренировки
+  // сюда не входят: менеджер там не доходит до предложения оплаты, и каждая
+  // такая тренировка проседала бы в проценте закрытых сделок как поражение.
+  // Счётчик количества тренировок при этом считает всё подряд — учиться
+  // навыку не менее ценно, чем проводить полный разговор.
+  //
+  // trainingTypeId = null — разговоры, начатые до мастера настройки: они были
+  // полными, и терять их из знаменателя нельзя.
+  const withDeal = {
+    ...completed,
+    OR: [{ trainingTypeId: null }, { trainingType: { scoresDeal: true } }],
+  };
+
   const [
     day,
     total,
@@ -168,6 +188,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
     prevWeekAvg,
     lastReview,
     paidCount,
+    dealTotal,
   ] = await Promise.all([
     Promise.resolve(dayNumber(now)),
     prisma.session.count({ where: completed }),
@@ -185,12 +206,13 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
       orderBy: { createdAt: "desc" },
       select: { strength: true, growthPoint: true },
     }),
-    // Закрытые сделки. Знаменатель — ВСЕ завершённые разговоры (total),
-    // а не только разобранные: незакрытая сделка не должна прятаться
-    // за «разбор пока не пришёл»
+    // Закрытые сделки. Знаменатель — все разговоры, где сделка могла
+    // случиться (dealTotal), а не только разобранные: незакрытая сделка
+    // не должна прятаться за «разбор пока не пришёл»
     prisma.sessionReview.count({
-      where: { session: completed, outcome: DealOutcome.paid },
+      where: { session: withDeal, outcome: DealOutcome.paid },
     }),
+    prisma.session.count({ where: withDeal }),
   ]);
 
   const [tip, motivation] = await Promise.all([
@@ -222,6 +244,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
           : Math.round(durationAgg._avg.durationSec),
       avgScore: round1(scoreAgg._avg.overallScore ?? null),
       paidDeals: paidCount,
+      dealTotal,
     },
     recent: recentRows,
     progress: {
