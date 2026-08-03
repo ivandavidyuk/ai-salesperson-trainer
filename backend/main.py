@@ -341,6 +341,7 @@ class TurnManager:
         session_id: str,
         tts_stream: "tts.TtsWsStream",
         system_prompt: str,
+        scores_deal: bool = True,
     ) -> None:
         self.ws = ws
         self.session_id = session_id
@@ -348,6 +349,12 @@ class TurnManager:
         # Роль пациента вместе с инструкцией этапа: загружается один раз
         # при подключении и не меняется в течение разговора
         self.system_prompt = system_prompt
+        # Идёт ли в этом разговоре сделка. У этапной тренировки — нет, и тогда
+        # весь механизм доверия выключается целиком: фоновый оценщик не
+        # запускается, строка про доверие в промпт не добавляется. Считать
+        # порог там нечего — предлагать оплату менеджер и не собирается,
+        # а лишние вызовы модели стоят денег и добавляют задержку
+        self.scores_deal = scores_deal
         # Проставляется после создания ElevenLabsSTT (нужен seconds_since_voice)
         self.stt: Optional[ElevenLabsSTT] = None
         self.barge_in_enabled = get_settings().barge_in_enabled
@@ -671,7 +678,14 @@ class TurnManager:
             не применяем. Иначе его молчаливый отказ сделал бы сделку
             незакрываемой, а это ровно тот баг, который мы чиним;
           • оценка была раньше — берём последнюю известную.
+
+        В этапной тренировке строки нет вовсе: сделки там не будет, решать
+        роли нечего, а лишний абзац про «нельзя соглашаться оплатить» только
+        сбивал бы её с упражнения.
         """
+        if not self.scores_deal:
+            return self.system_prompt
+
         settings = get_settings()
         scores = await store.get_stage_scores(self.session_id)
 
@@ -696,6 +710,8 @@ class TurnManager:
         репликах прямо перед закрытием, и при редком пересчёте мы отказывали
         бы, не увидев именно её.
         """
+        if not self.scores_deal:
+            return  # этапная тренировка: порога нет, считать нечего
         if self._scoring is not None and not self._scoring.done():
             return  # предыдущий пересчёт ещё идёт — обгонять его незачем
         self._scoring = asyncio.create_task(self._score_now())
@@ -932,14 +948,21 @@ async def finalize_review(session_id: str) -> None:
         if len(history) < 2:
             return  # разговора фактически не было — разбирать нечего
 
-        patient_prompt = await store.get_patient_prompt(session_id)
-        if not patient_prompt:
+        context = await store.get_review_context(session_id)
+        if not context:
             logger.warning(
                 "Сессия %s: нет промпта пациента — разбор невозможен", session_id
             )
             return
 
-        review = await scoring.review_conversation(history, patient_prompt)
+        review = await scoring.review_conversation(
+            history,
+            context["patient_prompt"],
+            rubric=context["rubric"],
+            done_when=context["done_when"],
+            scores_deal=context["scores_deal"],
+            stage_key=context["stage_key"],
+        )
         if review is None:
             logger.warning("Сессия %s: оценщик не вернул разбор", session_id)
             return
@@ -957,21 +980,32 @@ async def finalize_review(session_id: str) -> None:
                 "strength": review.strength,
                 "growthPoint": review.growth_point,
                 "judgeNotes": review.judge_notes,
+                "drillPassed": review.drill_passed,
             },
         )
-        logger.info(
-            "ИТОГ сессия %s: исход=%s | оценки: контакт %.1f лёд %.1f "
-            "потребность %.1f возражения %.1f закрытие %.1f | общая %.1f | %s",
-            session_id,
-            review.outcome,
-            review.stages.contact,
-            review.stages.iceBreaker,
-            review.stages.needs,
-            review.stages.objections,
-            review.closing,
-            review.overall,
-            review.judge_notes or "без пояснений",
-        )
+        if context["scores_deal"]:
+            logger.info(
+                "ИТОГ сессия %s: исход=%s | оценки: контакт %s лёд %s "
+                "потребность %s возражения %s закрытие %s | общая %.1f | %s",
+                session_id,
+                review.outcome,
+                review.stages.contact,
+                review.stages.iceBreaker,
+                review.stages.needs,
+                review.stages.objections,
+                review.closing,
+                review.overall,
+                review.judge_notes or "без пояснений",
+            )
+        else:
+            logger.info(
+                "ИТОГ сессия %s: тренировка «%s» — этап %s | оценка %.1f | %s",
+                session_id,
+                context["type_title"] or "без названия",
+                "ОТРАБОТАН" if review.drill_passed else "не отработан",
+                review.overall,
+                review.judge_notes or "без пояснений",
+            )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Разбор сессии %s не удался: %s", session_id, exc)
 
@@ -1054,6 +1088,7 @@ async def session_ws(ws: WebSocket, session_id: str):
         session_id=session_id,
         tts_stream=tts_stream,
         system_prompt=system_prompt,
+        scores_deal=await store.get_scores_deal(session_id),
     )
 
     # 4. Инициализируем STT (ElevenLabs Realtime)

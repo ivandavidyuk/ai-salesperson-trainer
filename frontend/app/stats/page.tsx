@@ -148,7 +148,7 @@ function PodiumCard({
                 превращается в табло позора, хотя 20% для холодного трафика
                 может быть нормой */}
             <MiniStat
-              value={formatDealsRate(manager.paidDeals, manager.total).label}
+              value={formatDealsRate(manager.paidDeals, manager.dealTotal).label}
               label="закрыто"
             />
           </div>
@@ -223,7 +223,7 @@ function OtherRow({
       </div>
       <div className="w-[84px] text-center">
         <div className="font-mono text-[19px] text-ink">
-          {formatDealsRate(manager.paidDeals, manager.total).label}
+          {formatDealsRate(manager.paidDeals, manager.dealTotal).label}
         </div>
         <div className="mt-0.5 text-[11px] text-ink-subtle">закрыто</div>
       </div>
@@ -298,7 +298,7 @@ export default function StatsPage() {
   // сколько менеджер с тридцатью
   const teamDeals = useMemo(() => {
     const paid = ranked.reduce((acc, m) => acc + m.paidDeals, 0);
-    const total = ranked.reduce((acc, m) => acc + m.total, 0);
+    const total = ranked.reduce((acc, m) => acc + m.dealTotal, 0);
     return formatDealsRate(paid, total);
   }, [ranked]);
 
@@ -321,7 +321,7 @@ export default function StatsPage() {
     // «Закрыватель» — только среди тех, у кого разговоров достаточно:
     // один закрытый из одного даёт 100% и забрал бы награду ни за что
     const closer = leader((m) =>
-      m.total >= DEALS_RATE_MIN_CONVERSATIONS ? m.paidDeals / m.total : null
+      m.dealTotal >= DEALS_RATE_MIN_CONVERSATIONS ? m.paidDeals / m.dealTotal : null
     );
 
     const list: Award[] = [];
@@ -354,7 +354,7 @@ export default function StatsPage() {
         manager: closer,
         label: "Закрыватель",
         tone: "bg-surface-accent text-brand-score",
-        metric: `${formatDealsRate(closer.paidDeals, closer.total).label} закрытых сделок`,
+        metric: `${formatDealsRate(closer.paidDeals, closer.dealTotal).label} закрытых сделок`,
       });
     }
     return list;

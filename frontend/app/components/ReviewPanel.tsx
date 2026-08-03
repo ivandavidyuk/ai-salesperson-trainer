@@ -81,7 +81,32 @@ function ScoreRing({ score }: { score: number }) {
  */
 function OutcomeStamp({ outcome }: { outcome: DealOutcome }) {
   const { title, stamp } = OUTCOME_LABELS[outcome];
-  const closed = isDealClosed(outcome);
+  return <Stamp good={isDealClosed(outcome)} title={title} stamp={stamp} />;
+}
+
+/**
+ * Итог этапной тренировки. Своей плашки не заводим: у менеджера уже есть
+ * язык «получилось / не получилось», и учить его второму незачем — меняются
+ * только слова.
+ */
+function DrillStamp({ passed }: { passed: boolean }) {
+  return passed ? (
+    <Stamp good title="Этап отработан" stamp="ЗАЧТЕНО" />
+  ) : (
+    <Stamp good={false} title="Этап не отработан" stamp="НЕ ЗАЧТЕНО" />
+  );
+}
+
+function Stamp({
+  good,
+  title,
+  stamp,
+}: {
+  good: boolean;
+  title: string;
+  stamp: string;
+}) {
+  const closed = good;
 
   return (
     <div
@@ -199,7 +224,11 @@ export default function ReviewPanel({ review, pending = false }: ReviewPanelProp
               оценки отвечают «как ты работал», исход — «получилось или нет».
               У разборов старше механизма исхода нет вовсе, и тогда плашки
               просто не будет: это не третье состояние, а её отсутствие */}
-          {review.outcome && <OutcomeStamp outcome={review.outcome} />}
+          {review.drillPassed !== null && review.drillPassed !== undefined ? (
+            <DrillStamp passed={review.drillPassed} />
+          ) : (
+            review.outcome && <OutcomeStamp outcome={review.outcome} />
+          )}
 
           <div className="rounded-xl border border-line p-[18px]">
             <div className="flex items-center gap-3.5">
@@ -207,7 +236,9 @@ export default function ReviewPanel({ review, pending = false }: ReviewPanelProp
               <div>
                 <div className="text-sm font-semibold text-ink">Общая оценка</div>
                 <div className="text-[12.5px] text-ink-subtle">
-                  среднее пяти этапов, из 10
+                  {review.drillPassed !== null && review.drillPassed !== undefined
+                    ? "за упражнение, из 10"
+                    : "среднее пяти этапов, из 10"}
                 </div>
               </div>
             </div>

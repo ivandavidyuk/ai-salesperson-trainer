@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.llm import trust_instruction
 from services.llm_json import unfence
-from services.scoring import StageScores, _clamp, format_transcript
+from services.scoring import StageScores, _clamp, build_rubric, format_transcript
 
 
 def test_средняя_считается_по_четырём_этапам():
@@ -48,6 +48,42 @@ def test_разбор_ответа_модели():
     assert scores.iceBreaker == 6.5
     assert scores.needs == 0.0
     assert scores.objections == 10.0
+
+
+def test_неизмеренный_этап_остаётся_пустым():
+    # В этапной тренировке считается только тренируемый этап. Ноль соврал бы
+    # про менеджера и утянул ему недельный «Прогресс»: остальных этапов
+    # в разговоре не было вовсе, а не было сделано плохо
+    scores = StageScores.from_dict({"contact": 8, "needs": 9}, keys=("contact",))
+    assert scores.contact == 8.0
+    assert scores.iceBreaker is None
+    assert scores.needs is None, "ключ не запрашивали — брать его нельзя"
+
+
+def test_средняя_считается_только_по_измеренному():
+    scores = StageScores(contact=8.0, objections=6.0)
+    assert scores.average == 7.0
+
+
+def test_без_единой_оценки_средней_нет():
+    # Не ноль: ноль означает «всё плохо», а правда в том, что мерить нечего.
+    # Порог доверия на этом и стоит — с нулём он не взялся бы никогда
+    assert StageScores().average is None
+
+
+def test_рубрика_упражнения_вытесняет_этапы_сделки():
+    своя = build_rubric("Оцениваешь перехват инициативы.")
+    assert "Оцениваешь перехват инициативы." in своя
+    assert "iceBreaker" not in своя, "этапы сделки в упражнении не оцениваются"
+    # Шкала общая для всех разборов — иначе оценки станут несопоставимы
+    assert "9–10 — образцово" in своя
+
+
+def test_пустая_рубрика_означает_полный_разговор():
+    # У `full` в сиде рубрика пустая: держать копию текста в двух местах
+    # значило бы однажды их разойтись
+    assert build_rubric("") == build_rubric(None) == build_rubric()
+    assert "iceBreaker" in build_rubric()
 
 
 def test_ниже_порога_запрет_абсолютный():

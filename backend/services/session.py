@@ -59,7 +59,14 @@ _PATIENT_PROMPT_SQL = (
     'SELECT COALESCE(pc."prompt", p."prompt") AS patient_prompt, '
     'p."name" AS patient_name, '
     '(pc."prompt" IS NOT NULL) AS case_generated, '
-    't."prompt" AS type_prompt, t."title" AS type_title '
+    't."prompt" AS type_prompt, t."title" AS type_title, '
+    # Рубрика, критерий и способ оценки — оценщику, а не роли: знай роль,
+    # по каким признакам судят собеседника, она начала бы подыгрывать
+    't."rubric" AS type_rubric, t."doneWhen" AS type_done_when, '
+    't."stageKey" AS type_stage_key, '
+    # У сессий, начатых до мастера настройки, типа нет вовсе — это были
+    # полные разговоры, поэтому COALESCE на true
+    'COALESCE(t."scoresDeal", true) AS type_scores_deal '
     'FROM "Session" s '
     'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
     'LEFT JOIN "TrainingType" t ON t."id" = s."trainingTypeId" '
@@ -290,30 +297,73 @@ class SessionStore:
         )
         return [{"role": row["role"], "text": row["text"]} for row in rows]
 
-    async def get_patient_prompt(self, session_id: str) -> Optional[str]:
-        """Промпт пациента — тот же текст, что был у роли.
+    async def get_scores_deal(self, session_id: str) -> bool:
+        """Идёт ли в этой сессии сделка.
 
-        Итоговый оценщик проверяет условия согласия по нему, а не по своему
-        представлению о правильной продаже. Поэтому и случай клиники берётся
-        тот же самый: иначе оценщик судил бы по офтальмологии разговор,
-        который роль вела про зубы, и не нашёл бы ни одного выполненного
-        условия.
+        Нужно в начале разговора, до первого хода: от этого зависит, включать
+        ли механизм доверия целиком. Отдельным запросом, а не через
+        get_system_prompt: тот кэширует склеенный промпт в Redis, и флагу
+        там не место — он про сессию, а не про текст.
+
+        У сессий без типа (начаты до мастера настройки) сделка идёт: это были
+        полные разговоры.
+        """
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            'SELECT COALESCE(t."scoresDeal", true) AS scores_deal '
+            'FROM "Session" s '
+            'LEFT JOIN "TrainingType" t ON t."id" = s."trainingTypeId" '
+            'WHERE s."id" = $1',
+            session_id,
+        )
+        return bool(row["scores_deal"]) if row else True
+
+    async def get_review_context(self, session_id: str) -> Optional[dict]:
+        """Всё, что нужно итоговому оценщику: промпт пациента и настройки типа.
+
+        Промпт — тот же текст, что был у роли. Оценщик проверяет условия
+        согласия по нему, а не по своему представлению о правильной продаже.
+        Поэтому и случай клиники берётся тот же самый: иначе он судил бы по
+        офтальмологии разговор, который роль вела про зубы, и не нашёл бы ни
+        одного выполненного условия.
+
+        Настройки типа решают, какой это вообще разбор: полный разговор
+        с исходом сделки или тренировка одного навыка с вердиктом
+        «отработан или нет».
         """
         assert self._pool is not None
         row = await self._pool.fetchrow(_PATIENT_PROMPT_SQL, session_id)
-        return (row["patient_prompt"] if row else None) or None
+        if row is None:
+            return None
+        prompt = (row["patient_prompt"] or "").strip()
+        if not prompt:
+            return None
+        return {
+            "patient_prompt": prompt,
+            "rubric": row["type_rubric"],
+            "done_when": row["type_done_when"],
+            "stage_key": row["type_stage_key"],
+            "scores_deal": bool(row["type_scores_deal"]),
+            "type_title": row["type_title"],
+        }
 
     async def save_review(self, session_id: str, review: dict) -> None:
-        """Записывает разбор разговора. Существующий перезаписывает."""
+        """Записывает разбор разговора. Существующий перезаписывает.
+
+        Оценки этапов и исход приходят как None у этапной тренировки: там
+        измерялся один навык, а остальные этапы разговора не было. NULL и ноль
+        здесь означают разное — ноль утянул бы менеджеру недельный «Прогресс»,
+        а NULL Prisma в средних не учитывает.
+        """
         assert self._pool is not None
         await self._pool.execute(
             'INSERT INTO "SessionReview" ('
             '"id", "sessionId", "overallScore", "contactScore", '
             '"iceBreakerScore", "needsScore", "objectionsScore", '
             '"closingScore", "outcome", "strength", "growthPoint", '
-            '"judgeNotes", "createdAt") '
+            '"judgeNotes", "drillPassed", "createdAt") '
             'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::"DealOutcome", '
-            "$10, $11, $12, NOW()) "
+            "$10, $11, $12, $13, NOW()) "
             'ON CONFLICT ("sessionId") DO UPDATE SET '
             '"overallScore" = EXCLUDED."overallScore", '
             '"contactScore" = EXCLUDED."contactScore", '
@@ -324,7 +374,8 @@ class SessionStore:
             '"outcome" = EXCLUDED."outcome", '
             '"strength" = EXCLUDED."strength", '
             '"growthPoint" = EXCLUDED."growthPoint", '
-            '"judgeNotes" = EXCLUDED."judgeNotes"',
+            '"judgeNotes" = EXCLUDED."judgeNotes", '
+            '"drillPassed" = EXCLUDED."drillPassed"',
             str(uuid.uuid4()),
             session_id,
             review["overall"],
@@ -337,6 +388,7 @@ class SessionStore:
             review["strength"],
             review["growthPoint"],
             review["judgeNotes"],
+            review.get("drillPassed"),
         )
 
     # --- Оценка разговора ------------------------------------------------

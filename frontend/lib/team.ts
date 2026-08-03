@@ -39,8 +39,14 @@ export interface TeamMemberStats {
   weekDelta: number | null;
   /** Лучшая оценка за всё время; null — разборов нет */
   bestScore: number | null;
-  /** Разговоров с исходом `paid`. Знаменатель — total, а не число разборов */
+  /** Разговоров с исходом `paid`. Знаменатель — dealTotal, а не total */
   paidDeals: number;
+  /**
+   * Сколько было разговоров, в которых сделка могла случиться. Меньше total
+   * на число этапных тренировок: в них до предложения оплаты не доходят,
+   * и в проценте закрытых сделок им не место.
+   */
+  dealTotal: number;
   /** Разговоров по дням за последние 7 суток, от старого к сегодняшнему */
   activity: number[];
   stages: TeamStageMetric[];
@@ -90,6 +96,14 @@ export async function getTeamStats(
   return Promise.all(
     managers.map(async (manager) => {
       const completed = { userId: manager.id, status: "completed" as const };
+      // Разговоры, где сделка вообще могла случиться. Этапные тренировки
+      // не в счёт: там менеджер до предложения оплаты не доходит, и каждая
+      // такая тренировка портила бы ему процент как поражение. Сессии без
+      // типа — из времён до мастера настройки, они были полными
+      const withDeal = {
+        ...completed,
+        OR: [{ trainingTypeId: null }, { trainingType: { scoresDeal: true } }],
+      };
 
       const [
         total,
@@ -101,6 +115,7 @@ export async function getTeamStats(
         lastReview,
         activityRows,
         paidCount,
+        dealTotal,
       ] = await Promise.all([
           prisma.session.count({ where: completed }),
           prisma.session.count({
@@ -135,12 +150,13 @@ export async function getTeamStats(
             where: { ...completed, startedAt: { gte: activityStart } },
             select: { startedAt: true },
           }),
-          // Закрытые сделки. Делится на total — все завершённые разговоры,
-          // а не только разобранные: незакрытая сделка не должна прятаться
-          // за «разбор пока не пришёл»
+          // Закрытые сделки. Делится на dealTotal — все разговоры, где сделка
+          // могла случиться, а не только разобранные: незакрытая сделка
+          // не должна прятаться за «разбор пока не пришёл»
           prisma.sessionReview.count({
-            where: { session: completed, outcome: DealOutcome.paid },
+            where: { session: withDeal, outcome: DealOutcome.paid },
           }),
+          prisma.session.count({ where: withDeal }),
         ]);
 
       const activity = new Array<number>(ACTIVITY_DAYS).fill(0);
@@ -183,6 +199,7 @@ export async function getTeamStats(
             : null,
         bestScore: round1(scoreAgg._max.overallScore),
         paidDeals: paidCount,
+        dealTotal,
         activity,
         stages,
         strength: lastReview?.strength ?? null,

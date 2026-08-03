@@ -117,9 +117,11 @@ export default function HomePage() {
   );
 
   const hasConversations = (data?.stats.total ?? 0) > 0;
+  // Знаменатель — только разговоры, где сделка могла случиться: этапные
+  // тренировки в проценте закрытых сделок не участвуют
   const dealsRate = formatDealsRate(
     data?.stats.paidDeals ?? 0,
-    data?.stats.total ?? 0
+    data?.stats.dealTotal ?? 0
   );
 
   return (

@@ -10,14 +10,22 @@ export interface TranscriptMessage {
 }
 
 export interface TranscriptReview {
+  /** Есть всегда: у этапной тренировки это оценка самого упражнения */
   overallScore: number;
-  contactScore: number;
-  iceBreakerScore: number;
-  needsScore: number;
-  objectionsScore: number;
-  /** null у разговоров, разобранных до появления механизма исхода */
+  // Оценки этапов. null означает «не измеряли», а не «ноль»: в этапной
+  // тренировке считается только тренируемый этап, остальных в разговоре
+  // не было. У профилактики и перехвата не заполнена ни одна — этапа
+  // сделки под них не существует.
+  contactScore: number | null;
+  iceBreakerScore: number | null;
+  needsScore: number | null;
+  objectionsScore: number | null;
+  /** null у этапных тренировок и у разборов до появления механизма исхода */
   closingScore: number | null;
+  /** null у этапных тренировок: сделки там нет */
   outcome: DealOutcome | null;
+  /** Отработан ли этап. null у полного разговора — там про это говорит outcome */
+  drillPassed: boolean | null;
   strength: string;
   growthPoint: string;
   // judgeNotes сюда намеренно не попадает: разбор оценщика по условиям —
