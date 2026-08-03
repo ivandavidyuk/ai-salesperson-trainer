@@ -15,7 +15,12 @@ scoring.score_stages, scoring.review_conversation. Поэтому проверя
     но так же по итогам предыдущего хода, поэтому состояние доверия совпадает).
 
 Запуск из папки backend:
-    python scripts/sim_conversation.py <промпт.txt> <реплики.txt>
+    python scripts/sim_conversation.py <промпт.txt> <реплики.txt> [тип]
+
+Третий аргумент — слаг типа тренировки (`s3`, `intercept`, …). С ним прогон
+идёт как этапная тренировка: блок этапа доклеивается к роли, механизм доверия
+выключается, а разбор в конце отвечает «этап отработан или нет». Без него —
+полный разговор со сделкой, как раньше.
 
 Файл реплик: по реплике менеджера на абзац, абзацы разделены пустой строкой.
 Строки, начинающиеся с #, игнорируются.
@@ -25,6 +30,8 @@ import asyncio
 import os
 import re
 import sys
+
+import asyncpg
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -96,8 +103,34 @@ def имя_роли(role: str) -> str:
     return (совпадение.group(1) if совпадение else "ПАЦИЕНТ").upper()
 
 
+async def тип_тренировки(type_id: str) -> dict:
+    """Настройки типа из базы — той же самой, откуда их берёт бой.
+
+    Не из сида и не из копии в скрипте: сид перезаписывает базу, и копия
+    разошлась бы незаметно. Прогон должен проверять то, что реально стоит
+    у пациента, а не то, что мы думаем, что там стоит.
+    """
+    settings = get_settings()
+    pool = await asyncpg.create_pool(dsn=settings.asyncpg_dsn, min_size=1, max_size=2)
+    try:
+        row = await pool.fetchrow(
+            'SELECT "title", "prompt", "rubric", "doneWhen", "stageKey", '
+            '"scoresDeal" FROM "TrainingType" WHERE "id" = $1',
+            type_id,
+        )
+    finally:
+        await pool.close()
+    if row is None:
+        raise SystemExit(f"типа тренировки «{type_id}» нет в базе")
+    return dict(row)
+
+
 async def main() -> None:
     role_path, lines_path = sys.argv[1], sys.argv[2]
+    # Третий аргумент — слаг типа тренировки. Без него прогон идёт как раньше:
+    # полный разговор со сделкой
+    type_id = sys.argv[3] if len(sys.argv) > 3 else None
+
     with open(role_path, encoding="utf-8") as fh:
         role = fh.read()
     lines = load_lines(lines_path)
@@ -105,17 +138,34 @@ async def main() -> None:
 
     settings = get_settings()
     threshold = settings.deal_score_threshold
+
+    тип = await тип_тренировки(type_id) if type_id else None
+    if тип is not None:
+        # Склейка ровно как в бою (services/session.py): роль, потом блок этапа.
+        # Своей склейки здесь нет и быть не должно — на разошедшемся порядке
+        # мы уже обожглись 31.07
+        role = llm.build_system_prompt(role, тип["prompt"])
+    считаем_сделку = тип["scoresDeal"] if тип is not None else True
+
     print(f"роль: {len(role)} символов | модель: {settings.llm_model}")
     print(f"оценщик: {settings.scorer_model} | итоговый: {settings.final_scorer_model}")
+    if тип is not None:
+        print(f"тип: {тип['title']} ({type_id}) | сделка: {'да' if считаем_сделку else 'нет'}")
+        print(f"критерий: {тип['doneWhen']}")
     print(f"порог: {threshold} | реплик менеджера: {len(lines)}\n")
 
     history: list[dict] = []
     scores = None
 
     for number, line in enumerate(lines, 1):
-        # Состояние доверия — ровно как в TurnManager: по последней оценке
-        reached = scores is not None and scores.average >= threshold
-        prompt = f"{role}\n\n{llm.trust_instruction(reached)}"
+        # Состояние доверия — ровно как в TurnManager: по последней оценке.
+        # В этапной тренировке строки нет вовсе: сделки не будет, решать роли
+        # нечего, а лишний абзац сбивал бы её с упражнения
+        if считаем_сделку:
+            reached = scores is not None and scores.average >= threshold
+            prompt = f"{role}\n\n{llm.trust_instruction(reached)}"
+        else:
+            prompt = role
 
         print(f"[{number:2d}] МЕНЕДЖЕР  {line}")
         # Реплика менеджера уходит в историю ДО запроса — как в TurnManager
@@ -137,8 +187,9 @@ async def main() -> None:
         print(f"     {подпись:<9} {reply}")
 
         await asyncio.sleep(_TURN_PAUSE_SEC)
-        scores = await scoring.score_stages(history, role) or scores
-        if scores is not None:
+        if считаем_сделку:
+            scores = await scoring.score_stages(history, role) or scores
+        if считаем_сделку and scores is not None:
             mark = "ВЗЯТ" if scores.average >= threshold else "не взят"
             print(
                 f"     оценка: контакт {scores.contact} лёд {scores.iceBreaker} "
@@ -148,16 +199,28 @@ async def main() -> None:
         print()
 
     print("=" * 76)
-    review = await scoring.review_conversation(history, role)
+    review = await scoring.review_conversation(
+        history,
+        role,
+        rubric=тип["rubric"] if тип else None,
+        done_when=тип["doneWhen"] if тип else None,
+        scores_deal=считаем_сделку,
+        stage_key=тип["stageKey"] if тип else None,
+    )
     if review is None:
         print("ИТОГОВЫЙ РАЗБОР НЕ ПОЛУЧЕН")
         return
-    print(f"ИСХОД: {review.outcome}")
-    print(
-        f"оценки: контакт {review.stages.contact} лёд {review.stages.iceBreaker} "
-        f"потребность {review.stages.needs} возражения {review.stages.objections} "
-        f"закрытие {review.closing} | общая {review.overall}"
-    )
+    if считаем_сделку:
+        print(f"ИСХОД: {review.outcome}")
+        print(
+            f"оценки: контакт {review.stages.contact} лёд {review.stages.iceBreaker} "
+            f"потребность {review.stages.needs} возражения {review.stages.objections} "
+            f"закрытие {review.closing} | общая {review.overall}"
+        )
+    else:
+        итог = "ОТРАБОТАН" if review.drill_passed else "НЕ ОТРАБОТАН"
+        print(f"ЭТАП {итог} | оценка {review.overall}")
+        print(f"полосы: {review.stages.as_dict()}")
     print(f"\nсильная сторона: {review.strength}")
     print(f"точка роста:     {review.growth_point}")
     print(f"\nразбор для нас:  {review.judge_notes}")
