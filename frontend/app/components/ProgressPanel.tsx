@@ -88,7 +88,11 @@ export default function ProgressPanel({
                       <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium tracking-[-.005em] text-ink-body">
                         {metric.label}
                       </span>
-                      <span className="shrink-0 font-mono text-xl font-medium leading-none text-ink">
+                      <span
+                        className={`shrink-0 font-mono text-xl font-medium leading-none ${
+                          metric.value === null ? "text-ink-placeholder" : "text-ink"
+                        }`}
+                      >
                         {metric.value ?? "—"}
                       </span>
                       {/* Ширина под плашку резервируется всегда: без неё
@@ -97,13 +101,22 @@ export default function ProgressPanel({
                         <Delta delta={metric.delta} />
                       </span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-surface-bubble">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-brand-bar-top to-brand"
-                        // Шкала 0–10, поэтому оценка напрямую переводится в проценты
-                        style={{ width: `${((metric.value ?? 0) / 10) * 100}%` }}
-                      />
-                    </div>
+                    {/* «Не измеряли» и «ноль» обязаны различаться с одного
+                        взгляда: полоса у обоих пустая, поэтому пустую дорожку
+                        рисуем пунктиром, а число делаем бледным. Этап, по
+                        которому за неделю не было ни одной тренировки, —
+                        не то же самое, что этап, проваленный в ноль */}
+                    {metric.value === null ? (
+                      <div className="h-2 rounded-full border border-dashed border-line-strong" />
+                    ) : (
+                      <div className="h-2 overflow-hidden rounded-full bg-surface-bubble">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-brand-bar-top to-brand"
+                          // Шкала 0–10, оценка напрямую переводится в проценты
+                          style={{ width: `${(metric.value / 10) * 100}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
