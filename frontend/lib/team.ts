@@ -6,7 +6,7 @@
 
 import { prisma } from "@/lib/db";
 import { DealOutcome, UserRole } from "@prisma/client";
-import { averageScores, round1, startOfWeek } from "@/lib/home";
+import { WEEK_DAYS, averageScores, round1, startOfWeek } from "@/lib/home";
 import { STAGE_METRICS } from "@/lib/score";
 
 export interface TeamStageMetric {
@@ -82,7 +82,7 @@ export async function getTeamStats(
   const now = new Date();
   const weekStart = startOfWeek(now);
   const prevWeekStart = new Date(weekStart);
-  prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+  prevWeekStart.setDate(prevWeekStart.getDate() - WEEK_DAYS);
 
   // Спарклайн активности: семь суток, заканчивая сегодняшними.
   // Границей берём полночь, иначе «день» съезжал бы по времени запроса.

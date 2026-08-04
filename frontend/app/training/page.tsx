@@ -4,7 +4,7 @@
 // отдельные этапы сделки и спецнавык. Каждая карточка открывает мастер
 // настройки с уже выбранным типом.
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import AppShell from "@/app/components/AppShell";
 import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
@@ -80,14 +80,99 @@ function Icon({ children, size = 22 }: { children: ReactNode; size?: number }) {
 }
 
 // Заголовок секции: подпись и линия до конца строки
-function SectionTitle({ children }: { children: string }) {
+function SectionTitle({
+  children,
+  actions,
+}: {
+  children: string;
+  actions?: ReactNode;
+}) {
   return (
-    <div className="mb-3 flex items-baseline gap-2.5">
+    <div
+      className={`mb-3 flex gap-2.5 ${actions ? "items-center" : "items-baseline"}`}
+    >
       <div className="font-mono text-[11px] uppercase tracking-[.12em] text-brand-hover">
         {children}
       </div>
       <div className="h-px flex-1 bg-line" />
+      {actions}
     </div>
+  );
+}
+
+/**
+ * Полоса этапов, как в макете: карточки по 288px в горизонтальной прокрутке
+ * со снапом, счётчик и стрелки в заголовке секции.
+ *
+ * Ширина 288 выбрана дизайном не для красоты: при ней пятая карточка всегда
+ * торчит краем и видно, что полоса продолжается. Без этого профилактика
+ * возражений — новый этап, о котором менеджер ещё не знает, — уезжала бы
+ * за край незамеченной.
+ */
+function StageCarousel({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+  const track = useRef<HTMLDivElement>(null);
+
+  // Шаг — карточка плюс отступ (288 + 16), как в макете
+  const scrollBy = (direction: 1 | -1) =>
+    track.current?.scrollBy({ left: direction * 304, behavior: "smooth" });
+
+  return (
+    <div>
+      <SectionTitle
+        actions={
+          <>
+            <span className="shrink-0 whitespace-nowrap font-mono text-[11px] text-ink-placeholder">
+              {count} этапов · листайте
+            </span>
+            <CarouselArrow direction="prev" onClick={() => scrollBy(-1)} />
+            <CarouselArrow direction="next" onClick={() => scrollBy(1)} />
+          </>
+        }
+      >
+        {title}
+      </SectionTitle>
+      <div
+        ref={track}
+        className="flex snap-x snap-mandatory gap-4 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function CarouselArrow({
+  direction,
+  onClick,
+}: {
+  direction: "prev" | "next";
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={direction === "prev" ? "Предыдущие этапы" : "Следующие этапы"}
+      className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-card text-ink-muted transition-colors hover:bg-surface-bubble"
+    >
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        {direction === "prev" ? (
+          <path d="M14.5 6l-6 6 6 6" />
+        ) : (
+          <path d="M9.5 6l6 6-6 6" />
+        )}
+      </svg>
+    </button>
   );
 }
 
@@ -168,19 +253,19 @@ export default function TrainingPage() {
           )}
 
           {byGroup.stage.length > 0 && (
-            <div>
-              <SectionTitle>{GROUP_LABELS.stage}</SectionTitle>
-              <div className="flex flex-col gap-2.5">
-                {byGroup.stage.map((type, index) => (
-                  <StageRow
-                    key={type.id}
-                    type={type}
-                    number={index + 1}
-                    onStart={() => setStarted(type)}
-                  />
-                ))}
-              </div>
-            </div>
+            <StageCarousel
+              title={GROUP_LABELS.stage}
+              count={byGroup.stage.length}
+            >
+              {byGroup.stage.map((type, index) => (
+                <StageCard
+                  key={type.id}
+                  type={type}
+                  number={index + 1}
+                  onStart={() => setStarted(type)}
+                />
+              ))}
+            </StageCarousel>
           )}
 
           {byGroup.special.length > 0 && (
@@ -267,21 +352,9 @@ function FullCard({ type, onStart }: CardProps) {
   );
 }
 
-/**
- * Этап сделки — строка во всю ширину.
- *
- * Были карточки по четверти ряда, и пятая — профилактика возражений — уезжала
- * на вторую строку. Заказчик предложил карусель, дизайн переспорил, и довод
- * оказался сильнее: карусель прятала бы за краем ровно тот этап, который мы
- * добавили и о котором менеджер ещё не знает. Плюс горизонтальная прокрутка
- * на экране, где всё остальное листается вертикально.
- *
- * Строки этого не требуют: пять видны сразу, порядок сверху вниз совпадает
- * с порядком разговора и с полосами в разборе, а описание получает всю ширину
- * — оно у нас длинное, потому что несёт критерий этапа (других мест, где
- * менеджер узнаёт требования, нет). Шестой этап добавится строкой.
- */
-function StageRow({
+// Этап сделки — карточка в горизонтальной полосе. Ширина 288 из макета:
+// при ней пятая карточка торчит краем и полоса читается как продолжающаяся
+function StageCard({
   type,
   number,
   onStart,
@@ -289,27 +362,32 @@ function StageRow({
   const blocked = !type.isActive;
 
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-line bg-surface-card py-[13px] pl-[18px] pr-4">
-      <span className="w-6 shrink-0 font-mono text-[12.5px] text-ink-placeholder">
-        {String(number).padStart(2, "0")}
-      </span>
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-surface-accent text-brand">
-        <Icon>{STAGE_ICONS[type.id] ?? FALLBACK_ICON}</Icon>
-      </span>
-      {/* Фиксированная колонка под название: заголовки разной длины иначе
-          разъезжаются, и глазу не за что зацепиться при просмотре списка */}
-      <span className="w-[230px] shrink-0 text-pretty text-[15.5px] font-semibold leading-tight text-ink">
+    <div className="flex w-[288px] shrink-0 snap-start flex-col rounded-[14px] border border-line bg-surface-card p-5">
+      <div className="flex items-center justify-between">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-surface-accent text-brand">
+          <Icon>{STAGE_ICONS[type.id] ?? FALLBACK_ICON}</Icon>
+        </span>
+        <div className="flex items-center gap-2">
+          {blocked && <SoonBadge />}
+          <span className="font-mono text-[13px] font-medium text-ink-placeholder">
+            {String(number).padStart(2, "0")}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-4 text-pretty text-[15.5px] font-semibold leading-tight text-ink">
         {type.title}
-      </span>
-      <p className="min-w-0 flex-1 text-pretty text-[13.5px] leading-normal text-ink-muted">
+      </div>
+      {/* flex-1 выравнивает кнопки по низу при описаниях разной длины */}
+      <p className="mt-1.5 flex-1 text-pretty text-[13px] leading-normal text-ink-muted">
         {type.description}
       </p>
-      {blocked && <SoonBadge />}
+
       <button
         type="button"
         onClick={onStart}
         disabled={blocked}
-        className={`flex shrink-0 items-center justify-center gap-2 rounded-input px-6 py-[11px] text-[14.5px] font-semibold text-white transition-colors ${
+        className={`mt-[18px] flex items-center justify-center gap-2 rounded-input py-[11px] text-[14.5px] font-semibold text-white transition-colors ${
           blocked
             ? "cursor-not-allowed bg-disabled"
             : "bg-brand hover:bg-brand-hover"
