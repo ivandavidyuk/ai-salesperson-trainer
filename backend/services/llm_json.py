@@ -17,6 +17,7 @@ from typing import Optional
 import httpx
 
 from core.config import get_settings
+from services import usage
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,12 @@ async def _attempt(payload: dict, *, purpose: str, attempt: int) -> Optional[dic
             headers={"Authorization": f"Bearer {settings.llm_api_key}"},
         )
         response.raise_for_status()
-        choice = (response.json().get("choices") or [{}])[0]
+        тело = response.json()
+        # Учёт токенов: провайдер присылает usage в каждом ответе, и это
+        # единственный способ узнать расход точно. В бою учёт не открыт,
+        # и вызов ничего не делает
+        usage.записать(payload.get("model", "?"), тело.get("usage"))
+        choice = (тело.get("choices") or [{}])[0]
     except Exception as exc:  # noqa: BLE001
         logger.warning("%s, попытка %d: запрос не прошёл: %s", purpose, attempt, exc)
         return None
