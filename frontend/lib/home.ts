@@ -8,14 +8,22 @@ import { DailyContentKind, DealOutcome } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { STAGE_METRICS } from "@/lib/score";
 
-// Понедельник недели, к которой относится дата (00:00 локального времени).
-// «Эта неделя» в статистике считается от него.
+/**
+ * Начало «недели» в статистике — семь суток назад от переданной даты.
+ *
+ * Был понедельник календарной недели, и это сбивало с толку: в понедельник
+ * утром «Прогресс» обнулялся у человека с сотней разговоров, а во вторник
+ * сравнивал два дня с семью. 04.08.2026 пользователь принял такое обнуление
+ * за поломку статистики — и был прав в том смысле, что цифра ничего не значила.
+ *
+ * Скользящее окно ровнее: сравниваются всегда одинаковые отрезки, и результат
+ * не зависит от того, в какой день недели человек открыл страницу.
+ */
+export const WEEK_DAYS = 7;
+
 export function startOfWeek(date: Date): Date {
   const result = new Date(date);
-  result.setHours(0, 0, 0, 0);
-  // getDay(): 0 — воскресенье, поэтому сдвигаем нумерацию к понедельнику
-  const dayIndex = (result.getDay() + 6) % 7;
-  result.setDate(result.getDate() - dayIndex);
+  result.setDate(result.getDate() - WEEK_DAYS);
   return result;
 }
 
@@ -158,7 +166,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
   const now = new Date();
   const weekStart = startOfWeek(now);
   const prevWeekStart = new Date(weekStart);
-  prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+  prevWeekStart.setDate(prevWeekStart.getDate() - WEEK_DAYS);
 
   // В статистику попадают только завершённые разговоры: брошенные
   // и текущие искажали бы и счётчики, и среднюю длительность.
