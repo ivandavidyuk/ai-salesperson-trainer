@@ -16,6 +16,7 @@ from typing import AsyncIterator, Optional
 import httpx
 
 from core.config import get_settings
+from services import usage
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,11 @@ def _build_request(
         # от модели — см. reasoning_for
         "reasoning": reasoning_for(settings.llm_model),
     }
+    if stream:
+        # Просим провайдера прислать usage финальным чанком. Без этого расход
+        # стрима не виден вовсе, и посчитать его можно только на глаз —
+        # 04.08 такая прикидка разошлась со счётом кратно
+        payload["stream_options"] = {"include_usage": True}
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
     url = f"{settings.llm_base_url}/chat/completions"
     return url, payload, headers
@@ -267,6 +273,12 @@ async def _stream_once(
                 chunk = json.loads(data)
             except ValueError:
                 continue
+            # Учёт токенов приезжает отдельным чанком в самом конце потока —
+            # в нём usage есть, а choices пустой. Ловим до всех прочих веток,
+            # иначе он утонет в «choices нет, идём дальше»
+            if chunk.get("usage"):
+                usage.записать(payload.get("model", "?"), chunk["usage"])
+
             choices = chunk.get("choices") or []
             choice = choices[0] if choices else {}
             # Отказ провайдера приезжает внутри успешного ответа: HTTP 200,
