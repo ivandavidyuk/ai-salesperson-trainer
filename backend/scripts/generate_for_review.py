@@ -1,0 +1,159 @@
+"""Сборка анамнезов на вычитку врачом: по файлу на отрасль.
+
+Дима читает и говорит, что годится. До его «да» механизм дальше не трогаем,
+поэтому файлы должны быть полными: пропущенный пациент читается как дыра
+в механизме, а не как отказ провайдера.
+
+Почему не через кабинет РОПа. Заполнить форму и нажать «Собрать заново» —
+значит писать в боевые данные, а второй прогон по другой отрасли затрёт
+первый, и сравнивать станет нечего. Здесь личности приходят файлом,
+а результат ложится в markdown, ничего не трогая.
+
+Личности выгружаются из репозитория фронтенда (там их дом):
+
+    cd frontend && npm run --silent dump:personalities > личности.json
+    docker cp личности.json ai-trainer-backend-1:/tmp/
+    docker exec ai-trainer-backend-1 sh -c \\
+        'cd /app && python scripts/generate_for_review.py --личности /tmp/личности.json'
+
+ПЛАТНО: 21 пациент на отрасль, по три вызова на каждого.
+"""
+
+import argparse
+import asyncio
+import json
+import os
+import sys
+from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from core.config import get_settings  # noqa: E402
+from services import case_generator, usage  # noqa: E402
+
+_КЛИНИКИ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "review_clinics.json")
+
+# Провайдер троттлит, если бить вплотную. В бою случаи собираются
+# последовательно по той же причине (см. rebuildCases)
+_ПАУЗА_СЕК = 1.5
+
+
+async def собрать(личности: list[dict], клиника: dict) -> list[dict]:
+    """Случаи всех пациентов под одну клинику, по одному, с накоплением диагнозов."""
+    занятые: list[str] = []
+    строки: list[dict] = []
+
+    for номер, профиль in enumerate(личности, 1):
+        случай = await case_generator.generate_case(
+            профиль["personality"], клиника, занятые
+        )
+        if случай and случай.get("diagnosis"):
+            занятые.append(случай["diagnosis"])
+        строки.append({"имя": профиль["name"], "случай": случай})
+        метка = (случай or {}).get("diagnosis") or "НЕ СОБРАЛСЯ"
+        print(f"  {номер}/{len(личности)} {профиль['name']}: {метка}",
+              file=sys.stderr, flush=True)
+        await asyncio.sleep(_ПАУЗА_СЕК)
+    return строки
+
+
+def отчёт(строки: list[dict], клиника: dict) -> str:
+    """Markdown под чтение врачом, а не под наши метрики."""
+    собрались = [с for с in строки if с["случай"]]
+    услуги = "\n".join(
+        f"- **{у['name']}** — {у['price']}. {у.get('description', '')}"
+        for у in клиника["services"]
+    )
+    куски = [
+        f"# Анамнезы: {клиника['title']}",
+        "",
+        f"Собрано {datetime.now(timezone.utc):%d.%m.%Y}. "
+        f"Пациентов {len(собрались)} из {len(строки)}.",
+        "",
+        "## Что проверяем",
+        "",
+        "1. Бывает ли такое в этом возрасте.",
+        "2. Следуют ли жалобы из диагноза — и те ли это жалобы, которые",
+        "   при нём появляются первыми.",
+        "3. Похожи ли данные осмотра на настоящие.",
+        "4. Лечится ли это той услугой, которую предлагают.",
+        "",
+        "Личности пациентов писал Дима, они не менялись. Всё медицинское",
+        "придумано моделью — её и проверяем.",
+        "",
+        "## Прайс клиники",
+        "",
+        услуги,
+        "",
+        "---",
+        "",
+    ]
+
+    for строка in строки:
+        случай = строка["случай"]
+        куски.append(f"## {строка['имя']}")
+        куски.append("")
+        if not случай:
+            куски += ["_Случай не собрался — это наш сбой, не медицина._", ""]
+            continue
+        куски += [
+            f"**Диагноз:** {случай.get('diagnosis', '')}",
+            "",
+            f"**Предлагаем:** {случай.get('service', '')}",
+            "",
+            f"**Карточка:** {случай.get('description', '')}",
+            "",
+            "**Анамнез (его видит менеджер до разговора):**",
+            "",
+            f"> {случай.get('anamnesis', '')}",
+            "",
+            "**Зачем пришёл (это знает сам пациент):**",
+            "",
+            f"> {случай.get('situation', '')}",
+            "",
+            "---",
+            "",
+        ]
+    return "\n".join(куски)
+
+
+async def main() -> None:
+    разбор = argparse.ArgumentParser(description="Анамнезы на вычитку врачом")
+    разбор.add_argument("--личности", required=True, help="JSON из npm run dump:personalities")
+    разбор.add_argument("--клиники", default=_КЛИНИКИ, help="описания отраслей")
+    разбор.add_argument("--только", default=None, help="slug одной отрасли вместо всех")
+    разбор.add_argument("--сколько", type=int, default=None, help="ограничить число пациентов")
+    разбор.add_argument("--куда", default="/tmp", help="куда положить файлы")
+    доводы = разбор.parse_args()
+
+    with open(доводы.личности, encoding="utf-8") as файл:
+        личности = json.load(файл)
+    if доводы.сколько:
+        личности = личности[: доводы.сколько]
+
+    with open(доводы.клиники, encoding="utf-8") as файл:
+        клиники = json.load(файл)["clinics"]
+    if доводы.только:
+        клиники = [к for к in клиники if к["slug"] == доводы.только]
+
+    настройки = get_settings()
+    print(
+        f"Проза {настройки.case_model}, картина {настройки.clinical_model}. "
+        f"Отраслей {len(клиники)}, пациентов {len(личности)}. ПЛАТНО.",
+        file=sys.stderr,
+    )
+
+    with usage.учёт() as счёт:
+        for клиника in клиники:
+            print(f"=== {клиника['title']} ===", file=sys.stderr, flush=True)
+            строки = await собрать(личности, клиника)
+            путь = os.path.join(доводы.куда, f"анамнезы-{клиника['slug']}.md")
+            with open(путь, "w", encoding="utf-8") as файл:
+                файл.write(отчёт(строки, клиника))
+            print(f"  → {путь}", file=sys.stderr, flush=True)
+
+    print(json.dumps(счёт.как_словарь(), ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
