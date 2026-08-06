@@ -253,6 +253,11 @@ INSTRUCTIONS = """Ты собираешь «случай» для тренажё
   Ничего нового сюда не приноси. Другой диагноз, другая стадия, лишняя
   находка на осмотре — это брак, даже если звучит убедительно.
 
+  ЗАКОНЧИ СТРОКОЙ «Диагноз: …», скопировав название из блока с картиной
+  ПОСИМВОЛЬНО. Не переписывай его по памяти и не поправляй: описку
+  в названии болезни врач замечает первой, и дальше он не верит уже
+  ничему в этом тексте.
+
   НЕ ПИШИ, ЧТО НАДО ПРОДАТЬ. «Требуется лазерная коррекция», «показана
   замена хрусталика», «объективно требуется операция» — это вывод о продаже,
   а не находка осмотра, и в карте им не место. Менеджеру решать, что
@@ -345,7 +350,11 @@ def _same_line(left: str, right: str) -> bool:
     return left.lower().translate(strip) == right.lower().translate(strip)
 
 
-def validate_case(case: dict, personality: Optional[dict] = None) -> Optional[str]:
+def validate_case(
+    case: dict,
+    personality: Optional[dict] = None,
+    picture: Optional[dict] = None,
+) -> Optional[str]:
     """Проверяет форму ответа. Возвращает причину отказа либо None.
 
     Проверяем не только наличие полей, но и количество элементов: в замере
@@ -405,6 +414,15 @@ def validate_case(case: dict, personality: Optional[dict] = None) -> Optional[st
     if hedge:
         return f"анамнез гадает: «{hedge}»"
 
+    # Диагноз должен приехать из картины дословно. Проза пишется отдельным
+    # вызовом при temperature 0.7, и она переписывает название по памяти:
+    # 06.08 так родились «Пресебиопия» и «Пальпебральные щещи». Описка
+    # в названии болезни — первое, что замечает врач, и дальше он не верит
+    # уже ничему в тексте
+    if picture and picture.get("diagnosis"):
+        if picture["diagnosis"].strip().lower() not in anamnesis:
+            return f"анамнез не повторяет диагноз дословно: «{picture['diagnosis']}»"
+
     for condition in case["caseConditions"]:
         lowered = condition.lower()
         voice = next((v for v in _INSTRUCTION_VOICE if v in lowered), None)
@@ -460,7 +478,7 @@ async def write_case(
             # повторять ещё раз тем же способом бессмысленно
             return None
 
-        problem = validate_case(case, personality)
+        problem = validate_case(case, personality, picture)
         if problem is None:
             return case
         logger.warning(
