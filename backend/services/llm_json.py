@@ -53,7 +53,7 @@ async def ask_json(
     attempts: int = 1,
     temperature: float = 0.2,
     max_tokens: int = 8000,
-    reasoning: bool = True,
+    reasoning: Optional[str] = "medium",
 ) -> Optional[dict]:
     """Спрашивает модель и возвращает разобранный JSON либо None.
 
@@ -61,9 +61,25 @@ async def ask_json(
     уместна там, где следующая попытка случится сама (фоновый оценщик
     пересчитается на следующем ходу); больше — там, где второго шанса нет.
 
-    @param reasoning размышление. Включено по умолчанию: у всех нынешних
-    потребителей задержка не важна, а устойчивость суждения — главное.
-    Роль сюда не ходит: у неё reasoning выключен ради первого токена.
+    @param reasoning уровень усилия: medium по умолчанию, None — не думать.
+    Роль сюда не ходит: у неё размышление своё, ради первого токена.
+
+    ПОЧЕМУ ИМЕННО effort, А НЕ enabled. До 06.08 здесь стояло
+    `{"enabled": True}`, и это НЕ РАБОТАЛО: замер на gemini-3.5-flash-lite
+    показал ноль токенов размышления при каждой форме, кроме effort.
+
+        без параметра   0        effort=minimal  0
+        enabled=true    0        effort=low      0
+        effort=medium 818        effort=high   834      effort=max 841
+
+    Выше medium модель думать не начинает — сколько тратить, Google решает
+    внутри. У gpt-4o-mini размышления нет ни на одном уровне, и параметр
+    он просто игнорирует, не ломаясь.
+
+    То же знание уже лежало в llm.py для роли (там `effort: minimal`
+    и запись, что `enabled: false` даёт HTTP 400 «Reasoning is mandatory»),
+    но сюда не доехало — и полгода все вызовы шли без размышления,
+    хотя код утверждал обратное.
     """
     settings = get_settings()
     if not settings.llm_api_key:
@@ -75,7 +91,9 @@ async def ask_json(
         "messages": messages,
         "temperature": temperature,
         "response_format": {"type": "json_object"},
-        "reasoning": {"enabled": reasoning},
+        # minimal вместо enabled=false: gemini-3.5 на выключение отвечает
+        # HTTP 400 «Reasoning is mandatory», а minimal он принимает и не думает
+        "reasoning": {"effort": reasoning or "minimal"},
         "max_tokens": max_tokens,
     }
 
