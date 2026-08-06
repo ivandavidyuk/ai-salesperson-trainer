@@ -282,7 +282,12 @@ async def generate_case_endpoint(request: Request):
     if not isinstance(personality, dict) or not isinstance(clinic, dict):
         raise HTTPException(status_code=400, detail="Нужны personality и clinic")
 
-    case = await case_generator.generate_case(personality, clinic)
+    # Диагнозы, уже выданные другим пациентам этой клиники. Необязательное:
+    # без него сборка работает, просто у пациентов чаще совпадут болезни
+    used = body.get("usedDiagnoses")
+    used = [str(d) for d in used] if isinstance(used, list) else None
+
+    case = await case_generator.generate_case(personality, clinic, used)
     if case is None:
         # Провайдер не ответил или ответ не прошёл проверку формы. Причина
         # уже в логе; вызывающему важно одно — этот пациент не собрался
