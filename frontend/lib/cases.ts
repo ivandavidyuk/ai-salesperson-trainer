@@ -32,6 +32,11 @@ interface GeneratedCase {
   anamnesis: string;
   description: string;
   objections: string[];
+  /** Диагноз, который поставил клинический шаг. Нужен следующим пациентам:
+   *  по нему сборка предпочтёт им ещё не занятую болезнь. */
+  diagnosis: string;
+  /** Услуга, подобранная под диагноз, — та, которую менеджер продаёт. */
+  service: string;
 }
 
 function backendUrl(): string {
@@ -44,7 +49,8 @@ function backendUrl(): string {
 async function generateOne(
   personality: unknown,
   clinic: ClinicPayload,
-  token: string
+  token: string,
+  usedDiagnoses: string[]
 ): Promise<GeneratedCase | null> {
   const res = await fetch(`${backendUrl()}/cases/generate`, {
     method: "POST",
@@ -52,7 +58,7 @@ async function generateOne(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ personality, clinic }),
+    body: JSON.stringify({ personality, clinic, usedDiagnoses }),
   });
   if (!res.ok) return null;
   return (await res.json()) as GeneratedCase;
@@ -169,12 +175,21 @@ async function generateAll(
   alreadyDone: number
 ): Promise<number> {
   const byName = new Map(PROFILES.map((p) => [p.name, p]));
+  // Занятые болезни копим по ходу сборки: сборка идёт последовательно,
+  // и каждый следующий пациент знает, что уже выпало предыдущим. Это мягкое
+  // предпочтение, а не запрет — правдоподобие важнее разнообразия.
+  //
+  // При «собрать заново» после обрыва список начинается пустым: диагнозы
+  // готовых случаев в базе не лежат. Разнообразие от этого чуть слабее,
+  // но ни один случай не становится неверным.
+  const usedDiagnoses: string[] = [];
   let ready = alreadyDone;
   for (const patient of patients) {
     const role = byName.get(patient.name)!;
     try {
-      const generated = await generateOne(role.personality, clinic, token);
+      const generated = await generateOne(role.personality, clinic, token, usedDiagnoses);
       if (generated) {
+        if (generated.diagnosis) usedDiagnoses.push(generated.diagnosis);
         const patientCase: PatientCase = {
           situation: generated.situation,
           calmWhile: generated.calmWhile,
