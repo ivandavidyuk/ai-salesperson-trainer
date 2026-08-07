@@ -193,6 +193,10 @@ model Patient {
   objections    String[]
   decisionMaker String?
   approach      String?
+  // Голос синтеза. Пусто — берётся общий из ELEVENLABS_VOICE_ID, он женский
+  // и подбирался под Тамару. Мужчинам он не годится, поэтому у них здесь
+  // стоит свой идентификатор
+  voice       String?
   // Сложность пациента в мастере настройки тренировки
   difficulty  PatientDifficulty @default(mid)
   // Пациенты, для которых ещё нет промпта, лежат неактивными: в мастере они

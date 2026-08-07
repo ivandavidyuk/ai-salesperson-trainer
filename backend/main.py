@@ -854,7 +854,11 @@ class TurnManager:
                     logger.warning(
                         "TTS WS не сработал (%s), фолбэк на HTTP", exc
                     )
-                    async for chunk in tts.synthesize_stream(sentence):
+                    # Голос тот же, что у сокета: иначе на сбое пациент
+                    # посреди разговора сменил бы пол
+                    async for chunk in tts.synthesize_stream(
+                        sentence, self.tts_stream.voice_id
+                    ):
                         yield chunk
 
             async def consume_sentences() -> None:
@@ -1077,8 +1081,15 @@ async def session_ws(ws: WebSocket, session_id: str):
     )
 
     # Постоянный TTS WebSocket на всю сессию: соединение устанавливается
-    # здесь один раз, чтобы на каждой реплике не тратить время на TLS
-    tts_stream = tts.TtsWsStream()
+    # здесь один раз, чтобы на каждой реплике не тратить время на TLS.
+    #
+    # Голос берём до подключения: он вшит в адрес сокета, и сменить его
+    # у поднятого соединения нельзя. Пусто — общий из настроек
+    voice_id = await store.get_patient_voice(session_id)
+    tts_stream = tts.TtsWsStream(voice_id)
+    logger.info(
+        "Сессия %s: голос %s", session_id, voice_id or "общий из настроек"
+    )
     try:
         await tts_stream.start()
     except Exception as exc:  # noqa: BLE001

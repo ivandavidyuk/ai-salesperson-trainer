@@ -69,10 +69,13 @@ class TtsWsStream:
         await stream.stop()                  # при закрытии сессии
     """
 
-    def __init__(self) -> None:
+    def __init__(self, voice_id: Optional[str] = None) -> None:
         self._ws: Optional[websockets.ClientConnection] = None
         self._ctx_counter = itertools.count(1)
         self._closed = False
+        # Голос пациента. Пусто — общий из настроек: он женский, подбирался
+        # под Тамару, и мужчинам не годится
+        self.voice_id = voice_id or get_settings().elevenlabs_voice_id
 
     async def start(self) -> None:
         """Устанавливает WebSocket-соединение заранее (на старте сессии)."""
@@ -82,7 +85,7 @@ class TtsWsStream:
         settings = get_settings()
         if not settings.elevenlabs_api_key:
             raise RuntimeError("Не задан ELEVENLABS_API_KEY для TTS")
-        if not settings.elevenlabs_voice_id:
+        if not self.voice_id:
             raise RuntimeError("Не задан ELEVENLABS_VOICE_ID для TTS")
 
         query = urlencode(
@@ -93,7 +96,7 @@ class TtsWsStream:
             }
         )
         url = (
-            f"{WS_BASE}/text-to-speech/{settings.elevenlabs_voice_id}"
+            f"{WS_BASE}/text-to-speech/{self.voice_id}"
             f"/multi-stream-input?{query}"
         )
         headers = {"xi-api-key": settings.elevenlabs_api_key}
@@ -176,17 +179,20 @@ class TtsWsStream:
         logger.info("TTS: WebSocket-стрим остановлен")
 
 
-def _request_parts(text: str, stream: bool) -> tuple[str, dict, dict]:
+def _request_parts(
+    text: str, stream: bool, voice_id: Optional[str] = None
+) -> tuple[str, dict, dict]:
     """Собирает URL, payload и заголовки запроса синтеза."""
     settings = get_settings()
     if not settings.elevenlabs_api_key:
         raise RuntimeError("Не задан ELEVENLABS_API_KEY для TTS")
-    if not settings.elevenlabs_voice_id:
+    voice = voice_id or settings.elevenlabs_voice_id
+    if not voice:
         raise RuntimeError("Не задан ELEVENLABS_VOICE_ID для TTS")
 
     suffix = "/stream" if stream else ""
     url = (
-        f"{API_BASE}/text-to-speech/{settings.elevenlabs_voice_id}{suffix}"
+        f"{API_BASE}/text-to-speech/{voice}{suffix}"
         f"?output_format={OUTPUT_FORMAT}"
     )
     payload = {
@@ -198,13 +204,19 @@ def _request_parts(text: str, stream: bool) -> tuple[str, dict, dict]:
     return url, payload, headers
 
 
-async def synthesize_stream(text: str) -> AsyncIterator[bytes]:
+async def synthesize_stream(
+    text: str, voice_id: Optional[str] = None
+) -> AsyncIterator[bytes]:
     """Синтезирует речь и отдаёт MP3-чанки по мере генерации.
 
     Использует эндпоинт /stream: первый чанк приходит до завершения
     синтеза всей фразы, что заметно снижает задержку до первого звука.
+
+    Это запасной путь, когда WebSocket не поднялся. Голос передавать
+    обязательно: без него фолбэк заговорит женским голосом Тамары
+    посреди разговора с мужчиной — заметнее, чем сам сбой.
     """
-    url, payload, headers = _request_parts(text, stream=True)
+    url, payload, headers = _request_parts(text, stream=True, voice_id=voice_id)
 
     total = 0
     async with _client.stream("POST", url, json=payload, headers=headers) as response:
