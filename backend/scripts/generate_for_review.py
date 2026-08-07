@@ -22,6 +22,7 @@
 import argparse
 import asyncio
 import json
+import logging
 import os
 import sys
 from datetime import datetime, timezone
@@ -146,6 +147,12 @@ async def main() -> None:
         личности = json.load(файл)
     if доводы.сколько:
         личности = личности[: доводы.сколько]
+
+    # Без этого не видно работы механизма: сборка картин и браковки критика
+    # пишутся уровнем INFO, а по умолчанию до лога доходит только WARNING.
+    # 07.08 из-за этого grep по «Критик забраковал» показал ноль на прогоне,
+    # где критик вмешался семь раз, — и я едва не отчитался, что он молчал.
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
 
     with open(доводы.клиники, encoding="utf-8") as файл:
         клиники = json.load(файл)["clinics"]
