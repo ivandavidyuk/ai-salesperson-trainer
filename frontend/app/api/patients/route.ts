@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getUserWithRole } from "@/lib/access";
+import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,10 +37,13 @@ export async function GET(request: NextRequest) {
         objections: isHead,
         decisionMaker: isHead,
         approach: isHead,
+        // Случай под клинику пользователя перекрывает видимые поля:
+        // анамнез и карточка зависят от отрасли, а личность — нет
+        cases: случайДляОрганизации(user.organizationId),
       },
     });
 
-    return NextResponse.json(patients);
+    return NextResponse.json(patients.map(сНаложеннымСлучаем));
   } catch (error) {
     console.error("Ошибка в /api/patients:", error);
     return NextResponse.json(
