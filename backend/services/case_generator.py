@@ -35,7 +35,7 @@ import re
 from typing import Optional
 
 from core.config import get_settings
-from services import clinical_picture
+from services import case_review, clinical_picture
 from services.llm_json import ask_json
 
 logger = logging.getLogger(__name__)
@@ -58,6 +58,19 @@ _SHAPE_ATTEMPTS = 3
 # прошло бы проверку «поле на месте». Считаем, а не только проверяем наличие
 _MANNER_EXAMPLES = 2
 _MIN_VOCABULARY = 5
+
+# Потолок работы критика: две картины по две попытки прозы на каждую.
+#
+# Две, а не больше, по обоим счётчикам. Прозу с названным возражением
+# обычно чинит первая же попытка; если не починила две — дело не в тексте.
+# Картин берём две из трёх-пяти готовых: если и вторая не годится, значит
+# ошибается не выбор, а что-то выше по конвейеру, и перебор не поможет.
+#
+# Дальше отдаём последнее написанное с пометкой. Пациент без случая
+# не остаётся никогда: ложный отказ критика должен стоить разнообразия,
+# а не пациента.
+_REVIEW_ATTEMPTS = 2
+_КАРТИН_НА_ПАЦИЕНТА = 2
 
 # Корень в две буквы ловит что попало: «дн» из первой сборки на двадцати
 # одном пациенте совпадало с «дней», «дно» и «однажды» разом.
@@ -502,6 +515,50 @@ async def write_case(
     return None
 
 
+async def _собрать_с_критиком(
+    personality: dict,
+    clinic: dict,
+    пары: list[tuple[dict, dict]],
+) -> tuple[Optional[dict], Optional[dict], Optional[dict], str]:
+    """Проза под надзором критика. Возвращает (случай, картина, услуга, пометка).
+
+    Порядок попыток продиктован тем, что чинится, а что нет.
+
+    Виновата проза — пересобираем её, передав само возражение: слепая
+    пересборка при temperature 0.7 это тот же бросок костей, а названная
+    беда делает попытку осмысленной. Обычно хватает первой.
+
+    Виновата картина — переписывание текста не спасёт никогда, поэтому
+    берём следующую пару. Она уже оплачена клиническим вызовом, новый
+    не нужен.
+
+    Потолок — две картины по две попытки прозы. Дальше отдаём последнее
+    написанное с пометкой: пациент без случая не остаётся, как бы критик
+    ни привередничал. Ложный отказ должен стоить разнообразия, а не пациента.
+    """
+    последний: tuple[Optional[dict], Optional[dict], Optional[dict], str] = (None, None, None, "")
+
+    for picture, service in пары[:_КАРТИН_НА_ПАЦИЕНТА]:
+        возражение: Optional[str] = None
+        for попытка in range(1, _REVIEW_ATTEMPTS + 1):
+            case = await write_case(personality, clinic, picture, service, возражение)
+            if case is None:
+                break  # форма не сошлась и после повторов — эта картина не пошла
+
+            годится, виновник, возражение = await case_review.review(
+                personality, picture, case, service.get("name", "")
+            )
+            if годится:
+                return case, picture, service, ""
+
+            последний = (case, picture, service, возражение)
+            if виновник == case_review.ВИНОВАТА_КАРТИНА:
+                break  # прозу переписывать бесполезно, нужна другая картина
+            logger.info("Критик о прозе, попытка %d: %s", попытка, возражение)
+
+    return последний
+
+
 async def generate_case(
     personality: dict,
     clinic: dict,
@@ -521,14 +578,15 @@ async def generate_case(
     Никогда не бросает: сбой на одном пациенте не должен ронять сборку
     остальных.
     """
-    выбор = await clinical_picture.pick(personality, clinic, used_diagnoses)
-    if выбор is None:
+    пары = await clinical_picture.pick(personality, clinic, used_diagnoses)
+    if not пары:
         return None
-    picture, service = выбор
 
-    case = await write_case(personality, clinic, picture, service)
+    case, picture, service, пометка = await _собрать_с_критиком(personality, clinic, пары)
     if case is None:
         return None
+    if пометка:
+        case["reviewNote"] = пометка
 
     # Диагноз возвращаем наверх: по нему сборка следующих пациентов узнает,
     # что уже занято, а разбор помеченных случаев — что именно проверять.
