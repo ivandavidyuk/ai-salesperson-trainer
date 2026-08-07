@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireHead } from "@/lib/access";
-import { rebuildCases } from "@/lib/cases";
+import { rebuildCases, идётСборка } from "@/lib/cases";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +24,15 @@ export async function POST(request: NextRequest) {
     }
     if (!head.organizationId) {
       return NextResponse.json({ error: "Клиника не заполнена" }, { status: 400 });
+    }
+
+    // Вторую сборку поверх живой не запускаем. Кнопка нажимается там же,
+    // где показан обрыв, — а нажать её можно и когда обрыва не было:
+    // две вкладки, двойной клик, возврат назад. Обе сборки взялись бы
+    // за одних и тех же пациентов, заплатив за них дважды, и чей случай
+    // останется в базе, решала бы очередь записи
+    if (await идётСборка(head.organizationId)) {
+      return NextResponse.json({ started: false, alreadyRunning: true });
     }
 
     // Флаг поднимаем до старта, как и при сохранении формы: иначе страница
