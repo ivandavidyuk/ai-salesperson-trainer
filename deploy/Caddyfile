@@ -13,6 +13,15 @@
 	@ws path /ws/*
 	reverse_proxy @ws {$BACKEND_UPSTREAM}
 
+	# Сборка случаев пациентов → туда же, на FastAPI.
+	#
+	# Роуты Next зовут этот путь по адресу из FASTAPI_WS_URL, а это наш
+	# собственный домен: без правила запрос возвращался в Next.js, тот
+	# не знал такого роута и редиректил на /login. Сборка падала на всех
+	# двадцати одном пациенте, а backend не видел ни одного запроса
+	@cases path /cases/*
+	reverse_proxy @cases {$BACKEND_UPSTREAM}
+
 	# Всё остальное (интерфейс + REST API) → Next.js
 	reverse_proxy frontend:3000
 }
