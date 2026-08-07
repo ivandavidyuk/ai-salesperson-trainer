@@ -16,6 +16,7 @@
     "seed:demo": "ts-node scripts/seed-demo.ts",
     "check:prompts": "ts-node scripts/check-prompts.ts",
     "dump:personalities": "ts-node scripts/dump-personalities.ts",
+    "rebuild:prompts": "ts-node scripts/rebuild-prompts.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
