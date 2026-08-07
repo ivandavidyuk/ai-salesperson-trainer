@@ -111,6 +111,14 @@ jobs:
             # но их загрузка тратит лимит и может уронить весь pull.
             docker compose -f docker-compose.prod.yml pull frontend
             docker compose -f docker-compose.prod.yml up -d
+            # Caddy перечитывает конфиг сам только при пересоздании, а его
+            # образ не меняется — контейнер живёт неделями и правки Caddyfile
+            # не видит. Перечитывание штатное: соединения не рвутся.
+            # Не роняем деплой на сбое: приложение уже выкачено, а прежний
+            # маршрут работает — хуже свежего, но лучше упавшего деплоя
+            docker compose -f docker-compose.prod.yml exec -T caddy \
+              caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile \
+              || echo "ВНИМАНИЕ: Caddy не перечитал конфиг — маршруты остались прежними"
             # Контейнер должен работать именно на свежескачанном образе.
             # Без этой проверки неудачный деплой выглядел бы успешным.
             running=$(docker inspect -f '{{.Image}}' "$(docker compose -f docker-compose.prod.yml ps -q frontend)")
