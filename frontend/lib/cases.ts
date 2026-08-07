@@ -184,58 +184,92 @@ async function generateAll(
   // но ни один случай не становится неверным.
   const usedDiagnoses: string[] = [];
   let ready = alreadyDone;
-  for (const patient of patients) {
+
+  /** Одна попытка на пациента. true — случай сохранён. */
+  const собрать = async (patient: { id: string; name: string }): Promise<boolean> => {
     const role = byName.get(patient.name)!;
     try {
       const generated = await generateOne(role.personality, clinic, token, usedDiagnoses);
-      if (generated) {
-        if (generated.diagnosis) usedDiagnoses.push(generated.diagnosis);
-        const patientCase: PatientCase = {
-          situation: generated.situation,
-          calmWhile: generated.calmWhile,
-          mannerExamples: generated.mannerExamples.join("\n"),
-          conditions: generated.caseConditions,
-          helps: generated.caseHelps,
-          vocabulary: generated.vocabulary,
-        };
-        const prompt = buildRolePrompt({ personality: role.personality, case: patientCase });
-
-        await prisma.patientCase.upsert({
-          where: {
-            patientId_organizationId: { patientId: patient.id, organizationId },
-          },
-          create: {
-            patientId: patient.id,
-            organizationId,
-            prompt,
-            caseData: patientCase as unknown as Prisma.InputJsonValue,
-            description: generated.description,
-            anamnesis: generated.anamnesis,
-            objections: generated.objections,
-          },
-          update: {
-            prompt,
-            caseData: patientCase as unknown as Prisma.InputJsonValue,
-            description: generated.description,
-            anamnesis: generated.anamnesis,
-            objections: generated.objections,
-            generatedAt: new Date(),
-          },
-        });
-        ready += 1;
-      } else {
+      if (!generated) {
         // Пациент остаётся с прежним случаем — это лучше, чем пустой:
         // разговор с ним по-прежнему возможен, просто не по новой отрасли
         console.error(`Случай не собран: ${patient.name}`);
+        return false;
       }
+      if (generated.diagnosis) usedDiagnoses.push(generated.diagnosis);
+      const patientCase: PatientCase = {
+        situation: generated.situation,
+        calmWhile: generated.calmWhile,
+        mannerExamples: generated.mannerExamples.join("\n"),
+        conditions: generated.caseConditions,
+        helps: generated.caseHelps,
+        vocabulary: generated.vocabulary,
+      };
+      const prompt = buildRolePrompt({ personality: role.personality, case: patientCase });
+
+      await prisma.patientCase.upsert({
+        where: {
+          patientId_organizationId: { patientId: patient.id, organizationId },
+        },
+        create: {
+          patientId: patient.id,
+          organizationId,
+          prompt,
+          caseData: patientCase as unknown as Prisma.InputJsonValue,
+          description: generated.description,
+          anamnesis: generated.anamnesis,
+          objections: generated.objections,
+        },
+        update: {
+          prompt,
+          caseData: patientCase as unknown as Prisma.InputJsonValue,
+          description: generated.description,
+          anamnesis: generated.anamnesis,
+          objections: generated.objections,
+          generatedAt: new Date(),
+        },
+      });
+      ready += 1;
+      return true;
     } catch (error) {
       console.error(`Случай не собран: ${patient.name}`, error);
+      return false;
     }
+  };
 
-    await prisma.organization.update({
+  const отметить = () =>
+    prisma.organization.update({
       where: { id: organizationId },
       data: { casesReady: ready, casesUpdatedAt: new Date() },
     });
+
+  const упавшие: typeof patients = [];
+  for (const patient of patients) {
+    if (!(await собрать(patient))) упавшие.push(patient);
+    await отметить();
+  }
+
+  // Второй проход по упавшим — и только по ним. Пересобирать всё значило бы
+  // заново платить за два десятка удачных ради одного неудачного.
+  //
+  // ИМЕННО В КОНЦЕ, а не сразу после сбоя. Если провайдер поймал плохую
+  // минуту, немедленный повтор попадёт в ту же минуту; между проходами
+  // пройдёт десять-двадцать, и это лечит случайный сбой. Побочная польза:
+  // к концу список занятых диагнозов полон, и пересобранным достанется
+  // более разнообразная картина.
+  //
+  // Проход ровно один. Внутри конвейера уже по две-три попытки на каждом
+  // шаге; если и после этого не вышло, дело не в случайности, а в самом
+  // пациенте или в узости прайса — по кругу тут только деньги терять.
+  if (упавшие.length) {
+    console.warn(
+      `Пересборка упавших (${упавшие.length}): ${упавшие.map((p) => p.name).join(", ")}`
+    );
+    for (const patient of упавшие) {
+      const вышло = await собрать(patient);
+      console.warn(`Пересборка ${patient.name}: ${вышло ? "получилось" : "снова мимо"}`);
+      await отметить();
+    }
   }
   return ready;
 }
