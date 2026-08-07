@@ -39,6 +39,8 @@ function toRow(profile: (typeof PROFILES)[number]): Prisma.PatientCreateInput {
     objections: profile.objections ?? [],
     decisionMaker: profile.decisionMaker,
     approach: profile.approach,
+    // Пусто у женщин — им достаётся общий голос из настроек
+    voice: profile.voice ?? null,
     difficulty: profile.difficulty,
     // Без случая роль неполна: в мастере такой пациент виден, но не выбирается
     isActive: Boolean(role),

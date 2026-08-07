@@ -77,6 +77,18 @@ _PATIENT_PROMPT_SQL = (
 )
 
 
+# Голос спрашиваем отдельным запросом, а не вместе с промптом: промпт
+# собирается лениво и кладётся в Redis, а голос нужен раньше — в момент
+# подключения, когда поднимается постоянный TTS-сокет на всю сессию.
+# Запрос на сессию один, он копеечный
+_PATIENT_VOICE_SQL = (
+    'SELECT p."voice" AS patient_voice '
+    'FROM "Session" s '
+    'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
+    'WHERE s."id" = $1'
+)
+
+
 def _scores_key(session_id: str) -> str:
     """Последняя фоновая оценка этапов — от неё зависит порог допуска."""
     return f"session:{session_id}:scores"
@@ -280,6 +292,15 @@ class SessionStore:
         )
         await self._redis.set(_prompt_key(session_id), prompt)
         return prompt
+
+    async def get_patient_voice(self, session_id: str) -> Optional[str]:
+        """Голос пациента или None, если у него свой не задан.
+
+        None — не ошибка: у женщин стоит общий голос из настроек.
+        """
+        row = await self._pool.fetchrow(_PATIENT_VOICE_SQL, session_id)
+        voice = (row["patient_voice"] or "").strip() if row else ""
+        return voice or None
 
     # --- Итоговый разбор --------------------------------------------------
 
