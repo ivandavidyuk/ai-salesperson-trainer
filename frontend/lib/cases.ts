@@ -119,7 +119,19 @@ async function generateOne(
     },
     body: JSON.stringify({ personality, clinic, usedDiagnoses }),
   });
-  if (!res.ok) return null;
+  // Отказ разбираем вслух. Пока здесь стоял голый `if (!res.ok) return null`,
+  // в логе оставалось только «Случай не собран: Имя» — по этой строке
+  // неотличимы отказ модели, протухший токен и запрос, ушедший не на тот
+  // сервер. Последнее и случилось 07.08: Caddy не знал про /cases/*,
+  // возвращал запрос в Next.js, тот редиректил на /login, и сборка молча
+  // падала на всех, пока причину не нашли раскопками по ssh
+  if (!res.ok) {
+    const тело = await res.text().catch(() => "");
+    console.error(
+      `Генератор отказал: HTTP ${res.status} ${res.url} ${тело.slice(0, 200)}`
+    );
+    return null;
+  }
   return (await res.json()) as GeneratedCase;
 }
 
