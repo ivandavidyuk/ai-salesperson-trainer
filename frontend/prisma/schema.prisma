@@ -416,6 +416,15 @@ model PatientCase {
   anamnesis   String
   objections  String[]
 
+  // Возражение критика, если он забраковал случай, а исправить не вышло.
+  // Пустое поле — случай прошёл проверку.
+  //
+  // Именно полем, а не строкой в логе: лог никто не открывает, и плохой
+  // анамнез молча доехал бы до менеджера — ровно то положение, из которого
+  // мы выбирались. По колонке видно одним запросом, что смотреть перед
+  // запуском клиники.
+  reviewNote String?
+
   generatedAt DateTime @default(now())
 
   patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
