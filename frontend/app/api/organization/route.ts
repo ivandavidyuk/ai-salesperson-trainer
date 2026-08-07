@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireHead } from "@/lib/access";
-import { rebuildCases } from "@/lib/cases";
+import { rebuildCases, сборкаЖива, идётСборка } from "@/lib/cases";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,13 +29,6 @@ interface OrganizationBody {
   services?: ServiceBody[];
 }
 
-// Сколько ждать движения счётчика, прежде чем считать сборку мёртвой.
-// Один пациент занимает до полутора минут: до шести обращений к модели —
-// три попытки провайдера с паузами и два повтора на негодную форму.
-// Порог берём с запасом, ложно объявить живую сборку мёртвой хуже:
-// руководитель увидит «прервалось», пока оно идёт
-const STALE_AFTER_MS = 3 * 60 * 1000;
-
 async function organizationWithServices(id: string) {
   const organization = await prisma.organization.findUnique({
     where: { id },
@@ -55,15 +48,7 @@ async function organizationWithServices(id: string) {
   });
   if (!organization) return null;
 
-  // Флаг в одиночку врёт: рестарт контейнера посреди сборки обрывает задачу,
-  // а снять флаг уже некому — он останется поднятым навсегда, и лоадер
-  // будет крутиться при мёртвом процессе. Живой считаем только ту сборку,
-  // у которой недавно двигался счётчик
-  const moved = organization.casesUpdatedAt?.getTime() ?? 0;
-  const running =
-    organization.casesRunning && Date.now() - moved < STALE_AFTER_MS;
-
-  return { ...organization, casesRunning: running };
+  return { ...organization, casesRunning: сборкаЖива(organization) };
 }
 
 export async function GET(request: NextRequest) {
@@ -97,6 +82,18 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         { error: "Доступно только руководителю" },
         { status: 403 }
+      );
+    }
+
+    // Сохранение во время сборки отклоняем целиком, а не «сохраним, но
+    // пересоберём потом». Идущая сборка держит в руках прежний прайс и на
+    // новый уже не посмотрит: часть пациентов вышла бы по старой отрасли,
+    // часть по новой, и разобрать, кто по какой, было бы не по чему.
+    // Ждать до конца сборки честнее, чем получить клинику вперемешку
+    if (head.organizationId && (await идётСборка(head.organizationId))) {
+      return NextResponse.json(
+        { error: "Идёт сборка пациентов — сохранить получится, когда она закончится" },
+        { status: 409 }
       );
     }
 
