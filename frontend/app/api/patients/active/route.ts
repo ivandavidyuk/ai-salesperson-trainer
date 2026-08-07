@@ -7,14 +7,16 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getAuthUser } from "@/lib/auth";
+import { getUserWithRole } from "@/lib/access";
+import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser(request);
+    // Не getAuthUser: нужна организация, чтобы взять случай под её отрасль
+    const user = await getUserWithRole(request);
     if (!user) {
       return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
     }
@@ -22,14 +24,20 @@ export async function GET(request: NextRequest) {
     const patient = await prisma.patient.findFirst({
       where: { isActive: true },
       orderBy: { createdAt: "asc" },
-      select: { id: true, name: true, description: true, anamnesis: true },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        anamnesis: true,
+        cases: случайДляОрганизации(user.organizationId),
+      },
     });
 
     if (!patient) {
       return NextResponse.json({ error: "Пациент не найден" }, { status: 404 });
     }
 
-    return NextResponse.json(patient);
+    return NextResponse.json(сНаложеннымСлучаем(patient));
   } catch (error) {
     console.error("Ошибка в /api/patients/active:", error);
     return NextResponse.json(

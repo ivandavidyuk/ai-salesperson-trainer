@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getUserWithRole, requireHead } from "@/lib/access";
+import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,6 +53,7 @@ export async function GET(request: NextRequest) {
             objections: isHead,
             decisionMaker: isHead,
             approach: isHead,
+            cases: случайДляОрганизации(user.organizationId),
           },
         },
         trainingType: { select: { id: true, title: true, isActive: true } },
@@ -67,7 +69,7 @@ export async function GET(request: NextRequest) {
         comment: row.comment,
         dueAt: row.dueAt?.toISOString() ?? null,
         isPriority: row.isPriority,
-        patient: row.patient,
+        patient: сНаложеннымСлучаем(row.patient),
         trainingType: row.trainingType,
         author: `${row.createdBy.firstName} ${row.createdBy.lastName}`.trim(),
         // Кому назначено — нужно только на странице руководителя
