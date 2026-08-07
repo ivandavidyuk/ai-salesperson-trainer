@@ -37,6 +37,8 @@ interface GeneratedCase {
   diagnosis: string;
   /** Услуга, подобранная под диагноз, — та, которую менеджер продаёт. */
   service: string;
+  /** Возражение критика, если исправить не вышло. Пусто — случай чист. */
+  reviewNote?: string;
 }
 
 function backendUrl(): string {
@@ -183,6 +185,10 @@ async function generateAll(
   // готовых случаев в базе не лежат. Разнообразие от этого чуть слабее,
   // но ни один случай не становится неверным.
   const usedDiagnoses: string[] = [];
+  // Кого критик забраковал, а исправить не вышло. Пометка лежит в базе
+  // полем reviewNote; здесь — чтобы итог сборки был виден сразу, не дожидаясь
+  // запроса. Случай при этом сохраняется: пациент без случая хуже помеченного
+  const помеченные: string[] = [];
   let ready = alreadyDone;
 
   /** Одна попытка на пациента. true — случай сохранён. */
@@ -219,6 +225,7 @@ async function generateAll(
           description: generated.description,
           anamnesis: generated.anamnesis,
           objections: generated.objections,
+          reviewNote: generated.reviewNote || null,
         },
         update: {
           prompt,
@@ -226,10 +233,14 @@ async function generateAll(
           description: generated.description,
           anamnesis: generated.anamnesis,
           objections: generated.objections,
+          // Пустая строка, а не пропуск: пересборка должна СНИМАТЬ старую
+          // пометку, если на этот раз случай прошёл критика чисто
+          reviewNote: generated.reviewNote || null,
           generatedAt: new Date(),
         },
       });
       ready += 1;
+      if (generated.reviewNote) помеченные.push(patient.name);
       return true;
     } catch (error) {
       console.error(`Случай не собран: ${patient.name}`, error);
@@ -270,6 +281,15 @@ async function generateAll(
       console.warn(`Пересборка ${patient.name}: ${вышло ? "получилось" : "снова мимо"}`);
       await отметить();
     }
+  }
+
+  // Помеченные — не сбой сборки, а повод прочитать их до запуска клиники:
+  // критик нашёл беду и не смог её выправить, случай сохранён как есть
+  if (помеченные.length) {
+    console.warn(
+      `Случаев с пометкой критика (${помеченные.length}): ${помеченные.join(", ")}. ` +
+        `Читать через PatientCase.reviewNote`
+    );
   }
   return ready;
 }
