@@ -21,7 +21,6 @@ const FILTERS: { key: "all" | DifficultyKey; label: string }[] = [
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState<WizardPatient[] | null>(null);
-  const [isHead, setIsHead] = useState(false);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | DifficultyKey>("all");
@@ -33,16 +32,7 @@ export default function PatientsPage() {
     let cancelled = false;
     (async () => {
       try {
-        // Роль решает, показывать ли кнопку «Подробнее»: разбор пациента
-        // API отдаёт только руководителю
-        const [meRes, res] = await Promise.all([
-          fetch("/api/auth/me"),
-          fetch("/api/patients"),
-        ]);
-        if (meRes.ok && !cancelled) {
-          const me = (await meRes.json()) as { role?: string };
-          setIsHead(me.role === "head");
-        }
+        const res = await fetch("/api/patients");
         if (!res.ok) throw new Error("request failed");
         const data = (await res.json()) as WizardPatient[];
         if (!cancelled) setPatients(data);
@@ -158,7 +148,6 @@ export default function PatientsPage() {
             <PatientCard
               key={patient.id}
               patient={patient}
-              isHead={isHead}
               onOpenInfo={() => setInfoPatient(patient)}
               onStart={() => setStarted(patient)}
             />
@@ -196,45 +185,20 @@ export default function PatientsPage() {
 
 interface PatientCardProps {
   patient: WizardPatient;
-  /** У руководителя рядом с «Начать» появляется «Подробнее» */
-  isHead: boolean;
   onOpenInfo: () => void;
   onStart: () => void;
 }
 
-/** Аватар, имя и подпись. Кнопкой становится только когда есть куда вести. */
-function Identity({
-  patient,
-  onOpenInfo,
-}: {
-  patient: PatientCardProps["patient"];
-  onOpenInfo?: () => void;
-}) {
-  const inner = (
-    <>
+/** Аватар, имя и подпись. Не кликается: в окно ведёт кнопка «Подробнее». */
+function Identity({ patient }: { patient: PatientCardProps["patient"] }) {
+  return (
+    <div className="-ml-1.5 inline-flex min-w-0 flex-1 items-center gap-3 py-1.5 pl-1.5 pr-3">
       <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-[17px] font-semibold text-brand">
         {initials(patient.name)}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="truncate text-base font-semibold text-ink">
-            {patient.name}
-          </span>
-          {onOpenInfo && (
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              className="shrink-0 text-ink-icon"
-              aria-hidden="true"
-            >
-              <path d="M9 6l6 6-6 6" />
-            </svg>
-          )}
+        <span className="truncate text-base font-semibold text-ink">
+          {patient.name}
         </span>
         {patient.description && (
           <span className="mt-px block truncate text-[13px] text-ink-subtle">
@@ -242,32 +206,12 @@ function Identity({
           </span>
         )}
       </span>
-    </>
-  );
-
-  if (!onOpenInfo) {
-    return (
-      <div className="-ml-1.5 inline-flex min-w-0 flex-1 items-center gap-3 py-1.5 pl-1.5 pr-3">
-        {inner}
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={onOpenInfo}
-      title="Досье пациента"
-      className="-ml-1.5 inline-flex min-w-0 flex-1 items-center gap-3 rounded-full py-1.5 pl-1.5 pr-3 text-left transition-colors hover:bg-surface-bubble"
-    >
-      {inner}
-    </button>
+    </div>
   );
 }
 
 function PatientCard({
   patient,
-  isHead,
   onOpenInfo,
   onStart,
 }: PatientCardProps) {
@@ -279,15 +223,13 @@ function PatientCard({
     // Три колонки при gap-4: (100% − 2 × 16px) / 3
     <div className="flex w-[calc((100%-32px)/3)] flex-col rounded-[14px] border border-line bg-surface-card p-5">
       <div className="flex items-center gap-2">
-        {/* Клик по имени открывает карточку пациента — но только у
-            руководителя. У него там досье: характер, возражения, ЛПР, подход.
-            Менеджеру API этих полей не отдаёт, и карточка для него дублировала
-            бы анамнез, который и так на виду. В макете менеджера клика нет
-            вовсе, и это правильно: лишний способ посмотреть то же самое */}
-        <Identity
-          patient={patient}
-          onOpenInfo={isHead ? onOpenInfo : undefined}
-        />
+        {/* Имя больше не кликается ни у кого: то же окно открывает кнопка
+            «Подробнее» ниже, и два входа в одно место — лишний способ
+            посмотреть то же самое.
+            Прежний комментарий здесь утверждал, что менеджеру карточка
+            дублировала бы «анамнез, который и так на виду». На виду он был
+            обрезан до четырёх строк, а раскрыть его менеджеру было нечем */}
+        <Identity patient={patient} />
         <span
           className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${difficulty.pill}`}
         >
@@ -306,33 +248,36 @@ function PatientCard({
       </div>
 
       <div className="mt-[18px] flex gap-2">
-        {/* Досье с разбором — только у руководителя */}
-        {isHead && (
-          <button
-            type="button"
-            onClick={onOpenInfo}
-            title="Подробнее о пациенте"
-            className="flex flex-1 items-center justify-center gap-[7px] rounded-input border-[length:1.5px] border-brand bg-surface-accent px-2 py-3 text-sm font-semibold text-brand-hover transition-colors hover:bg-[#DCEDE9]"
+        {/* Кнопка есть у всех. Менеджеру она открывает полный анамнез —
+            на карточке он обрезан четырьмя строками, и до 10.08 прочитать
+            его целиком было негде вовсе. Руководителю в том же окне
+            дополнительно показывается досье: характер, возражения, ЛПР,
+            подход. Разделение по ролям делает сама модалка — она рендерит
+            блоки разбора только если API их прислал */}
+        <button
+          type="button"
+          onClick={onOpenInfo}
+          title="Подробнее о пациенте"
+          className="flex flex-1 items-center justify-center gap-[7px] rounded-input border-[length:1.5px] border-brand bg-surface-accent px-2 py-3 text-sm font-semibold text-brand-hover transition-colors hover:bg-[#DCEDE9]"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.9"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M9 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2h-2" />
-              <rect x="9" y="2" width="6" height="4" rx="1" />
-              <path d="M8.5 11.5h7" />
-              <path d="M8.5 15.5h4" />
-            </svg>
-            Подробнее
-          </button>
-        )}
+            <path d="M9 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2h-2" />
+            <rect x="9" y="2" width="6" height="4" rx="1" />
+            <path d="M8.5 11.5h7" />
+            <path d="M8.5 15.5h4" />
+          </svg>
+          Подробнее
+        </button>
 
         <button
           type="button"
