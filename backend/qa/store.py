@@ -6,6 +6,7 @@
 хуже отсутствия инструмента.
 """
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -50,12 +51,32 @@ from core.config import get_settings
 _ПАЦИЕНТЫ = (
     'SELECT p."id", p."name", '
     'COALESCE(pc."prompt", p."prompt") AS prompt, '
+    # Анамнез и карточка — то, что менеджер видит на экране до разговора.
+    # Берутся тем же COALESCE, что и промпт: иначе менеджер читал бы
+    # исходный анамнез, а роль играла случай клиники
+    'COALESCE(pc."anamnesis", p."anamnesis") AS anamnesis, '
+    'COALESCE(pc."description", p."description") AS description, '
     '(pc."prompt" IS NOT NULL) AS case_generated '
     'FROM "Patient" p '
     'LEFT JOIN "PatientCase" pc '
     '  ON pc."patientId" = p."id" AND pc."organizationId" = $1 '
     'WHERE p."isActive" = true '
     'ORDER BY p."name"'
+)
+
+# Клиника и прайс: менеджер в ней работает и услуги знает наизусть.
+# Без этого симулятор выдумывал услугу — 10.08 продавал Виталию лазерную
+# коррекцию за 45 000, тогда как в его случае подбор очков от 3 500, и снять
+# страх «как линзы выдержат пыль на стройке» было нечем в принципе
+_КЛИНИКА = (
+    'SELECT o."name", o."industry", '
+    '  COALESCE(json_agg(json_build_object('
+    '    \'name\', s."name", \'price\', s."price", \'description\', s."description"'
+    '  ) ORDER BY s."position") FILTER (WHERE s."id" IS NOT NULL), \'[]\') AS services '
+    'FROM "Organization" o '
+    'LEFT JOIN "Service" s ON s."organizationId" = o."id" '
+    'WHERE o."id" = $1 '
+    'GROUP BY o."id", o."name", o."industry"'
 )
 
 _ТИПЫ = (
@@ -71,6 +92,29 @@ class Пациент:
     имя: str
     промпт: str
     случай_собран: bool
+    # Что менеджер видит на экране до разговора. Промпт роли ему не показываем
+    # никогда: там условия согласия, и с ними прогон проверял бы не навык,
+    # а умение прочитать ответы
+    анамнез: str = ""
+    карточка: str = ""
+
+
+@dataclass
+class Клиника:
+    название: str
+    отрасль: str
+    услуги: list[dict]
+
+    def прайс(self) -> str:
+        """Услуги строками — как менеджер держит их в голове."""
+        строки = []
+        for у in self.услуги:
+            описание = (у.get("description") or "").strip()
+            строки.append(
+                f"- {у.get('name')} — {у.get('price')}"
+                + (f". {описание}" if описание else "")
+            )
+        return "\n".join(строки)
 
 
 @dataclass
@@ -95,8 +139,8 @@ def _слаг(имя: str) -> str:
 
 async def загрузить(
     organization_id: Optional[str] = None,
-) -> tuple[list[Пациент], list[ТипТренировки], list[str]]:
-    """Пациенты, типы и список замечаний к данным.
+) -> tuple[list[Пациент], list[ТипТренировки], Optional[Клиника], list[str]]:
+    """Пациенты, типы, клиника и список замечаний к данным.
 
     Замечания возвращаются, а не логируются молча: пациент без промпта или
     без слага выпадет из матрицы, и об этом надо сказать в сводке, иначе
@@ -110,8 +154,21 @@ async def загрузить(
             organization_id = строка["id"] if строка else None
         пациенты_строки = await pool.fetch(_ПАЦИЕНТЫ, organization_id)
         типы_строки = await pool.fetch(_ТИПЫ)
+        строка_клиники = (
+            await pool.fetchrow(_КЛИНИКА, organization_id) if organization_id else None
+        )
     finally:
         await pool.close()
+
+    клиника = (
+        Клиника(
+            название=строка_клиники["name"],
+            отрасль=строка_клиники["industry"],
+            услуги=json.loads(строка_клиники["services"]),
+        )
+        if строка_клиники
+        else None
+    )
 
     замечания: list[str] = []
     пациенты: list[Пациент] = []
@@ -133,6 +190,8 @@ async def загрузить(
                 имя=строка["name"],
                 промпт=промпт,
                 случай_собран=строка["case_generated"],
+                анамнез=(строка["anamnesis"] or "").strip(),
+                карточка=(строка["description"] or "").strip(),
             )
         )
 
@@ -160,4 +219,4 @@ async def загрузить(
             "пациента переименовали, скрыли или удалили"
         )
 
-    return пациенты, типы, замечания
+    return пациенты, типы, клиника, замечания

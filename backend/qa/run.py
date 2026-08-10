@@ -143,6 +143,7 @@ async def _одна(
     args: argparse.Namespace,
     семафор: asyncio.Semaphore,
     прогресс: dict,
+    клиника: Optional[store.Клиника],
 ) -> None:
     имя_файла = f"{пациент.слаг}__{тип.слаг}"
     if ловушка:
@@ -164,7 +165,11 @@ async def _одна(
         # у провайдера, и понять, на что именно ушло, нельзя
         with usage.учёт() as счёт:
             разговор = await conversation.провести(
-                пациент, тип, реплики=реплики, сценарий=имя_сценария
+                пациент,
+                тип,
+                реплики=реплики,
+                сценарий=имя_сценария,
+                клиника=клиника,
             )
             метрики = checks.посчитать(разговор.история(), пациент.промпт)
 
@@ -231,7 +236,7 @@ async def дочитать(args: argparse.Namespace) -> None:
         print("Читать нечего: помеченных клеток нет или все уже прочитаны.")
         return
 
-    пациенты, _, _ = await store.загрузить(args.organization)
+    пациенты, _, _, _ = await store.загрузить(args.organization)
     промпты = {п.слаг: п.промпт for п in пациенты}
     семафор = asyncio.Semaphore(args.concurrency)
 
@@ -304,7 +309,7 @@ async def main() -> None:
         await дочитать(args)
         return
 
-    пациенты, типы, замечания = await store.загрузить(args.organization)
+    пациенты, типы, клиника, замечания = await store.загрузить(args.organization)
     for з in замечания:
         print(f"замечание: {з}", flush=True)
 
@@ -368,7 +373,7 @@ async def main() -> None:
 
     await asyncio.gather(
         *(
-            _одна(п, т, л, каталог, args, семафор, прогресс)
+            _одна(п, т, л, каталог, args, семафор, прогресс, клиника)
             for п, т, л in клетки
         )
     )
