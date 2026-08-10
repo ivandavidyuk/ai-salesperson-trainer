@@ -18,6 +18,7 @@ import httpx
 
 from core.config import get_settings
 from services import usage
+from services.llm import reasoning_for
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +92,13 @@ async def ask_json(
         "messages": messages,
         "temperature": temperature,
         "response_format": {"type": "json_object"},
-        # minimal вместо enabled=false: gemini-3.5 на выключение отвечает
-        # HTTP 400 «Reasoning is mandatory», а minimal он принимает и не думает
-        "reasoning": {"effort": reasoning or "minimal"},
+        # Уровень усилия задан явно — берём как есть. Не задан — берём ручку
+        # под конкретную модель из llm.reasoning_for: она снята замером
+        # 31.07 и у каждого семейства своя. Прежний жёсткий minimal был
+        # выключением только на словах: 10.08 читатель на haiku выдал
+        # 1519 токенов размышления, а они тарифицируются как выход по $5/М
+        # и составляли большую часть счёта прогона
+        "reasoning": {"effort": reasoning} if reasoning else reasoning_for(model),
         "max_tokens": max_tokens,
     }
 
