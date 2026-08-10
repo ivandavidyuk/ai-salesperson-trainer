@@ -143,6 +143,7 @@ async def _одна(
     args: argparse.Namespace,
     семафор: asyncio.Semaphore,
     прогресс: dict,
+    клиника: Optional[store.Клиника],
 ) -> None:
     имя_файла = f"{пациент.слаг}__{тип.слаг}"
     if ловушка:
@@ -372,7 +373,7 @@ async def main() -> None:
 
     await asyncio.gather(
         *(
-            _одна(п, т, л, каталог, args, семафор, прогресс)
+            _одна(п, т, л, каталог, args, семафор, прогресс, клиника)
             for п, т, л in клетки
         )
     )
