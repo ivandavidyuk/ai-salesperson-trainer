@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createWsToken, getAuthUser, WS_TOKEN_TTL } from "@/lib/auth";
+import { расходЧасовПользователя } from "@/lib/hours";
 
 export const runtime = "nodejs";
 // Роут читает cookie запроса — рендерится только динамически
@@ -16,6 +17,17 @@ export async function GET(request: NextRequest) {
     const user = await getAuthUser(request);
     if (!user) {
       return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+    }
+
+    // Второй замок на том же входе. Токен — единственное, чем открывается
+    // голосовой сокет, и без проверки здесь исчерпанный лимит обходился бы
+    // запросом за токеном напрямую, минуя создание сессии
+    const счёт = await расходЧасовПользователя(user.sub);
+    if (счёт?.exhausted) {
+      return NextResponse.json(
+        { error: "Часы разговоров закончились" },
+        { status: 402 }
+      );
     }
 
     // Создаём одноразовый ws-токен для этого пользователя

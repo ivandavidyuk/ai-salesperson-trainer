@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Alert from "@/app/components/Alert";
+import HoursExhaustedModal from "@/app/components/HoursExhaustedModal";
 import Field from "@/app/components/Field";
 import PatientInfoModal from "@/app/components/PatientInfoModal";
 import Loader from "@/app/components/Loader";
@@ -141,6 +142,32 @@ export default function TrainingSetupModal({
   onCreated,
 }: TrainingSetupModalProps) {
   const router = useRouter();
+
+  // Проверка лимита живёт ЗДЕСЬ, а не в пяти местах, откуда мастер
+  // открывается. Разложи её по кнопкам — и шестая точка входа, добавленная
+  // через месяц, просто не будет знать про часы.
+  //
+  // Руководителя не трогает: он часы не тратит, а назначает задание.
+  const [hours, setHours] = useState<{ resetsAt: string; limitSec: number } | null>(
+    null
+  );
+  useEffect(() => {
+    if (createMode) return;
+    let cancelled = false;
+    (async () => {
+      const res = await fetch("/api/organization/hours");
+      if (!res.ok) return;
+      const data = (await res.json()) as
+        | { exhausted: boolean; resetsAt: string; limitSec: number }
+        | null;
+      if (!cancelled && data?.exhausted) {
+        setHours({ resetsAt: data.resetsAt, limitSec: data.limitSec });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [createMode]);
 
   // Набор шагов зависит от того, что уже выбрано за менеджера
   const steps: StepKey[] = createMode
@@ -367,6 +394,18 @@ export default function TrainingSetupModal({
         </span>
         {disabled && <SoonBadge />}
       </button>
+    );
+  }
+
+  // Часы кончились — вместо мастера показываем, почему нельзя. Заполнять
+  // форму, которая упрётся в отказ на последнем шаге, — издевательство
+  if (hours) {
+    return (
+      <HoursExhaustedModal
+        resetsAt={hours.resetsAt}
+        limitHours={Math.round(hours.limitSec / 3600)}
+        onClose={onClose}
+      />
     );
   }
 

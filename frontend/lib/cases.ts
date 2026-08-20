@@ -17,8 +17,13 @@ import { PROFILES } from "@/scripts/patients";
 
 interface ClinicPayload {
   name: string;
+  // Город: из него пациент получает быт — транспорт, районы, расстояния.
+  // Nullable в базе, потому что миграция накатывалась на живую организацию
+  city: string | null;
   industry: string;
   services: { name: string; price: string; description: string | null }[];
+  // Закрытый список: генератор берёт диагноз отсюда и не добавляет своего
+  diagnoses: { name: string; complaint: string }[];
 }
 
 // Сколько молчания считать смертью сборки.
@@ -167,11 +172,16 @@ export async function rebuildCases(
     where: { id: organizationId },
     select: {
       name: true,
+      city: true,
       industry: true,
       formSavedAt: true,
       services: {
         orderBy: { position: "asc" },
         select: { name: true, price: true, description: true },
+      },
+      diagnoses: {
+        orderBy: { position: "asc" },
+        select: { name: true, complaint: true },
       },
     },
   });
@@ -213,8 +223,10 @@ export async function rebuildCases(
 
   const clinic: ClinicPayload = {
     name: organization.name,
+    city: organization.city,
     industry: organization.industry,
     services: organization.services,
+    diagnoses: organization.diagnoses,
   };
   const token = await signToken({
     userId: head.id,

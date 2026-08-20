@@ -1,5 +1,5 @@
 // GET/PUT /api/organization
-// Клиника руководителя: название, отрасль и услуги.
+// Клиника руководителя: название, город, отрасль, услуги и диагнозы.
 //
 // Только для руководителя: отрасль и прайс — это данные организации, а не
 // личные, и менеджеру их менять нечего. Проверка ролью, а не наличием
@@ -13,9 +13,10 @@ import { rebuildCases, сборкаЖива, идётСборка } from "@/lib/
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Услуг у клиники немного, но список приходит от пользователя, и без потолка
-// один запрос мог бы записать их тысячами
+// Услуг и диагнозов у клиники немного, но списки приходят от пользователя,
+// и без потолка один запрос мог бы записать их тысячами
 const MAX_SERVICES = 40;
+const MAX_DIAGNOSES = 40;
 
 interface ServiceBody {
   name?: string;
@@ -23,18 +24,26 @@ interface ServiceBody {
   description?: string;
 }
 
-interface OrganizationBody {
+interface DiagnosisBody {
   name?: string;
-  industry?: string;
-  services?: ServiceBody[];
+  complaint?: string;
 }
 
-async function organizationWithServices(id: string) {
+interface OrganizationBody {
+  name?: string;
+  city?: string;
+  industry?: string;
+  services?: ServiceBody[];
+  diagnoses?: DiagnosisBody[];
+}
+
+async function organizationForForm(id: string) {
   const organization = await prisma.organization.findUnique({
     where: { id },
     select: {
       id: true,
       name: true,
+      city: true,
       industry: true,
       casesTotal: true,
       casesReady: true,
@@ -43,6 +52,10 @@ async function organizationWithServices(id: string) {
       services: {
         orderBy: { position: "asc" },
         select: { id: true, name: true, price: true, description: true },
+      },
+      diagnoses: {
+        orderBy: { position: "asc" },
+        select: { id: true, name: true, complaint: true },
       },
     },
   });
@@ -65,7 +78,7 @@ export async function GET(request: NextRequest) {
       // пользователь заведён до организаций). Отдаём null, форма покажет пустую
       return NextResponse.json(null);
     }
-    return NextResponse.json(await organizationWithServices(head.organizationId));
+    return NextResponse.json(await organizationForForm(head.organizationId));
   } catch (error) {
     console.error("Ошибка в GET /api/organization:", error);
     return NextResponse.json(
@@ -105,9 +118,13 @@ export async function PUT(request: NextRequest) {
     }
 
     const name = body.name?.trim() ?? "";
+    const city = body.city?.trim() ?? "";
     const industry = body.industry?.trim() ?? "";
     if (!name) {
       return NextResponse.json({ error: "Укажите название клиники" }, { status: 400 });
+    }
+    if (!city) {
+      return NextResponse.json({ error: "Укажите город клиники" }, { status: 400 });
     }
     if (!industry) {
       return NextResponse.json({ error: "Укажите отрасль" }, { status: 400 });
@@ -139,16 +156,47 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const diagnoses = (body.diagnoses ?? [])
+      .map((d) => ({
+        name: d.name?.trim() ?? "",
+        complaint: d.complaint?.trim() ?? "",
+      }))
+      .filter((d) => d.name || d.complaint);
+
+    if (diagnoses.length > MAX_DIAGNOSES) {
+      return NextResponse.json(
+        { error: `Не больше ${MAX_DIAGNOSES} диагнозов` },
+        { status: 400 }
+      );
+    }
+    // Хотя бы один диагноз обязателен: без списка генератор вернулся бы
+    // к сочинению болезней, ради отказа от которого всё и делается
+    if (diagnoses.length === 0) {
+      return NextResponse.json(
+        { error: "Добавьте хотя бы один диагноз" },
+        { status: 400 }
+      );
+    }
+    // Жалоба обязательна наравне с диагнозом: одно название не говорит,
+    // с чем человек приходит, и генератору не от чего оттолкнуться
+    const неполный = diagnoses.findIndex((d) => !d.name || !d.complaint);
+    if (неполный >= 0) {
+      return NextResponse.json(
+        { error: `В диагнозе №${неполный + 1} нужны и диагноз, и жалоба` },
+        { status: 400 }
+      );
+    }
+
     const organizationId = head.organizationId;
     const saved = await prisma.$transaction(async (tx) => {
       const organization = organizationId
         ? await tx.organization.update({
             where: { id: organizationId },
-            data: { name, industry, formSavedAt: new Date() },
+            data: { name, city, industry, formSavedAt: new Date() },
             select: { id: true },
           })
         : await tx.organization.create({
-            data: { name, industry, formSavedAt: new Date() },
+            data: { name, city, industry, formSavedAt: new Date() },
             select: { id: true },
           });
 
@@ -177,6 +225,17 @@ export async function PUT(request: NextRequest) {
         });
       }
 
+      // Диагнозы — тем же приёмом, что и услуги
+      await tx.diagnosis.deleteMany({ where: { organizationId: organization.id } });
+      await tx.diagnosis.createMany({
+        data: diagnoses.map((d, index) => ({
+          organizationId: organization.id,
+          name: d.name,
+          complaint: d.complaint,
+          position: index,
+        })),
+      });
+
       return organization.id;
     });
 
@@ -201,7 +260,7 @@ export async function PUT(request: NextRequest) {
       console.error("Сборка случаев не удалась:", error)
     );
 
-    return NextResponse.json(await organizationWithServices(saved));
+    return NextResponse.json(await organizationForForm(saved));
   } catch (error) {
     console.error("Ошибка в PUT /api/organization:", error);
     return NextResponse.json(
