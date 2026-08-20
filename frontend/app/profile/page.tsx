@@ -9,8 +9,10 @@ import AppShell, { PROFILE_UPDATED_EVENT } from "@/app/components/AppShell";
 import Alert from "@/app/components/Alert";
 import Button from "@/app/components/Button";
 import Loader from "@/app/components/Loader";
+import { HoursCard } from "@/app/components/HoursCard";
+import { ResetStatsCard } from "@/app/components/ResetStatsCard";
 import { compressAvatar } from "@/lib/avatar";
-import { initials } from "@/lib/format";
+import { initials, plural } from "@/lib/format";
 
 interface Profile {
   id: string;
@@ -31,11 +33,18 @@ interface ServiceRow {
   description: string;
 }
 
+interface DiagnosisRow {
+  name: string;
+  complaint: string;
+}
+
 interface Organization {
   id: string;
   name: string;
+  city: string | null;
   industry: string;
   services: ServiceRow[];
+  diagnoses: DiagnosisRow[];
   casesTotal: number;
   casesReady: number;
   // Идёт ли сборка прямо сейчас. Сервер отдаёт не голый флаг, а живость:
@@ -94,8 +103,14 @@ export default function ProfilePage() {
             <AvatarCard profile={profile} onChange={setProfile} />
 
             <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto pr-1.5">
-              {profile.role === "head" && <ClinicForm />}
+              {profile.role === "head" && (
+                <>
+                  <ClinicForm />
+                  <HoursCard />
+                </>
+              )}
               <PersonalForm profile={profile} onChange={setProfile} />
+              {profile.role === "head" && <ResetStatsCard />}
             </div>
           </>
         )}
@@ -566,8 +581,11 @@ function ClinicForm() {
   const [saved, setSaved] = useState<Organization | null>(null);
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
+  const [city, setCity] = useState("");
   const [services, setServices] = useState<ServiceRow[]>([]);
+  const [diagnoses, setDiagnoses] = useState<DiagnosisRow[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [diagsOpen, setDiagsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // Пересборка: null — не идёт, иначе прогресс с сервера
@@ -588,8 +606,10 @@ function ClinicForm() {
       if (data) {
         setSaved(data);
         setName(data.name);
+        setCity(data.city ?? "");
         setIndustry(data.industry);
         setServices(data.services);
+        setDiagnoses(data.diagnoses ?? []);
       }
       setLoading(false);
     })();
@@ -620,14 +640,21 @@ function ClinicForm() {
 
   const filled =
     name.trim() !== "" &&
+    city.trim() !== "" &&
     industry.trim() !== "" &&
     services.length > 0 &&
-    services.every((s) => s.name.trim() && s.price.trim());
+    services.every((s) => s.name.trim() && s.price.trim()) &&
+    // Диагнозы обязательны наравне с услугами: без списка генератор вернулся
+    // бы к сочинению болезней, ради отказа от которого всё и делалось
+    diagnoses.length > 0 &&
+    diagnoses.every((d) => d.name.trim() && d.complaint.trim());
   const changed =
     !saved ||
     saved.name !== name ||
+    (saved.city ?? "") !== city ||
     saved.industry !== industry ||
-    JSON.stringify(saved.services) !== JSON.stringify(services);
+    JSON.stringify(saved.services) !== JSON.stringify(services) ||
+    JSON.stringify(saved.diagnoses) !== JSON.stringify(diagnoses);
 
   async function handleSave() {
     setError("");
@@ -637,7 +664,7 @@ function ClinicForm() {
       const res = await fetch("/api/organization", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, industry, services }),
+        body: JSON.stringify({ name, city, industry, services, diagnoses }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -646,6 +673,7 @@ function ClinicForm() {
       }
       setSaved(data);
       setServices(data.services ?? []);
+      setDiagnoses(data.diagnoses ?? []);
       setProgress({ ready: data.casesReady, total: data.casesTotal });
     } catch {
       setError("Не удалось сохранить");
@@ -725,7 +753,9 @@ function ClinicForm() {
             </span>
           </div>
 
-          <div className="mt-[18px] grid grid-cols-2 gap-x-4 gap-y-3.5">
+          {/* Город узкой колонкой: в него влезает «Нижний Новгород», а тянуть
+              его в половину строки незачем — размер диктует содержимое */}
+          <div className="mt-[18px] grid grid-cols-[1fr_232px] items-start gap-x-4 gap-y-3.5">
             <div>
               <FieldLabel>Название клиники</FieldLabel>
               <TextInput
@@ -735,6 +765,14 @@ function ClinicForm() {
               />
             </div>
             <div>
+              <FieldLabel>Город</FieldLabel>
+              <TextInput
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="Например: Казань"
+              />
+            </div>
+            <div className="col-span-2">
               <FieldLabel>Специализация клиники</FieldLabel>
               <TextInput
                 value={industry}
@@ -793,12 +831,60 @@ function ClinicForm() {
             )}
           </div>
 
+          {/* Диагнозы — вторая опора карточки, а не дополнительное поле:
+              от них зависит, чем болеют пациенты. Поэтому вид тот же,
+              что у услуг, и вес читается одинаковым */}
+          <div className="mt-3.5">
+            <FieldLabel>Диагнозы и частые жалобы</FieldLabel>
+            {diagnoses.length > 0 ? (
+              <div className="flex items-center gap-4 rounded-xl border border-line-soft bg-surface px-4 py-3.5">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[14.5px] font-semibold text-ink">
+                    {pluralDiagnoses(diagnoses.length)}
+                  </div>
+                  <div className="mt-0.5 truncate text-[12.5px] text-ink-muted">
+                    {diagnoses.map((d) => d.name || "Без названия").join(" · ")}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDiagsOpen(true)}
+                  className="shrink-0 whitespace-nowrap rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[13.5px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
+                >
+                  Показать все диагнозы
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4 rounded-xl border-[1.5px] border-dashed border-line-accent bg-surface px-4 py-4">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[14.5px] font-semibold text-ink">
+                    Пока ни одного диагноза
+                  </div>
+                  <div className="mt-0.5 text-[12.5px] leading-snug text-ink-muted">
+                    Диагноз и жалоба, с которой с ним приходят. Без этого диагнозы
+                    придумывает модель — и придумывает одинаковые
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDiagnoses([{ name: "", complaint: "" }]);
+                    setDiagsOpen(true);
+                  }}
+                  className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
+                >
+                  Добавить первый диагноз
+                </button>
+              </div>
+            )}
+          </div>
+
           {error && <Alert className="mt-4">{error}</Alert>}
 
           <div className="mt-5 flex items-center justify-between gap-5 border-t border-line-soft pt-[18px]">
             <p className="max-w-[520px] text-[12.5px] leading-normal text-ink-muted">
               {!filled
-                ? "Чтобы сохранить, заполните название и специализацию клиники, а в каждой услуге — название и цену."
+                ? "Чтобы сохранить, заполните название, город и специализацию клиники, в каждой услуге — название и цену, в каждом диагнозе — и диагноз, и жалобу."
                 : !changed
                   ? "Изменений нет — пациенты уже собраны по этим данным."
                   : "После сохранения тренажёр пересоберёт всех пациентов под вашу специализацию. На двадцати пациентах это занимает несколько минут — страницу можно закрыть, сборка не прервётся."}
@@ -823,6 +909,13 @@ function ClinicForm() {
           onClose={() => setModalOpen(false)}
         />
       )}
+      {diagsOpen && (
+        <DiagnosesModal
+          diagnoses={diagnoses}
+          onChange={setDiagnoses}
+          onClose={() => setDiagsOpen(false)}
+        />
+      )}
       {progress && <RebuildModal progress={progress} industry={industry} onGiveUp={stopWaiting} />}
       {outcome === "failed" && partial && !progress && (
         <FailedModal
@@ -834,6 +927,10 @@ function ClinicForm() {
       )}
     </>
   );
+}
+
+function pluralDiagnoses(n: number): string {
+  return `${n} ${plural(n, "диагноз", "диагноза", "диагнозов")}`;
 }
 
 function pluralServices(n: number): string {
@@ -959,6 +1056,138 @@ function ServicesModal({
                 type="button"
                 onClick={() => {
                   const rows = services.slice();
+                  rows.splice(removed.at, 0, removed.row);
+                  onChange(rows);
+                  setRemoved(null);
+                }}
+                className="ml-auto shrink-0 text-[13.5px] font-semibold text-brand-hover"
+              >
+                Вернуть
+              </button>
+            </div>
+          ) : (
+            <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-ink-muted">
+              Изменения попадут в тренажёр после «Сохранить» в профиле.
+            </p>
+          )}
+          <Button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 px-6 py-[11px] text-[14px]"
+          >
+            Готово
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Окно диагнозов. Устроено как окно услуг и намеренно: это две связанные
+// сущности одной карточки, и разная механика у них читалась бы как разная
+// важность. Полей здесь два, а не три, поэтому строка проще.
+function DiagnosesModal({
+  diagnoses,
+  onChange,
+  onClose,
+}: {
+  diagnoses: DiagnosisRow[];
+  onChange: (rows: DiagnosisRow[]) => void;
+  onClose: () => void;
+}) {
+  const [removed, setRemoved] = useState<{ row: DiagnosisRow; at: number } | null>(null);
+
+  function update(index: number, patch: Partial<DiagnosisRow>) {
+    onChange(diagnoses.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-10">
+      <div className="flex max-h-full w-[760px] flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-2xl">
+        <div className="flex shrink-0 items-start gap-4 border-b border-line-soft px-7 pb-[18px] pt-6">
+          <div className="min-w-0 flex-1">
+            <div className="text-[18px] font-semibold text-ink">Диагнозы и частые жалобы</div>
+            <p className="mt-1 text-[13px] leading-normal text-ink-muted">
+              Диагнозов меньше, чем пациентов, — это нормально: каждый достанется
+              нескольким, с разными жалобами и обстоятельствами
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Закрыть"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-ink-muted transition-colors hover:bg-surface-bubble"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="flex shrink-0 gap-2.5 px-7 pt-3.5 font-mono text-[10.5px] uppercase tracking-[.1em] text-brand-hover">
+          <div className="flex-1">Диагноз</div>
+          <div className="flex-1">Жалобы при диагнозе</div>
+          <div className="w-[30px] shrink-0" />
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-7 pb-1 pt-2.5">
+          {diagnoses.map((row, index) => (
+            <div
+              key={index}
+              className="group flex shrink-0 items-start gap-2.5 rounded-xl border border-line-soft p-3 transition-colors hover:border-line-strong"
+            >
+              <input
+                value={row.name}
+                onChange={(e) => update(index, { name: e.target.value })}
+                placeholder="Например: хронический пульпит"
+                className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[14px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+              />
+              <input
+                value={row.complaint}
+                onChange={(e) => update(index, { complaint: e.target.value })}
+                placeholder="Как это звучит от пациента"
+                className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[13.5px] text-ink-body outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+              />
+              <button
+                type="button"
+                title="Удалить диагноз"
+                onClick={() => {
+                  setRemoved({ row, at: index });
+                  onChange(diagnoses.filter((_, i) => i !== index));
+                }}
+                className="h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+
+          {diagnoses.length === 0 && (
+            <div className="shrink-0 rounded-xl border-[1.5px] border-dashed border-line-accent bg-surface p-6 text-center">
+              <div className="text-[14px] font-semibold text-ink">Список пуст</div>
+              <div className="mt-1 text-[13px] text-ink-muted">
+                Начните с того, с чем к вам приходят чаще всего.
+              </div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onChange([...diagnoses, { name: "", complaint: "" }])}
+            className="mt-0.5 shrink-0 self-start rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[13.5px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
+          >
+            + Добавить диагноз
+          </button>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-3.5 border-t border-line-soft px-7 pb-5 pt-4">
+          {removed ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-[10px] border border-line bg-surface-bubble px-3 py-2.5">
+              <span className="truncate text-[13.5px] text-ink-body">
+                Удалили «{removed.row.name || "новый диагноз"}»
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const rows = diagnoses.slice();
                   rows.splice(removed.at, 0, removed.row);
                   onChange(rows);
                   setRemoved(null);

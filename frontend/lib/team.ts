@@ -5,6 +5,7 @@
 // средняя оценка и прогресс по этапам неделя к неделе.
 
 import { prisma } from "@/lib/db";
+import { завершённые } from "@/lib/statsWindow";
 import { DealOutcome, UserRole } from "@prisma/client";
 import { WEEK_DAYS, averageScores, round1, startOfWeek } from "@/lib/home";
 import { STAGE_METRICS } from "@/lib/score";
@@ -29,6 +30,12 @@ export interface TeamMemberStats {
   name: string;
   jobTitle: string;
   avatarUpdatedAt: string | null;
+  /**
+   * Когда руководитель обнулил статистику. null — не обнулял.
+   * Нужен интерфейсу, чтобы показать, что цифры считаются не с начала,
+   * и предложить вернуть: иначе обнуление выглядит как потеря данных
+   */
+  statsResetAt: string | null;
   /** Завершённых разговоров за всё время */
   total: number;
   /** Из них на этой неделе */
@@ -76,6 +83,7 @@ export async function getTeamStats(
       lastName: true,
       jobTitle: true,
       avatarUpdatedAt: true,
+      statsResetAt: true,
     },
   });
 
@@ -95,7 +103,7 @@ export async function getTeamStats(
   // искажали бы и счётчики, и средние
   return Promise.all(
     managers.map(async (manager) => {
-      const completed = { userId: manager.id, status: "completed" as const };
+      const completed = завершённые(manager.id, manager.statsResetAt);
       // Разговоры, где сделка вообще могла случиться. Этапные тренировки
       // не в счёт: там менеджер до предложения оплаты не доходит, и каждая
       // такая тренировка портила бы ему процент как поражение. Сессии без
@@ -189,6 +197,7 @@ export async function getTeamStats(
         id: manager.id,
         name: `${manager.firstName} ${manager.lastName}`.trim(),
         jobTitle: manager.jobTitle ?? "Менеджер по продажам",
+        statsResetAt: manager.statsResetAt?.toISOString() ?? null,
         avatarUpdatedAt: manager.avatarUpdatedAt?.toISOString() ?? null,
         total,
         week,

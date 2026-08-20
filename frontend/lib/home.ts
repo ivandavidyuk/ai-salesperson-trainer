@@ -6,6 +6,7 @@
 
 import { DailyContentKind, DealOutcome } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { завершённые } from "@/lib/statsWindow";
 import { STAGE_METRICS } from "@/lib/score";
 
 /**
@@ -159,7 +160,13 @@ export async function averageScores(userId: string, from: Date, to: Date) {
 export async function getHomeData(userId: string): Promise<HomeData | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { firstName: true, lastName: true, jobTitle: true },
+    select: {
+      firstName: true,
+      lastName: true,
+      jobTitle: true,
+      statsResetAt: true,
+      organizationId: true,
+    },
   });
   if (!user) return null;
 
@@ -170,7 +177,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
 
   // В статистику попадают только завершённые разговоры: брошенные
   // и текущие искажали бы и счётчики, и среднюю длительность.
-  const completed = { userId, status: "completed" as const };
+  const completed = завершённые(userId, user.statsResetAt);
 
   // Разговоры, в которых сделка вообще могла случиться. Этапные тренировки
   // сюда не входят: менеджер там не доходит до предложения оплаты, и каждая

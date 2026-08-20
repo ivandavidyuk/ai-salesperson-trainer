@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
+import { расходЧасовПользователя } from "@/lib/hours";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Не авторизован" },
         { status: 401 }
+      );
+    }
+
+    // Часы отдела кончились — новый разговор не начинаем. Проверка здесь,
+    // а не только в интерфейсе: интерфейс не защита, и запрос сюда можно
+    // отправить в обход кнопки. Идущий разговор это не трогает — он уже
+    // начат, и обрывать его посреди было бы хуже, чем доиграть.
+    const счёт = await расходЧасовПользователя(user.sub);
+    if (счёт?.exhausted) {
+      return NextResponse.json(
+        {
+          error: "Часы разговоров закончились",
+          resetsAt: счёт.resetsAt.toISOString(),
+        },
+        { status: 402 }
       );
     }
 

@@ -26,6 +26,18 @@ export function formatDuration(seconds: number | null): string {
   return `${pad(minutes)}:${pad(seconds % 60)}`;
 }
 
+// Секунды → «38 ч 20 мин». Для тарифных часов, а не для длительности
+// разговора: там счёт идёт на минуты и уместно «04:38», здесь на десятки
+// часов, и «2300:00» никто не прочитает
+export function formatHours(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds / 60));
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  if (hours === 0) return `${minutes} мин`;
+  if (minutes === 0) return `${hours} ч`;
+  return `${hours} ч ${minutes} мин`;
+}
+
 // Дата разговора: «Сегодня, 11:24» · «Вчера, 16:02» · «12 июля, 09:47»
 export function formatConversationDate(iso: string, now: Date = new Date()): string {
   const date = new Date(iso);
