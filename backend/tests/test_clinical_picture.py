@@ -489,3 +489,32 @@ def test_распределение_на_закрытом_списке_ровн�
     счёт = {и: выдано.count(и) for и in список}
     assert max(счёт.values()) - min(счёт.values()) <= 1, счёт
     assert sum(счёт.values()) == 21
+
+
+def test_без_диагнозов_клиники_вызова_не_будет():
+    # Форма диагнозы требует, но «Собрать заново» идёт мимо неё, и клиника,
+    # сохранённая до этой правки, пришла бы сюда с пустым списком. Молча
+    # спросить модель значило бы вернуть ей сочинение диагнозов
+    import asyncio
+
+    from services import clinical_picture
+
+    звали = []
+
+    async def не_должно(*args, **kwargs):
+        звали.append(1)
+        return {}
+
+    прежний = clinical_picture.ask_json
+    clinical_picture.ask_json = не_должно
+    try:
+        без_списка = dict(клиника())
+        без_списка["diagnoses"] = []
+        итог = asyncio.run(
+            clinical_picture.generate_pictures({"identity": "Ты — Пётр, 44 года."}, без_списка)
+        )
+    finally:
+        clinical_picture.ask_json = прежний
+
+    assert итог is None
+    assert звали == [], "модель спросили при пустом списке диагнозов"
