@@ -945,6 +945,38 @@ class TurnManager:
                 producer.cancel()
 
 
+async def close_if_abandoned(session_id: str) -> Optional[int]:
+    """Закрывает разговор, оборвавшийся без «стоп». Возвращает его длительность.
+
+    Закрытая вкладка, упавший браузер, пропавшая сеть — завершение не
+    проставит никто: роут `/stop` зовёт только кнопка «Завершить». Сессия
+    осталась бы `active` навсегда, а её минуты не попали бы ни в статистику
+    менеджера, ни в счётчик часов клиента, хотя оплачены.
+
+    При штатном завершении статус уже `completed`, и функция ничего не делает:
+    длительность остаётся от роута `/stop`, там она уже посчитана.
+
+    Никогда не бросает: вызывается из блока завершения сессии, и сбой
+    хранилища не имеет права помешать закрыть соединение.
+    """
+    try:
+        seconds = await store.finish_if_unfinished(session_id)
+        if seconds is None:
+            return None
+        logger.info(
+            "Сессия %s: закрыта по обрыву связи, длительность %s сек",
+            session_id,
+            seconds,
+        )
+        # clear_session зовётся только в ветке «стоп», поэтому у оборванного
+        # разговора четыре ключа Redis оставались висеть навсегда
+        await store.clear_session(session_id)
+        return seconds
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Сессия %s: не удалось закрыть: %s", session_id, exc)
+        return None
+
+
 async def finalize_review(session_id: str) -> None:
     """Разбор разговора после его завершения.
 
@@ -1227,6 +1259,13 @@ async def session_ws(ws: WebSocket, session_id: str):
             await tts_stream.stop()
         except Exception as exc:  # noqa: BLE001
             logger.warning("Ошибка при остановке TTS: %s", exc)
+
+        # Закрытие оборванного разговора стоит ПОСЛЕ остановки пайплайна,
+        # а не перед ней: отменяемый ход дописывает историю в Redis
+        # (append_message_cache), и очистка до shutdown воскресила бы ключи,
+        # которые только что удалили.
+        await close_if_abandoned(session_id)
+
         try:
             await ws.close()
         except Exception:  # noqa: BLE001

@@ -197,6 +197,38 @@ class SessionStore:
                 session_id,
             )
 
+    async def finish_if_unfinished(self, session_id: str) -> Optional[int]:
+        """Закрывает сессию, которую никто не закрыл, и считает её длительность.
+
+        Нужна для разговоров, оборвавшихся без «стоп»: закрытая вкладка,
+        упавший браузер, пропавшая сеть. Обрыв сокета и есть конец такого
+        разговора — вернуться в ту же сессию нельзя, ws-токен одноразовый,
+        а `session_ws` отклоняет подключение к незавершённой сессии.
+
+        Идемпотентна: при штатном завершении статус уже `completed`, условие
+        в WHERE не совпадёт, и ни статус, ни длительность не перезапишутся.
+        Возвращает длительность в секундах, если закрыли именно мы, иначе None.
+
+        Длительность считает сама база: у бэкенда и у роутов Next разные
+        часы, а расхождение попадёт клиенту в счёт.
+        """
+        assert self._redis is not None and self._pool is not None
+
+        row = await self._pool.fetchrow(
+            'UPDATE "Session" SET '
+            '"status" = \'completed\'::"SessionStatus", '
+            '"endedAt" = NOW(), '
+            '"durationSec" = GREATEST(0, EXTRACT(EPOCH FROM (NOW() - "startedAt"))::int) '
+            'WHERE "id" = $1 AND "status" <> \'completed\' '
+            'RETURNING "durationSec"',
+            session_id,
+        )
+        if row is None:
+            return None
+
+        await self._redis.set(_status_key(session_id), STATUS_COMPLETED)
+        return row["durationSec"]
+
     # --- Работа с сообщениями -------------------------------------------
 
     async def get_messages(self, session_id: str) -> list[dict]:
