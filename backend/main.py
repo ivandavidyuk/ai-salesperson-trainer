@@ -10,7 +10,6 @@
 import asyncio
 import base64
 import logging
-import re
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
@@ -19,7 +18,8 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 
 from core.auth import verify_token
 from core.config import get_settings
-from services import case_generator, llm, scoring, tts
+from services import achievements, case_generator, llm, scoring, tts
+from services.text import strip_for_speech
 from services.session import (
     STATUS_ACTIVE,
     STATUS_COMPLETED,
@@ -153,39 +153,6 @@ def _meaningful_words(text: str) -> list[str]:
 def _is_backchannel_only(text: str) -> bool:
     """Реплика состоит только из поддакиваний (непустая, но без смысла)."""
     return bool(_norm_words(text)) and not _meaningful_words(text)
-
-
-# Разметка и ремарки, которые модель вставляет вопреки запрету в промпте.
-# Замер 31.07.2026 на четырёх моделях: чистой нет ни одной. Gemini пишет
-# скобочные ремарки («(Прищуривается, внимательно слушает.)»), gpt-5.4-nano —
-# Markdown с жирным и списками, qwen — и то, и другое сразу: «*(Молча беру
-# у вас папку, достаёт лупу)*».
-#
-# Запрет в промпте оставляем — он работает, просто не всегда. А это страховка
-# на выходе: до синтеза ремарка доходить не должна ни от какой модели, иначе
-# TTS произнесёт её вслух как реплику пациента.
-_MARKDOWN_CHARS = str.maketrans("", "", "*_`#")
-
-
-def strip_for_speech(text: str) -> str:
-    """Убирает из реплики всё, что нельзя произнести вслух.
-
-    Работает по готовому предложению, а не по дельтам стрима: дельта режется
-    где попало, и «**» приезжает половинками.
-
-    Скобки чистятся и незакрытые тоже: предложение отрезается по точке, и
-    ремарка из двух предложений разрывается пополам — «(Молча беру папку.»
-    в одном, «Достаёт лупу.)» в другом. Обе половины одинаково не нужны.
-    """
-    # Парные скобки целиком
-    text = re.sub(r"\([^()]*\)", " ", text)
-    # Хвост незакрытой скобки и начало неоткрытой — остатки разорванной ремарки
-    text = re.sub(r"\([^()]*$", " ", text)
-    text = re.sub(r"^[^()]*\)", " ", text)
-    text = text.translate(_MARKDOWN_CHARS)
-    # Нумерация списка в начале строки: «1) », «2. » — читается вслух нелепо
-    text = re.sub(r"(?m)^\s*\d+[.)]\s+", "", text)
-    return re.sub(r"\s+", " ", text).strip()
 
 
 def split_first_sentence(text: str) -> tuple[str | None, str]:
@@ -977,6 +944,34 @@ async def close_if_abandoned(session_id: str) -> Optional[int]:
         return None
 
 
+async def award_achievements(session_id: str) -> None:
+    """Выдаёт бейджи, заработанные этим разговором.
+
+    Никогда не бросает: игровой бейдж не имеет права мешать ни разбору,
+    ни закрытию разговора. Тот же приём, что у `close_if_abandoned`.
+    """
+    try:
+        выданы = await achievements.начислить_за_сессию(store.pool, session_id)
+        if выданы:
+            logger.info(
+                "Сессия %s: выданы достижения — %s", session_id, ", ".join(выданы)
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Сессия %s: достижения не начислены: %s", session_id, exc)
+
+
+async def после_разговора(session_id: str) -> None:
+    """Разбор и достижения — одной фоновой задачей, в этом порядке.
+
+    Порядок обязателен: достижения смотрят на исход сделки из разбора
+    и на статус `completed`, который проставляется при закрытии. Запусти
+    их раньше — и разговор, где сделка закрыта, не даст «Закрывателя»,
+    потому что разбора ещё нет.
+    """
+    await finalize_review(session_id)
+    await award_achievements(session_id)
+
+
 async def finalize_review(session_id: str) -> None:
     """Разбор разговора после его завершения.
 
@@ -1240,11 +1235,6 @@ async def session_ws(ws: WebSocket, session_id: str):
         logger.error("Сессия %s: непредвиденная ошибка: %s", session_id, exc)
         await safe_send(ws, {"type": "error", "message": "Внутренняя ошибка"})
     finally:
-        # Разбор разговора. Фоновой задачей и с перехватом всего: оценка
-        # не имеет права влиять на завершение сессии — при её сбое разговор
-        # должен закрыться штатно, а расшифровка сохраниться
-        asyncio.create_task(finalize_review(session_id))
-
         # 6. Корректно закрываем пайплайн, STT, TTS и соединение
         try:
             await manager.shutdown()
@@ -1265,6 +1255,15 @@ async def session_ws(ws: WebSocket, session_id: str):
         # (append_message_cache), и очистка до shutdown воскресила бы ключи,
         # которые только что удалили.
         await close_if_abandoned(session_id)
+
+        # Разбор и достижения. Фоновой задачей и с перехватом всего: оценка
+        # не имеет права влиять на завершение сессии — при её сбое разговор
+        # должен закрыться штатно, а расшифровка сохраниться.
+        #
+        # Стоит ПОСЛЕ закрытия, а не перед ним: достижения считают только
+        # завершённые разговоры, и запущенные раньше они не увидели бы
+        # ни статуса, ни самого этого разговора
+        asyncio.create_task(после_разговора(session_id))
 
         try:
             await ws.close()

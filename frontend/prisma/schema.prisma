@@ -132,7 +132,8 @@ model Achievement {
   users       UserAchievement[]
 }
 
-// Полученное достижение. Механизма выдачи пока нет — связи проставляет сид.
+// Полученное достижение. Выдаёт backend после разговора
+// (services/achievements.py), задним числом — scripts/backfill_achievements.py.
 model UserAchievement {
   userId        String
   achievementId String

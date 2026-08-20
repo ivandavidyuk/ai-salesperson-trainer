@@ -32,24 +32,6 @@ const HEAD_LAST_NAME = "Волков";
 // Пациентов наливает seed-patients.ts — здесь только привязываем разговоры
 const PATIENT_NAME = "Тамара Михайловна";
 
-// Достижения демо-аккаунта: те же, что отмечены полученными в макете.
-// daysAgo — когда получено, чтобы даты выглядели правдоподобно.
-// Сами достижения наливает seed-achievements.ts.
-const UNLOCKED_ACHIEVEMENTS = [
-  { id: "first-contact", daysAgo: 24 },
-  { id: "closer", daysAgo: 21 },
-  { id: "scriptolog", daysAgo: 18 },
-  { id: "no-lunch", daysAgo: 15 },
-  { id: "detective", daysAgo: 12 },
-  { id: "chatterbox", daysAgo: 11 },
-  { id: "deaf", daysAgo: 10 },
-  { id: "quickdraw", daysAgo: 8 },
-  { id: "door-is-there", daysAgo: 6 },
-  { id: "seller", daysAgo: 4 },
-  { id: "triple-kill", daysAgo: 2 },
-  { id: "fearless", daysAgo: 1 },
-];
-
 // Задания от руководителя: те же три, что в макете «Задания».
 // dueInDays — срок относительно сегодняшнего дня, чтобы карточки не
 // протухали при каждом запуске сида.
@@ -460,30 +442,17 @@ async function main() {
       `${TEAM_ASSIGNMENTS.length} остальным (автор — ${head.firstName} ${head.lastName})`
   );
 
-  // 5. Полученные достижения. Механизма выдачи нет — проставляем сидом.
-  await prisma.userAchievement.deleteMany({ where: { userId: user.id } });
-
-  let unlocked = 0;
-  for (const item of UNLOCKED_ACHIEVEMENTS) {
-    const achievement = await prisma.achievement.findUnique({
-      where: { id: item.id },
-    });
-    if (!achievement) {
-      console.error(
-        `Достижение «${item.id}» не найдено.\n` +
-          "Сначала выполните: npm run seed:achievements"
-      );
-      process.exit(1);
-    }
-    const unlockedAt = new Date();
-    unlockedAt.setDate(unlockedAt.getDate() - item.daysAgo);
-    await prisma.userAchievement.create({
-      data: { userId: user.id, achievementId: achievement.id, unlockedAt },
-    });
-    unlocked += 1;
-  }
-  const totalAchievements = await prisma.achievement.count();
-  console.log(`Выдано достижений: ${unlocked} из ${totalAchievements}`);
+  // 5. Достижения сид больше НЕ раздаёт.
+  //
+  // Раньше здесь стоял фиксированный список: механизма выдачи не было,
+  // и полку демо-аккаунта приходилось набивать руками. Теперь механизм есть,
+  // и раздача вручную с ним дралась бы — сид затирал бы заработанное.
+  //
+  // Демо-полка собирается из разговоров, которые создал этот же сид, тем же
+  // вычислителем, что и у живых людей. Заодно это честная проверка: если
+  // полка пустая, сломан механизм, а не сид.
+  console.log("\nДостижения сид не раздаёт. Начислить по разговорам:");
+  console.log("  python scripts/backfill_achievements.py   (из папки backend)");
 
   console.log("\nВход в демо-аккаунт (менеджер):");
   console.log(`  email:  ${DEMO_EMAIL}`);

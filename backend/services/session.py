@@ -122,6 +122,15 @@ class SessionStore:
             await self._pool.close()
         logger.info("SessionStore: подключения закрыты")
 
+    @property
+    def pool(self):
+        """Пул PostgreSQL для запросов, живущих вне этого класса.
+
+        Выдача достижений ходит в те же таблицы, но своей логики здесь
+        не место: хранилище про состояние сессии, а не про бейджи.
+        """
+        return self._pool
+
     # --- Авторизация WebSocket ------------------------------------------
 
     async def consume_ws_token(self, ws_token: Optional[str]) -> Optional[str]:
