@@ -72,7 +72,11 @@ export function ResetStatsCard() {
       <div className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px]">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-[15.5px] font-semibold text-ink">Статистика отдела</div>
+            {/* Именно «менеджера», в единственном числе: «Статистика отдела»
+                читалась так, будто кнопка обнуляет весь отдел разом */}
+            <div className="text-[15.5px] font-semibold text-ink">
+              Сброс статистики менеджера
+            </div>
             <p className="mt-1 max-w-[420px] text-[13px] leading-normal text-ink-muted">
               Вы можете очистить статистику менеджеров вашего отдела. Это может
               быть необходимо в случае замены менеджера
