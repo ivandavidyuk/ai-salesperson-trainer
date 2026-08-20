@@ -6,7 +6,7 @@
 // Функции, обращающиеся к Redis, можно использовать только в Node-рантайме
 // (то есть в route handlers, но НЕ в middleware).
 
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import { ensureRedisConnected, redis } from "@/lib/redis";
 
@@ -58,9 +58,16 @@ function expiresInToSeconds(expiresIn: string): number {
   }
 }
 
-// Формирует ключ Redis для хранения активного токена
+// Формирует ключ Redis для хранения активного токена.
+//
+// Ключом служит ХЕШ токена, а не сам токен. Redis открыт наружу — frontend
+// на RU ходит в него по интернету на DE, — и защищён одним паролем. Пока
+// ключом был сам JWT, `redis-cli --scan` выдавал готовые токены входа:
+// подставил в куку и вошёл под пользователем. По хешу войти нельзя,
+// а проверка «активен ли токен» работает ровно так же: мы всё равно
+// приходим сюда с токеном на руках.
 function redisTokenKey(token: string): string {
-  return `auth:token:${token}`;
+  return `auth:token:${createHash("sha256").update(token).digest("hex")}`;
 }
 
 // Создаёт подписанный JWT для пользователя.
