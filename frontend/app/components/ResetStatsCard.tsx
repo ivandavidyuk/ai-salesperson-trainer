@@ -69,7 +69,7 @@ export function ResetStatsCard() {
 
   return (
     <>
-      <div className="rounded-2xl border border-line bg-surface-card px-6 py-[22px]">
+      <div className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px]">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-[15.5px] font-semibold text-ink">Статистика отдела</div>

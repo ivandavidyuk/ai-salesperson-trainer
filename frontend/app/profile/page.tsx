@@ -376,7 +376,7 @@ function PersonalForm({ profile, onChange }: CardProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl border border-line bg-surface-card px-6 py-[22px]"
+      className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px]"
     >
       <div className="text-[15.5px] font-semibold text-ink">Личные данные</div>
 
@@ -700,7 +700,7 @@ function ClinicForm() {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-line bg-surface-card px-6 py-[22px]">
+      <div className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px]">
         <div className="text-[15.5px] font-semibold text-ink">Клиника и услуги</div>
         <p className="mt-3 text-[13.5px] text-ink-muted">Загружаем…</p>
       </div>
@@ -712,7 +712,7 @@ function ClinicForm() {
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border border-line bg-surface-card">
+      <div className="shrink-0 overflow-hidden rounded-2xl border border-line bg-surface-card">
         {outcome === "done" && done && (
           <div className="flex items-center gap-2.5 border-b border-good-surface bg-good-surface px-6 py-[11px] text-[13.5px] font-medium text-brand-hover">
             Пациенты пересобраны под «{saved.industry}» — все {saved.casesTotal}.
