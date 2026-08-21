@@ -101,6 +101,11 @@ model User {
   // Первые разговоры уходят на освоение интерфейса и портят картину,
   // а удалять их необратимо было бы страшно нажимать не на того человека
   statsResetAt DateTime?
+  // Водяной знак счётчика в меню: бейджи, открытые позже этой отметки,
+  // считаются непросмотренными. Переписывается заходом на «Достижения».
+  // Отдельно от shownAt, потому что закрытая плашка не должна гасить
+  // счётчик: «Скрыть все» иначе съедало бы новость, ради которой он и есть
+  achievementsSeenAt DateTime?
   createdAt    DateTime  @default(now())
 
   organization Organization? @relation(fields: [organizationId], references: [id])
@@ -138,6 +143,10 @@ model UserAchievement {
   userId        String
   achievementId String
   unlockedAt    DateTime    @default(now())
+  // Когда плашку в углу показали и закрыли. Пусто — стоит в очереди показа.
+  // Очередь привязана к моменту выдачи, а не к экрану: тогда она годится
+  // и для бейджей без разговора, которые на разборе не показать никогда
+  shownAt       DateTime?
 
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
