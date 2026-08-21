@@ -23,6 +23,15 @@ const NAV_WIDTH_CLOSED = 72;
  */
 export const PROFILE_UPDATED_EVENT = "podhod:profile-updated";
 
+/**
+ * Список полученных бейджей изменился — счётчику в меню пора перечитать себя.
+ * Шлют двое: опрос плашек (открылся новый бейдж) и страница «Достижения»
+ * (человек их посмотрел, счётчик гаснет). Оболочка живёт не на всех экранах,
+ * поэтому событие — подсказка, а не единственный канал: на своих страницах
+ * счётчик и так перечитывается при каждом переходе.
+ */
+export const ACHIEVEMENTS_CHANGED_EVENT = "podhod:achievements-changed";
+
 interface ShellUser {
   id: string;
   firstName: string;
@@ -42,13 +51,14 @@ interface ShellUser {
  */
 let cachedUser: ShellUser | null = null;
 let cachedTaskCount = 0;
+let cachedAchievementCount = 0;
 
 interface NavItem {
   href: string;
   label: string;
   icon: ReactNode;
-  /** Показывать ли счётчик активных заданий */
-  badge?: boolean;
+  /** Какой счётчик показывать у пункта */
+  badge?: "tasks" | "achievements";
   /** Пункт виден только руководителю */
   headOnly?: boolean;
 }
@@ -138,13 +148,14 @@ const NAV_ITEMS: NavItem[] = [
     icon: <Icon>{icons.stats}</Icon>,
     headOnly: true,
   },
-  { href: "/tasks", label: "Задания", icon: <Icon>{icons.tasks}</Icon>, badge: true },
+  { href: "/tasks", label: "Задания", icon: <Icon>{icons.tasks}</Icon>, badge: "tasks" },
   { href: "/patients", label: "Пациенты", icon: <Icon>{icons.patients}</Icon> },
   { href: "/training", label: "Тренировка", icon: <Icon>{icons.training}</Icon> },
   {
     href: "/achievements",
     label: "Достижения",
     icon: <Icon>{icons.achievements}</Icon>,
+    badge: "achievements",
   },
   { href: "/profile", label: "Профиль", icon: <Icon>{icons.profile}</Icon> },
 ];
@@ -168,6 +179,11 @@ export default function AppShell({ title, children }: AppShellProps) {
 
   // Число активных заданий для бейджа в меню
   const [taskCount, setTaskCount] = useState(cachedTaskCount);
+
+  // Число непросмотренных достижений для бейджа в меню
+  const [achievementCount, setAchievementCount] = useState(
+    cachedAchievementCount
+  );
 
   // Имя и фото для топбара. Перечитываем при переходе между страницами
   // и по событию из профиля: без него шапка показывала бы старое фото
@@ -215,12 +231,40 @@ export default function AppShell({ title, children }: AppShellProps) {
     };
   }, [pathname]);
 
+  // Бейдж достижений. Кроме перехода слушаем событие: бейдж может открыться,
+  // пока человек стоит на одной странице, — тогда его находит опрос плашек
+  // и сообщает сюда. Обратный случай тот же: со страницы «Достижения»
+  // приходит сигнал погасить счётчик.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const res = await fetch("/api/achievements/pending");
+        if (!res.ok) return;
+        const data = (await res.json()) as { count: number };
+        cachedAchievementCount = data.count;
+        if (!cancelled) setAchievementCount(data.count);
+      } catch {
+        // молча: без бейджа меню остаётся рабочим
+      }
+    }
+
+    void load();
+    window.addEventListener(ACHIEVEMENTS_CHANGED_EVENT, load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(ACHIEVEMENTS_CHANGED_EVENT, load);
+    };
+  }, [pathname]);
+
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     // Иначе следующий вошедший увидит в шапке имя и роль предыдущего,
     // пока не ответит /api/auth/me
     cachedUser = null;
     cachedTaskCount = 0;
+    cachedAchievementCount = 0;
     router.push("/login");
   }
 
@@ -294,7 +338,14 @@ export default function AppShell({ title, children }: AppShellProps) {
           (item) => !item.headOnly || user?.role === "head"
         ).map((item) => {
           const active = pathname === item.href;
-          const badge = item.badge && taskCount > 0 ? taskCount : null;
+          // null — счётчика нет вовсе: нулевой бейдж не рисуем
+          const счёт =
+            item.badge === "tasks"
+              ? taskCount
+              : item.badge === "achievements"
+                ? achievementCount
+                : 0;
+          const badge = счёт > 0 ? счёт : null;
           return (
             <Link
               key={item.href}

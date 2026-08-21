@@ -263,21 +263,30 @@ async def _реплики(pool, session_id: str) -> tuple[list[str], list[str]]:
     return менеджер, пациент
 
 
-async def выдать(pool, user_id: str, слаги: set[str], когда) -> list[str]:
+async def выдать(
+    pool, user_id: str, слаги: set[str], когда, *, показано=None
+) -> list[str]:
     """Записывает бейджи, которых у человека ещё нет. Возвращает выданные.
 
     Идемпотентно: `ON CONFLICT DO NOTHING`. Бейдж выдаётся один раз, и дата
     получения не переписывается — иначе повторный прогон начисления сдвинул
     бы все даты на сегодня.
+
+    `показано` заполняет `shownAt`, то есть отменяет плашку в углу. Пусто
+    у живой выдачи (о новом бейдже человеку и надо сообщить) и заполнено
+    у начисления задним числом: история — не новость, и высыпать её стопкой
+    при первом же заходе значит обесценить сам момент вручения.
     """
     выданы: list[str] = []
     for слаг in sorted(слаги):
         строка = await pool.fetchrow(
-            'INSERT INTO "UserAchievement" ("userId", "achievementId", "unlockedAt") '
-            "VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING \"achievementId\"",
+            'INSERT INTO "UserAchievement" '
+            '("userId", "achievementId", "unlockedAt", "shownAt") '
+            "VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING \"achievementId\"",
             user_id,
             слаг,
             когда,
+            показано,
         )
         if строка is not None:
             выданы.append(слаг)

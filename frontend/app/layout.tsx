@@ -4,6 +4,7 @@
 
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Manrope } from "next/font/google";
+import AchievementToasts from "@/app/components/AchievementToasts";
 import "./globals.css";
 
 // Основной шрифт интерфейса
@@ -45,7 +46,13 @@ export default function RootLayout({
       lang="ru"
       className={`${plexSans.variable} ${plexMono.variable} ${manrope.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Плашка о полученном бейдже — здесь, а не в AppShell: главный
+            экран для неё, /transcript/[id], живёт вне оболочки. Молчание
+            на входе и на звонке она обеспечивает сама */}
+        <AchievementToasts />
+      </body>
     </html>
   );
 }
