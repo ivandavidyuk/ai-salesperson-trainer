@@ -147,6 +147,9 @@ docker compose up -d
 | GET | `/api/team/[id]/sessions` | все разговоры менеджера (только руководитель) |
 | GET | `/api/assignments/count` | счётчик заданий для бейджа в меню |
 | GET | `/api/achievements` | достижения с отметкой полученных |
+| GET | `/api/achievements/pending` | плашки в углу и число на счётчике |
+| POST | `/api/achievements/shown` | плашки показаны — больше не всплывают |
+| POST | `/api/achievements/seen` | зашли на полку — счётчик гаснет |
 | PATCH | `/api/profile` | личные данные |
 | PUT/DELETE | `/api/profile/avatar` | загрузка и удаление фото |
 | POST | `/api/profile/password` | смена пароля |
