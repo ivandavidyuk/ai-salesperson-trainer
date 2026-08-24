@@ -3,6 +3,7 @@
 // секунде разговора.
 
 import { formatDuration, initials } from "@/lib/format";
+import PatientAvatar from "@/app/components/PatientAvatar";
 
 interface TranscriptBubbleProps {
   /** Реплика менеджера (наша) или клиента */
@@ -26,13 +27,19 @@ export default function TranscriptMessage({
         isManager ? "flex-row-reverse" : ""
       }`}
     >
-      <span
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
-          isManager ? "bg-brand text-white" : "bg-brand-soft text-brand"
-        }`}
-      >
-        {initials(speakerName)}
-      </span>
+      {/* Портрет только у клиента: у менеджера здесь его собственные инициалы,
+          а своё фото он видит в профиле */}
+      {isManager ? (
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand text-[11px] font-semibold text-white">
+          {initials(speakerName)}
+        </span>
+      ) : (
+        <PatientAvatar
+          name={speakerName}
+          className="h-8 w-8 bg-brand-soft text-[11px] font-semibold text-brand"
+          lazy
+        />
+      )}
 
       <div className="max-w-[74%]">
         {/* Скруглённый угол «смотрит» на аватар — так видно, кто говорит */}

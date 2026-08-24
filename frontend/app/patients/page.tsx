@@ -9,7 +9,8 @@ import AppShell from "@/app/components/AppShell";
 import PatientInfoModal from "@/app/components/PatientInfoModal";
 import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
-import { initials, plural } from "@/lib/format";
+import PatientAvatar from "@/app/components/PatientAvatar";
+import { plural } from "@/lib/format";
 import { DIFFICULTY, type DifficultyKey, type WizardPatient } from "@/lib/training";
 
 const FILTERS: { key: "all" | DifficultyKey; label: string }[] = [
@@ -193,9 +194,11 @@ interface PatientCardProps {
 function Identity({ patient }: { patient: PatientCardProps["patient"] }) {
   return (
     <div className="-ml-1.5 inline-flex min-w-0 flex-1 items-center gap-3 py-1.5 pl-1.5 pr-3">
-      <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-[17px] font-semibold text-brand">
-        {initials(patient.name)}
-      </span>
+      <PatientAvatar
+        name={patient.name}
+        className="h-[52px] w-[52px] bg-brand-soft text-[17px] font-semibold text-brand"
+        lazy
+      />
       <span className="min-w-0 flex-1">
         <span className="truncate text-base font-semibold text-ink">
           {patient.name}

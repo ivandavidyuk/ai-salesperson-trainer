@@ -9,6 +9,7 @@ import AppShell from "@/app/components/AppShell";
 import PatientInfoModal from "@/app/components/PatientInfoModal";
 import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
+import PatientAvatar from "@/app/components/PatientAvatar";
 import { formatDueDate, initials, isOverdue, plural } from "@/lib/format";
 import type { Assignment, WizardPatient } from "@/lib/training";
 
@@ -220,9 +221,11 @@ function AssignmentCard({
               title="О пациенте"
               className="-ml-1 inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-2.5 text-sm text-ink-body transition-colors hover:bg-surface-bubble"
             >
-              <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand">
-                {initials(assignment.patient.name)}
-              </span>
+              <PatientAvatar
+                name={assignment.patient.name}
+                className="h-[34px] w-[34px] bg-brand-soft text-xs font-semibold text-brand"
+                lazy
+              />
               {assignment.patient.name}
               <svg
                 width="12"
