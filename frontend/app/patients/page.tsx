@@ -178,6 +178,12 @@ export default function PatientsPage() {
         <PatientInfoModal
           patient={infoPatient}
           onClose={() => setInfoPatient(null)}
+          // Из окна тренировка запускается напрямую: иначе, дочитав анамнез,
+          // человек закрывал бы окно и искал ту же карточку глазами
+          onStart={() => {
+            setStarted(infoPatient);
+            setInfoPatient(null);
+          }}
         />
       )}
 
