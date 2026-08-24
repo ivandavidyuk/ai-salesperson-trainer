@@ -5,7 +5,6 @@
 // чем именно он болен, напишет генератор.
 
 import { PatientDifficulty } from "@prisma/client";
-import { МУЖСКОЙ_ГОЛОС } from "./types";
 import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
@@ -90,5 +89,6 @@ export const profile: PatientProfile = {
   character: `Критичен, холоден, недоверчив. Сам был врачом, поэтому красивые слова не работают. Проверяет не знания менеджера, а его честность.`,
   decisionMaker: `Решает сам. Дети за границей, к ним не обращается.`,
   approach: `Не продавайте — говорите фактами и цифрами, предложите документы. Честно назовите риски: признание в незнании работает лучше, чем «мы гарантируем». Не жалейте его из-за возраста.`,
-  voice: МУЖСКОЙ_ГОЛОС,
+  // Голос подобран 24.08 под возраст и манеру персонажа: Nikita Voitenko
+  voice: "I7ibRihHx5PMITrXPLP4",
 };
