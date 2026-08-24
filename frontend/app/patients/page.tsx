@@ -11,7 +11,12 @@ import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import PatientAvatar from "@/app/components/PatientAvatar";
 import { plural } from "@/lib/format";
-import { DIFFICULTY, type DifficultyKey, type WizardPatient } from "@/lib/training";
+import {
+  DIFFICULTY,
+  splitPatientSubtitle,
+  type DifficultyKey,
+  type WizardPatient,
+} from "@/lib/training";
 
 const FILTERS: { key: "all" | DifficultyKey; label: string }[] = [
   { key: "all", label: "Все" },
@@ -144,7 +149,9 @@ export default function PatientsPage() {
           <p className="py-16 text-center text-sm text-danger-text">{error}</p>
         )}
 
-        <div className="flex flex-wrap gap-4">
+        {/* Три колонки на всех поддерживаемых ширинах: 365 / 419 / 525px.
+            minmax(0,1fr) не даёт длинному слову растянуть колонку */}
+        <div className="grid grid-cols-3 gap-4">
           {visible.map((patient) => (
             <PatientCard
               key={patient.id}
@@ -155,7 +162,7 @@ export default function PatientsPage() {
           ))}
 
           {patients && visible.length === 0 && (
-            <div className="w-full px-5 py-14 text-center">
+            <div className="col-span-3 px-5 py-14 text-center">
               <div className="text-base font-semibold text-ink-muted">
                 Ничего не найдено
               </div>
@@ -190,25 +197,49 @@ interface PatientCardProps {
   onStart: () => void;
 }
 
-/** Аватар, имя и подпись. Не кликается: в окно ведёт кнопка «Подробнее». */
+/**
+ * Кто: аватар, имя и мета-строка «возраст · сложность».
+ *
+ * Имени отдана вся ширина справа от аватара. Раньше рядом с ним стоял чип
+ * сложности и отбирал ~90px, из-за чего на узком экране длинные имена
+ * выходили за колонку. Чип спустился в мета-строку: возраст и сложность
+ * коротки и предсказуемы, их длину мы контролируем, а имя — нет.
+ *
+ * Обрезки здесь нет намеренно: имя длиннее строки перенесётся, а не уедет
+ * за край. Не кликается — в окно ведёт кнопка «Подробнее».
+ */
 function Identity({ patient }: { patient: PatientCardProps["patient"] }) {
+  const difficulty = DIFFICULTY[patient.difficulty];
+  const { age } = splitPatientSubtitle(patient.description);
+
   return (
-    <div className="-ml-1.5 inline-flex min-w-0 flex-1 items-center gap-3 py-1.5 pl-1.5 pr-3">
+    <div className="flex items-center gap-[13px]">
       <PatientAvatar
         name={patient.name}
         className="h-[52px] w-[52px] bg-brand-soft text-[17px] font-semibold text-brand"
         lazy
       />
-      <span className="min-w-0 flex-1">
-        <span className="truncate text-base font-semibold text-ink">
+      <div className="min-w-0 flex-1">
+        <div className="text-pretty text-base font-semibold text-ink">
           {patient.name}
-        </span>
-        {patient.description && (
-          <span className="mt-px block truncate text-[13px] text-ink-subtle">
-            {patient.description}
+        </div>
+        <div className="mt-[5px] flex flex-wrap items-center gap-[7px]">
+          {age && (
+            <>
+              <span className="text-[13px] text-ink-subtle">{age}</span>
+              <span className="text-[13px] text-line-strong">·</span>
+            </>
+          )}
+          <span
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${difficulty.pill}`}
+          >
+            <span
+              className={`inline-block h-1.5 w-1.5 rounded-full ${difficulty.dot}`}
+            />
+            {difficulty.label}
           </span>
-        )}
-      </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -218,34 +249,39 @@ function PatientCard({
   onOpenInfo,
   onStart,
 }: PatientCardProps) {
-  const difficulty = DIFFICULTY[patient.difficulty];
+  const { reason } = splitPatientSubtitle(patient.description);
   // Промпта ещё нет — тренировку не начать, backend всё равно откажет
   const blocked = !patient.isActive;
 
   return (
-    // Три колонки при gap-4: (100% − 2 × 16px) / 3
-    <div className="flex w-[calc((100%-32px)/3)] flex-col rounded-[14px] border border-line bg-surface-card p-5">
-      <div className="flex items-center gap-2">
-        {/* Имя больше не кликается ни у кого: то же окно открывает кнопка
-            «Подробнее» ниже, и два входа в одно место — лишний способ
-            посмотреть то же самое.
-            Прежний комментарий здесь утверждал, что менеджеру карточка
-            дублировала бы «анамнез, который и так на виду». На виду он был
-            обрезан до четырёх строк, а раскрыть его менеджеру было нечем */}
-        <Identity patient={patient} />
-        <span
-          className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${difficulty.pill}`}
-        >
-          {difficulty.label}
-        </span>
-      </div>
+    // Ширину держит сетка страницы, а не карточка: при расчётной ширине
+    // карточка на 1280 ужималась до 360px и резала подпись
+    <div className="flex flex-col rounded-[14px] border border-line bg-surface-card p-5">
+      {/* Имя больше не кликается ни у кого: то же окно открывает кнопка
+          «Подробнее» ниже, и два входа в одно место — лишний способ
+          посмотреть то же самое.
+          Прежний комментарий здесь утверждал, что менеджеру карточка
+          дублировала бы «анамнез, который и так на виду». На виду он был
+          обрезан до четырёх строк, а раскрыть его менеджеру было нечем */}
+      <Identity patient={patient} />
 
-      {/* flex-1 выравнивает кнопки по низу, даже если анамнезы разной длины */}
-      <div className="mt-4 flex-1">
-        <div className="font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
-          Анамнез
-        </div>
-        <p className="mt-1.5 line-clamp-4 text-pretty text-[13.5px] leading-normal text-ink-body">
+      {/* С чем и подробности. Ярлыка над ними нет: два соседних текста
+          различают вес и место, а слово «Анамнез», повторённое на полке
+          двадцать один раз, давало больше шума, чем смысла.
+
+          Повод переносится по словам и не обрезается никогда — по нему
+          выбирают. Анамнез обрезан четырьмя строками, и это допустимо:
+          многоточие здесь означает «есть продолжение», а адрес у него
+          есть — кнопка «Подробнее» ниже.
+
+          flex-1 выравнивает кнопки по низу, даже если тексты разной длины */}
+      <div className="mt-[15px] flex-1">
+        {reason && (
+          <div className="text-pretty text-[15px] font-semibold leading-[1.35] text-ink">
+            {reason}
+          </div>
+        )}
+        <p className="mt-[7px] line-clamp-4 text-pretty text-[13px] leading-normal text-ink-muted">
           {patient.anamnesis || "Анамнез пока не заполнен."}
         </p>
       </div>
@@ -287,7 +323,9 @@ function PatientCard({
           onClick={onStart}
           disabled={blocked}
           title={blocked ? "Для этого пациента ещё не готов промпт" : undefined}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-input px-2 py-3 text-[15px] font-semibold text-white transition-colors ${
+          // Шире «Подробнее» в 1,3 раза: равные по виду кнопки заставляли бы
+          // выбирать, а читать необязательно — тренироваться цель
+          className={`flex flex-[1.3] items-center justify-center gap-2 rounded-input px-2 py-3 text-[15px] font-semibold text-white transition-colors ${
             blocked
               ? "cursor-not-allowed bg-disabled"
               : "bg-brand hover:bg-brand-hover"
