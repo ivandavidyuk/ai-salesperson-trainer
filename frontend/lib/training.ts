@@ -41,6 +41,34 @@ export const DIFFICULTY = {
 
 export type DifficultyKey = keyof typeof DIFFICULTY;
 
+/**
+ * Делит подпись пациента «34 года · лазерная коррекция зрения» на возраст
+ * и повод обращения.
+ *
+ * Склеенной строкой её пишет генератор случая, и до 24.08 она такой
+ * и показывалась — подписью под именем, с обрезкой по ширине. Обрезался
+ * всегда повод: возраст короткий и стоит первым. На карточке 360px это
+ * съедало смысл целиком — «34 года · лазерная …», а выбирают по поводу.
+ * Теперь возраст уходит в мета-строку к сложности, а повод становится
+ * заголовком случая и переносится по словам.
+ *
+ * Разделителя может не оказаться, если генератор изменят: тогда вся строка
+ * считается поводом. Потерять её хуже, чем показать целиком не в том месте.
+ */
+export function splitPatientSubtitle(description: string | null | undefined): {
+  age: string | null;
+  reason: string | null;
+} {
+  const text = description?.trim();
+  if (!text) return { age: null, reason: null };
+  const at = text.indexOf(" · ");
+  if (at === -1) return { age: null, reason: text };
+  return {
+    age: text.slice(0, at).trim() || null,
+    reason: text.slice(at + 3).trim() || null,
+  };
+}
+
 /** Задание от руководителя — то, что отдаёт GET /api/assignments */
 export interface Assignment {
   id: string;
