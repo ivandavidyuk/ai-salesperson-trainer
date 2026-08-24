@@ -1,7 +1,6 @@
 // «Строительный подрядчик» — аватар Димы №2.
 
 import { PatientDifficulty } from "@prisma/client";
-import { МУЖСКОЙ_ГОЛОС } from "./types";
 import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
@@ -90,5 +89,6 @@ export const profile: PatientProfile = {
   character: `Прямой, грубоватый, но справедливый. Мыслит сметой: срок, цена, гарантия. Не терпит болтовни и «допов», проверяет менеджера на серьёзность.`,
   decisionMaker: `Решает сам, советоваться не с кем не будет.`,
   approach: `Держитесь по-деловому: конкретная цена, сроки, этапы, гарантия. Назовите опыт и стаж врача сами. Не продавайте «допы» и не растягивайте — он читает это как попытку развести.`,
-  voice: МУЖСКОЙ_ГОЛОС,
+  // Голос подобран 24.08 под возраст и манеру персонажа: David Zhelezny
+  voice: "Ga0Zjw9ZBbevb3wIda0V",
 };

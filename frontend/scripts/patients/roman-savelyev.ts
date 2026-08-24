@@ -1,7 +1,6 @@
 // «Бывший коллектор, который влез в долги» — аватар Димы №18.
 
 import { PatientDifficulty } from "@prisma/client";
-import { МУЖСКОЙ_ГОЛОС } from "./types";
 import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
@@ -84,5 +83,6 @@ export const profile: PatientProfile = {
   character: `Циничный, дерзкий снаружи и обиженный внутри. Знает схемы и проверяет менеджера на честность провокациями. Уважает прямоту, презирает нравоучения.`,
   decisionMaker: `Решает сам, согласующих нет.`,
   approach: `Не учите его — он знает систему лучше вас. Говорите прямо: рассрочка без банка и без проверок. Не нервничайте на провокациях. Уважьте его опыт вместо осуждения.`,
-  voice: МУЖСКОЙ_ГОЛОС,
+  // Голос подобран 24.08 под возраст и манеру персонажа: Arty Grumson
+  voice: "2Zst4rvX5S2nMbiauLDN",
 };

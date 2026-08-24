@@ -12,6 +12,8 @@ import type { PatientProfile } from "./types";
 export const profile: PatientProfile = {
   name: "Елена Андреевна",
   difficulty: PatientDifficulty.mid,
+  // Голос подобран 24.08 под возраст и манеру персонажа: Elen Kuragina
+  voice: "TPIitICAZ8CqlGZ81AKm",
   personality: {
     identity: `Ты — Елена Андреевна Ворошилова, 34 года. Живёшь в Сочи, работаешь управляющей отелем. Замужем, есть ребёнок. Характер элегантный, строгий — классическая бизнес-леди. Привыкла, что к тебе относятся по статусу.
 
