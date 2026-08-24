@@ -11,10 +11,11 @@ import Alert from "@/app/components/Alert";
 import Button from "@/app/components/Button";
 import ReviewPanel from "@/app/components/ReviewPanel";
 import TranscriptMessage from "@/app/components/TranscriptMessage";
+import PatientAvatar from "@/app/components/PatientAvatar";
 import BackLink from "@/app/components/BackLink";
 import Logo from "@/app/components/Logo";
 import Loader from "@/app/components/Loader";
-import { formatConversationDate, formatDuration, initials } from "@/lib/format";
+import { formatConversationDate, formatDuration } from "@/lib/format";
 import { messageOffsetSec, type TranscriptData } from "@/lib/transcript";
 
 // Сколько ждать разбор после конца разговора. Оценщик укладывается
@@ -122,9 +123,10 @@ export default function TranscriptPage() {
             <>
               <span className="h-5 w-px bg-line" aria-hidden="true" />
               <div className="flex items-center gap-2.5">
-                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand">
-                  {initials(session.patientName)}
-                </span>
+                <PatientAvatar
+                  name={session.patientName}
+                  className="h-[30px] w-[30px] bg-brand-soft text-xs font-semibold text-brand"
+                />
                 <div>
                   <div className="text-sm font-semibold leading-tight text-ink">
                     {title}

@@ -1,8 +1,11 @@
 // Аватар собеседника на экране звонка. Внешний вид зависит от того,
 // что происходит в разговоре: пульсирующие кольца, пока говорит клиент;
 // приглушённый круг, пока говорит менеджер; серый — на паузе.
+//
+// Внутри круга — портрет пациента; обводка по состоянию и кольца остаются
+// поверх него.
 
-import { initials } from "@/lib/format";
+import PatientAvatar from "@/app/components/PatientAvatar";
 
 export type AvatarState = "idle" | "speaking" | "listening" | "paused";
 
@@ -48,11 +51,10 @@ export default function CallAvatar({
         </>
       )}
 
-      <div
-        className={`flex items-center justify-center rounded-full border-2 font-semibold ${scale.face} ${FACE_TONE[state]}`}
-      >
-        {initials(name)}
-      </div>
+      <PatientAvatar
+        name={name}
+        className={`border-2 font-semibold ${scale.face} ${FACE_TONE[state]}`}
+      />
     </div>
   );
 }

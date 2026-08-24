@@ -4,7 +4,7 @@
 // Открывается поверх мастера настройки тренировки по кнопке «О пациенте».
 
 import { useEffect } from "react";
-import { initials } from "@/lib/format";
+import PatientAvatar from "@/app/components/PatientAvatar";
 import { DIFFICULTY, type WizardPatient } from "@/lib/training";
 
 interface PatientInfoModalProps {
@@ -74,9 +74,10 @@ export default function PatientInfoModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-3.5 border-b border-line-soft px-6 py-[22px]">
-          <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-[17px] font-semibold text-brand">
-            {initials(patient.name)}
-          </span>
+          <PatientAvatar
+            name={patient.name}
+            className="h-[52px] w-[52px] bg-brand-soft text-[17px] font-semibold text-brand"
+          />
           <div className="min-w-0 flex-1">
             <div className="text-[17px] font-semibold text-ink">{patient.name}</div>
             {patient.description && (

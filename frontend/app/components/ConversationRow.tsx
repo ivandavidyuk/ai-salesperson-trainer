@@ -6,11 +6,8 @@
 import Link from "next/link";
 import type { HomeConversation } from "@/lib/home";
 import ScoreBadge from "@/app/components/ScoreBadge";
-import {
-  formatConversationDate,
-  formatDuration,
-  initials,
-} from "@/lib/format";
+import PatientAvatar from "@/app/components/PatientAvatar";
+import { formatConversationDate, formatDuration } from "@/lib/format";
 
 interface ConversationRowProps {
   conversation: HomeConversation;
@@ -48,9 +45,11 @@ export default function ConversationRow({
         </svg>
       </button>
 
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand">
-        {initials(conversation.patientName)}
-      </span>
+      <PatientAvatar
+        name={conversation.patientName}
+        className="h-10 w-10 bg-brand-soft text-sm font-semibold text-brand"
+        lazy
+      />
 
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-ink">

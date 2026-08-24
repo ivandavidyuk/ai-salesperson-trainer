@@ -14,6 +14,7 @@ import Alert from "@/app/components/Alert";
 import HoursExhaustedModal from "@/app/components/HoursExhaustedModal";
 import Field from "@/app/components/Field";
 import PatientInfoModal from "@/app/components/PatientInfoModal";
+import PatientAvatar from "@/app/components/PatientAvatar";
 import Loader from "@/app/components/Loader";
 import Spinner from "@/app/components/Spinner";
 import { formatDueDate, initials } from "@/lib/format";
@@ -716,9 +717,11 @@ export default function TrainingSetupModal({
                           selected ? "hover:bg-[#DCEDE9]" : "hover:bg-surface-bubble"
                         }`}
                       >
-                        <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand">
-                          {initials(patient.name)}
-                        </span>
+                        <PatientAvatar
+                          name={patient.name}
+                          className="h-[42px] w-[42px] bg-brand-soft text-sm font-semibold text-brand"
+                          lazy
+                        />
                         <span className="min-w-0 text-left">
                           <span className="block whitespace-nowrap text-[14.5px] font-semibold text-ink">
                             {patient.name}
@@ -825,9 +828,10 @@ export default function TrainingSetupModal({
                       title="О пациенте"
                       className="-ml-1 inline-flex min-w-0 items-center gap-3 rounded-full py-1.5 pl-1.5 pr-3 transition-colors hover:bg-[#DCEDE9]"
                     >
-                      <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand-soft text-[17px] font-semibold text-brand">
-                        {initials(selectedPatient.name)}
-                      </span>
+                      <PatientAvatar
+                        name={selectedPatient.name}
+                        className="h-[52px] w-[52px] bg-brand-soft text-[17px] font-semibold text-brand"
+                      />
                       <span className="min-w-0 text-left">
                         <span className="block whitespace-nowrap text-base font-semibold text-ink">
                           {selectedPatient.name}
