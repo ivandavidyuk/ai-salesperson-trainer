@@ -81,6 +81,17 @@ dev-сервер — он держит DLL движка. Остановить `n
 document.head.insertAdjacentHTML('beforeend', '<style>*{transition:none !important}</style>');
 ```
 
+В скрытой вкладке молчит не только анимация. **Картинки с `loading="lazy"`
+там вообще не запрашиваются**: браузер считает, что они не попали в область
+просмотра, и `img.complete` у всех остаётся `false`. Выглядит как поломка —
+двадцать один `<img>` в разметке, ноль запросов в сети, — хотя сам файл
+отдаётся за двадцать миллисекунд. Прежде чем чинить, проверь
+`document.visibilityState` и сними ленивость:
+
+```js
+document.querySelectorAll('img[loading="lazy"]').forEach(i => i.loading = 'eager');
+```
+
 Ещё одна ловушка: `border-[1.5px]` Tailwind **не генерирует** — значение
 неоднозначно (ширина или цвет). Нужен префикс: `border-[length:1.5px]`.
 
