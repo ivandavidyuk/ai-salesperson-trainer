@@ -82,7 +82,16 @@ export default function ProgressPanel({
                 пришлось сокращать и переносить мягким дефисом. В строке
                 под подпись есть вся ширина панели, и заодно нумерация
                 1–5 показывает, что этапы идут по порядку, а не стоят рядом */}
-            <div className="flex min-h-0 flex-1 flex-col justify-between gap-2.5">
+            {/* Расти можно, ужиматься ниже содержимого — нельзя. С `flex-1`
+                и `min-h-0` коробка на невысоком экране становилась ниже своих
+                строк, строки вываливались вниз и ложились поверх блока
+                «По последнему разговору»: на 1440×900 — на 41px, на 1280×800 —
+                на 141px. Прокрутка при этом не появлялась, потому что внешний
+                контейнер видел укоротившуюся коробку, а не её содержимое.
+                Соседние `min-h-0 flex-1` в проекте безопасны — рядом с ними
+                стоит `overflow-y-auto`, здесь его нет и быть не должно:
+                прокручиваться должна панель целиком, а не список этапов */}
+            <div className="flex shrink-0 grow basis-auto flex-col justify-between gap-2.5">
               {metrics.map((metric, index) => (
                 <div key={metric.key} className="flex items-center gap-[11px]">
                   <span className="w-[13px] shrink-0 text-right font-mono text-[11px] text-ink-placeholder">
