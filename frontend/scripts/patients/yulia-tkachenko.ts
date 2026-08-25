@@ -10,7 +10,10 @@ import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
   name: "Юлия Андреевна",
-  difficulty: PatientDifficulty.mid,
+  // Вслух сравнивает с другой клиникой — возражение, которое
+  // снимать собеседнику, — и требует итоговую сумму со сроком. Цена
+  // в верхней части её месячного плана, нужна разбивка.
+  difficulty: PatientDifficulty.hard,
   // Голос подобран 24.08 под возраст и манеру персонажа: Marusya G
   voice: "uQiZyJqZ7ePaB8bwME8n",
   personality: {

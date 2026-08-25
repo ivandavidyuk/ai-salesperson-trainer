@@ -10,7 +10,10 @@ import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
   name: "Гульсара Рустамовна",
-  difficulty: PatientDifficulty.easy,
+  // Согласующий со сценой в три шага плюс языковой барьер:
+  // отвечает одним словом, не договаривает фразы, извиняется за то, что
+  // отнимает время. Выяснить потребность почти невозможно.
+  difficulty: PatientDifficulty.hard,
   // Голос подобран 24.08 под возраст и манеру персонажа: Mishki
   voice: "Jhqrj1kYppTq06Kj3KFa",
   personality: {

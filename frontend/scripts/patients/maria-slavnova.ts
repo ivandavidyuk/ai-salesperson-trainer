@@ -9,7 +9,10 @@ import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
   name: "Мария Андреевна",
-  difficulty: PatientDifficulty.mid,
+  // Рассрочка обязательна (45 000 против потолка платежа
+  // в шесть-семь тысяч) и подавать её нужно как достойное решение: намёк
+  // на бюджетность или на долги заканчивает разговор.
+  difficulty: PatientDifficulty.hard,
   // Голос подобран 24.08 под возраст и манеру персонажа: Anna
   voice: "q22qntNqQAvTaBoqE089",
   personality: {
