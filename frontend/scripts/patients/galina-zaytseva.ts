@@ -8,7 +8,10 @@ import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
   name: "Галина Петровна",
-  difficulty: PatientDifficulty.mid,
+  // Ложное возражение про дочь как проверка менеджера,
+  // требование арифметики по пунктам, плохая память — повторять без
+  // раздражения, — и цена ровно в её зоне «пересчитав».
+  difficulty: PatientDifficulty.hard,
   // Голос подобран 24.08 под возраст и манеру персонажа: Olga Orlova
   voice: "d60rsXo2p0OwikDR5bS7",
   personality: {
