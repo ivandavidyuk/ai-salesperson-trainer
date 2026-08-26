@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireHead } from "@/lib/access";
 import { rebuildCases, идётСборка } from "@/lib/cases";
+import { ГЕНЕРАЦИЯ_ЗАКРЫТА, этоДемо } from "@/lib/demoAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +25,13 @@ export async function POST(request: NextRequest) {
     }
     if (!head.organizationId) {
       return NextResponse.json({ error: "Клиника не заполнена" }, { status: 400 });
+    }
+
+    // Второй замок на том же входе, что и у сохранения формы: этот роут
+    // запускает сборку напрямую, минуя её, и без проверки здесь запрет
+    // обходился бы одним нажатием «Собрать заново»
+    if (await этоДемо(head.organizationId)) {
+      return NextResponse.json({ error: ГЕНЕРАЦИЯ_ЗАКРЫТА }, { status: 403 });
     }
 
     // Вторую сборку поверх живой не запускаем. Кнопка нажимается там же,
