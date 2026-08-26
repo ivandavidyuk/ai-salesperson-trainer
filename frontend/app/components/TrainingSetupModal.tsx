@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Alert from "@/app/components/Alert";
 import HoursExhaustedModal from "@/app/components/HoursExhaustedModal";
+import DemoExpiredModal from "@/app/components/DemoExpiredModal";
 import Field from "@/app/components/Field";
 import PatientInfoModal from "@/app/components/PatientInfoModal";
 import PatientAvatar from "@/app/components/PatientAvatar";
@@ -149,9 +150,14 @@ export default function TrainingSetupModal({
   // через месяц, просто не будет знать про часы.
   //
   // Руководителя не трогает: он часы не тратит, а назначает задание.
+  //
+  // У демо-пары своё окно на оба случая — истёкшие сутки и исчерпанные
+  // часы. Показать демо-аккаунту HoursExhaustedModal значило бы раскрыть
+  // тихий потолок и наврать про «обновится 1-го числа».
   const [hours, setHours] = useState<{ resetsAt: string; limitSec: number } | null>(
     null
   );
+  const [demoOver, setDemoOver] = useState(false);
   useEffect(() => {
     if (createMode) return;
     let cancelled = false;
@@ -159,9 +165,17 @@ export default function TrainingSetupModal({
       const res = await fetch("/api/organization/hours");
       if (!res.ok) return;
       const data = (await res.json()) as
-        | { exhausted: boolean; resetsAt: string; limitSec: number }
+        | {
+            exhausted: boolean;
+            resetsAt: string;
+            limitSec: number;
+            demo: { expired: boolean } | null;
+          }
         | null;
-      if (!cancelled && data?.exhausted) {
+      if (cancelled || !data) return;
+      if (data.demo) {
+        if (data.demo.expired || data.exhausted) setDemoOver(true);
+      } else if (data.exhausted) {
         setHours({ resetsAt: data.resetsAt, limitSec: data.limitSec });
       }
     })();
@@ -400,6 +414,9 @@ export default function TrainingSetupModal({
 
   // Часы кончились — вместо мастера показываем, почему нельзя. Заполнять
   // форму, которая упрётся в отказ на последнем шаге, — издевательство
+  if (demoOver) {
+    return <DemoExpiredModal onClose={onClose} />;
+  }
   if (hours) {
     return (
       <HoursExhaustedModal

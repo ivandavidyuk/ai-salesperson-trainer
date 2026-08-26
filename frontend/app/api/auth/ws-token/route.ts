@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createWsToken, getAuthUser, WS_TOKEN_TTL } from "@/lib/auth";
 import { расходЧасовПользователя } from "@/lib/hours";
+import { демоСтатус } from "@/lib/demoAccess";
 
 export const runtime = "nodejs";
 // Роут читает cookie запроса — рендерится только динамически
@@ -26,6 +27,16 @@ export async function GET(request: NextRequest) {
     if (счёт?.exhausted) {
       return NextResponse.json(
         { error: "Часы разговоров закончились" },
+        { status: 402 }
+      );
+    }
+
+    // Тот же второй замок для демо: истёкшие сутки без проверки здесь
+    // обходились бы запросом за токеном напрямую
+    const демо = await демоСтатус(user.sub);
+    if (демо?.разговорыЗакрыты) {
+      return NextResponse.json(
+        { error: "Демо-доступ завершён" },
         { status: 402 }
       );
     }

@@ -27,6 +27,9 @@ export async function POST(request: Request) {
     // Ищем пользователя по email
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
+      include: {
+        organization: { select: { isDemo: true, demoExpiresAt: true } },
+      },
     });
 
     // Не уточняем, что именно неверно — это безопаснее
@@ -44,6 +47,25 @@ export async function POST(request: Request) {
         { error: "Неверный email или пароль" },
         { status: 401 }
       );
+    }
+
+    // Демо-доступ: после истечения суток вход живёт ещё неделю — на разборы
+    // опирается второй созвон с клиникой. Дальше дверь закрывается целиком.
+    // Проверка после пароля: иначе по тексту ошибки можно было бы выяснять,
+    // существует ли демо-аккаунт, не зная пароля
+    const org = user.organization;
+    if (org?.isDemo && org.demoExpiresAt) {
+      const входДо =
+        org.demoExpiresAt.getTime() + 7 * 24 * 60 * 60 * 1000;
+      if (Date.now() > входДо) {
+        return NextResponse.json(
+          {
+            error:
+              "Демо-доступ завершён. Напишите нам — продолжим на полном доступе.",
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // Создаём JWT и сохраняем его в Redis (whitelist)

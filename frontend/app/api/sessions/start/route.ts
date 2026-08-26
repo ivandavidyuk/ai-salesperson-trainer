@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
 import { расходЧасовПользователя } from "@/lib/hours";
+import { демоСтатус, засечьПервыйРазговор } from "@/lib/demoAccess";
 
 export const runtime = "nodejs";
 
@@ -40,6 +41,17 @@ export async function POST(request: NextRequest) {
           error: "Часы разговоров закончились",
           resetsAt: счёт.resetsAt.toISOString(),
         },
+        { status: 402 }
+      );
+    }
+
+    // Демо-доступ: сутки после первого разговора вышли — новых нет.
+    // Текст без деталей: чем кончилось демо (временем или потолком часов),
+    // клиенту знать не нужно
+    const демо = await демоСтатус(user.sub);
+    if (демо?.разговорыЗакрыты) {
+      return NextResponse.json(
+        { error: "Демо-доступ завершён" },
         { status: 402 }
       );
     }
@@ -122,6 +134,12 @@ export async function POST(request: NextRequest) {
         status: "active",
       },
     });
+
+    // Первый разговор демо-пары запускает суточный отсчёт. После создания
+    // сессии, а не до: упавший create не должен тратить клинике сутки
+    if (демо) {
+      await засечьПервыйРазговор(демо.organizationId);
+    }
 
     // Формируем URL WebSocket-сервера (FastAPI).
     // Базовый адрес берём из env, по умолчанию — локальный.
