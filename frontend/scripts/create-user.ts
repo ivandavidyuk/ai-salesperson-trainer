@@ -71,7 +71,10 @@ async function main() {
   // Клиника. Регистрации в продукте нет, поэтому привязка происходит здесь:
   // сам менеджер организацию не выбирает — иначе попал бы в чужую статистику
   // отдела. Когда клиника одна, вопрос не задаём вовсе.
+  // Демо-организации и отраслевые пресеты живым пользователям не предлагаем:
+  // демо живёт сутки, а пресет — шаблон без людей вовсе
   const organizations = await prisma.organization.findMany({
+    where: { isDemo: false, isPreset: false },
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true, industry: true },
   });

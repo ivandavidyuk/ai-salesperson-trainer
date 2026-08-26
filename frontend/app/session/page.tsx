@@ -345,6 +345,14 @@ function SessionScreen() {
         if (res.status === 400) {
           setErrorMsg("Этот вариант тренировки пока недоступен");
         }
+        // 402 — часы кончились или демо истекло: сервер прислал текст,
+        // молчаливый возврат в idle выглядел бы поломкой
+        if (res.status === 402) {
+          const body = (await res.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          setErrorMsg(body?.error ?? "Разговоры сейчас недоступны");
+        }
         setScreenState("idle");
         return;
       }
@@ -357,7 +365,14 @@ function SessionScreen() {
       const tokenRes = await fetch("/api/auth/ws-token");
       if (!tokenRes.ok) {
         if (tokenRes.status === 401) router.push("/login");
-        setErrorMsg("Не удалось авторизовать голосовое соединение");
+        if (tokenRes.status === 402) {
+          const body = (await tokenRes.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          setErrorMsg(body?.error ?? "Разговоры сейчас недоступны");
+        } else {
+          setErrorMsg("Не удалось авторизовать голосовое соединение");
+        }
         setScreenState("idle");
         return;
       }
