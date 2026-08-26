@@ -20,6 +20,7 @@
     "check:avatars": "ts-node scripts/check-avatars.ts",
     "dump:personalities": "ts-node scripts/dump-personalities.ts",
     "dump:presets": "ts-node scripts/dump-presets.ts",
+    "dump:presets:md": "ts-node scripts/dump-presets-md.ts",
     "rebuild:prompts": "ts-node scripts/rebuild-prompts.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
