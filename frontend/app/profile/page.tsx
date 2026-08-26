@@ -45,6 +45,9 @@ interface Organization {
   industry: string;
   services: ServiceRow[];
   diagnoses: DiagnosisRow[];
+  /** Демо-клиника: данные видны, но менять их нельзя — сохранение
+      запускает платную пересборку, и сервер его отклоняет */
+  isDemo: boolean;
   casesTotal: number;
   casesReady: number;
   // Идёт ли сборка прямо сейчас. Сервер отдаёт не голый флаг, а живость:
@@ -709,6 +712,7 @@ function ClinicForm() {
 
   const done = saved && saved.casesTotal > 0 && saved.casesReady >= saved.casesTotal;
   const partial = saved && saved.casesTotal > 0 && saved.casesReady < saved.casesTotal;
+  const demo = Boolean(saved?.isDemo);
 
   return (
     <>
@@ -881,24 +885,39 @@ function ClinicForm() {
 
           {error && <Alert className="mt-4">{error}</Alert>}
 
-          <div className="mt-5 flex items-center justify-between gap-5 border-t border-line-soft pt-[18px]">
-            <p className="max-w-[520px] text-[12.5px] leading-normal text-ink-muted">
-              {!filled
-                ? "Чтобы сохранить, заполните название, город и специализацию клиники, в каждой услуге — название и цену, в каждом диагнозе — и диагноз, и жалобу."
-                : !changed
-                  ? "Изменений нет — пациенты уже собраны по этим данным."
-                  : "После сохранения тренажёр пересоберёт всех пациентов под вашу специализацию. На двадцати пациентах это занимает несколько минут — страницу можно закрыть, сборка не прервётся."}
-            </p>
-            <Button
-              type="button"
-              onClick={handleSave}
-              loading={busy}
-              disabled={!filled || !changed}
-              className="shrink-0 px-6 py-[11px] text-[14.5px]"
-            >
-              Сохранить
-            </Button>
-          </div>
+          {/* В демо форма читается, но не правится: за сохранением идёт
+              пересборка случаев — сотня вызовов модели, и запускать её
+              нажатием из демо нельзя. Кнопку не гасим, а убираем вовсе:
+              серая кнопка выглядит поломкой, а не правилом */}
+          {demo ? (
+            <div className="mt-5 border-t border-line-soft pt-[18px]">
+              <p className="max-w-[560px] text-[12.5px] leading-normal text-ink-muted">
+                Клиника и пациенты в демо уже настроены под вашу специализацию —
+                можно посмотреть, с чем они приходят. На полном доступе здесь
+                описывают свои услуги и диагнозы, и пациенты пересобираются
+                под них.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-5 flex items-center justify-between gap-5 border-t border-line-soft pt-[18px]">
+              <p className="max-w-[520px] text-[12.5px] leading-normal text-ink-muted">
+                {!filled
+                  ? "Чтобы сохранить, заполните название, город и специализацию клиники, в каждой услуге — название и цену, в каждом диагнозе — и диагноз, и жалобу."
+                  : !changed
+                    ? "Изменений нет — пациенты уже собраны по этим данным."
+                    : "После сохранения тренажёр пересоберёт всех пациентов под вашу специализацию. На двадцати пациентах это занимает несколько минут — страницу можно закрыть, сборка не прервётся."}
+              </p>
+              <Button
+                type="button"
+                onClick={handleSave}
+                loading={busy}
+                disabled={!filled || !changed}
+                className="shrink-0 px-6 py-[11px] text-[14.5px]"
+              >
+                Сохранить
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -907,6 +926,7 @@ function ClinicForm() {
           services={services}
           onChange={setServices}
           onClose={() => setModalOpen(false)}
+          readOnly={demo}
         />
       )}
       {diagsOpen && (
@@ -914,6 +934,7 @@ function ClinicForm() {
           diagnoses={diagnoses}
           onChange={setDiagnoses}
           onClose={() => setDiagsOpen(false)}
+          readOnly={demo}
         />
       )}
       {progress && <RebuildModal progress={progress} industry={industry} onGiveUp={stopWaiting} />}
@@ -950,10 +971,13 @@ function ServicesModal({
   services,
   onChange,
   onClose,
+  readOnly = false,
 }: {
   services: ServiceRow[];
   onChange: (rows: ServiceRow[]) => void;
   onClose: () => void;
+  /** Демо: список показываем, но правки бессмысленны — сохранить их некуда */
+  readOnly?: boolean;
 }) {
   // Удаление без подтверждения: подтверждать каждую строку — издевательство,
   // а случайно снесённая строка это потерянная работа. Поэтому «Вернуть»
@@ -996,12 +1020,14 @@ function ServicesModal({
                     <input
                       value={service.name}
                       onChange={(e) => update(index, { name: e.target.value })}
+                      readOnly={readOnly}
                       placeholder="Название услуги"
                       className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[14.5px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
                     />
                     <input
                       value={service.price}
                       onChange={(e) => update(index, { price: e.target.value })}
+                      readOnly={readOnly}
                       placeholder="Цена"
                       className="w-[236px] shrink-0 rounded-[9px] border border-line-strong px-3 py-2 text-right font-mono text-[13px] text-brand-hover outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
                     />
@@ -1009,21 +1035,24 @@ function ServicesModal({
                   <input
                     value={service.description}
                     onChange={(e) => update(index, { description: e.target.value })}
+                      readOnly={readOnly}
                     placeholder="Что входит: сколько визитов, что включено"
                     className="rounded-[9px] border border-line-strong px-3 py-2 text-[13px] text-ink-muted outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
                   />
                 </div>
-                <button
-                  type="button"
-                  title="Удалить услугу"
-                  onClick={() => {
-                    setRemoved({ row: service, at: index });
-                    onChange(services.filter((_, i) => i !== index));
-                  }}
-                  className="mt-1 h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
-                >
-                  ✕
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    title="Удалить услугу"
+                    onClick={() => {
+                      setRemoved({ row: service, at: index });
+                      onChange(services.filter((_, i) => i !== index));
+                    }}
+                    className="mt-1 h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -1037,13 +1066,15 @@ function ServicesModal({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => onChange([...services, { name: "", price: "", description: "" }])}
-            className="mt-0.5 shrink-0 self-start rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[13.5px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
-          >
-            + Добавить услугу
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => onChange([...services, { name: "", price: "", description: "" }])}
+              className="mt-0.5 shrink-0 self-start rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[13.5px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
+            >
+              + Добавить услугу
+            </button>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-3.5 border-t border-line-soft px-7 pb-5 pt-4">
@@ -1090,10 +1121,13 @@ function DiagnosesModal({
   diagnoses,
   onChange,
   onClose,
+  readOnly = false,
 }: {
   diagnoses: DiagnosisRow[];
   onChange: (rows: DiagnosisRow[]) => void;
   onClose: () => void;
+  /** Демо: список показываем, но правки бессмысленны — сохранить их некуда */
+  readOnly?: boolean;
 }) {
   const [removed, setRemoved] = useState<{ row: DiagnosisRow; at: number } | null>(null);
 
@@ -1137,26 +1171,30 @@ function DiagnosesModal({
               <input
                 value={row.name}
                 onChange={(e) => update(index, { name: e.target.value })}
+                      readOnly={readOnly}
                 placeholder="Например: хронический пульпит"
                 className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[14px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
               />
               <input
                 value={row.complaint}
                 onChange={(e) => update(index, { complaint: e.target.value })}
+                      readOnly={readOnly}
                 placeholder="Как это звучит от пациента"
                 className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[13.5px] text-ink-body outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
               />
-              <button
-                type="button"
-                title="Удалить диагноз"
-                onClick={() => {
-                  setRemoved({ row, at: index });
-                  onChange(diagnoses.filter((_, i) => i !== index));
-                }}
-                className="h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
-              >
-                ✕
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  title="Удалить диагноз"
+                  onClick={() => {
+                    setRemoved({ row, at: index });
+                    onChange(diagnoses.filter((_, i) => i !== index));
+                  }}
+                  className="h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           ))}
 
@@ -1169,13 +1207,15 @@ function DiagnosesModal({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => onChange([...diagnoses, { name: "", complaint: "" }])}
-            className="mt-0.5 shrink-0 self-start rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[13.5px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
-          >
-            + Добавить диагноз
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => onChange([...diagnoses, { name: "", complaint: "" }])}
+              className="mt-0.5 shrink-0 self-start rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[13.5px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
+            >
+              + Добавить диагноз
+            </button>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-3.5 border-t border-line-soft px-7 pb-5 pt-4">

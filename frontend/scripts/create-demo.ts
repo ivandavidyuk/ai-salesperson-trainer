@@ -95,6 +95,40 @@ async function main() {
     select: { id: true, name: true },
   });
   if (пресет) {
+    // Прайс и диагнозы копируем вместе со случаями. Разговору они не нужны —
+    // цены звучат из уст менеджера, — но руководитель демо-клиники первым
+    // делом открывает «Клиника и услуги», и пустая форма там читается
+    // как недоделанный продукт, хотя случаи на месте
+    const услуги = await prisma.service.findMany({
+      where: { organizationId: пресет.id },
+      orderBy: { position: "asc" },
+    });
+    const диагнозы = await prisma.diagnosis.findMany({
+      where: { organizationId: пресет.id },
+      orderBy: { position: "asc" },
+    });
+    if (услуги.length > 0) {
+      await prisma.service.createMany({
+        data: услуги.map((у, i) => ({
+          organizationId: организация.id,
+          name: у.name,
+          price: у.price,
+          description: у.description,
+          position: i,
+        })),
+      });
+    }
+    if (диагнозы.length > 0) {
+      await prisma.diagnosis.createMany({
+        data: диагнозы.map((д, i) => ({
+          organizationId: организация.id,
+          name: д.name,
+          complaint: д.complaint,
+          position: i,
+        })),
+      });
+    }
+
     const случаи = await prisma.patientCase.findMany({
       where: { organizationId: пресет.id },
     });
@@ -117,7 +151,8 @@ async function main() {
       });
     }
     console.log(
-      `Пресет «${пресет.name}»: скопировано случаев — ${случаи.length}`
+      `Пресет «${пресет.name}»: случаев ${случаи.length}, ` +
+        `услуг ${услуги.length}, диагнозов ${диагнозы.length}`
     );
   } else {
     console.log(

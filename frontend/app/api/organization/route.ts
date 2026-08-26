@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireHead } from "@/lib/access";
 import { rebuildCases, сборкаЖива, идётСборка } from "@/lib/cases";
+import { ГЕНЕРАЦИЯ_ЗАКРЫТА, этоДемо } from "@/lib/demoAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,9 @@ async function organizationForForm(id: string) {
       name: true,
       city: true,
       industry: true,
+      // Демо-клинике форма показывается только на чтение: сохранение
+      // запускает платную пересборку, и оно ей закрыто
+      isDemo: true,
       casesTotal: true,
       casesReady: true,
       casesUpdatedAt: true,
@@ -96,6 +100,15 @@ export async function PUT(request: NextRequest) {
         { error: "Доступно только руководителю" },
         { status: 403 }
       );
+    }
+
+    // Демо-клинике сохранение формы закрыто: за ним следом идёт пересборка
+    // случаев, а это сотня вызовов модели за наш счёт — и одного нажатия
+    // хватило бы, чтобы её запустить. Заодно это бережёт сам показ: случаи
+    // пресета вычитаны людьми, а свежая генерация — нет, и подменять
+    // первое вторым посреди демо незачем
+    if (head.organizationId && (await этоДемо(head.organizationId))) {
+      return NextResponse.json({ error: ГЕНЕРАЦИЯ_ЗАКРЫТА }, { status: 403 });
     }
 
     // Сохранение во время сборки отклоняем целиком, а не «сохраним, но
