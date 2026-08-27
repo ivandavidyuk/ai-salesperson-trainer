@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
           firstName: user.firstName,
           lastName: user.lastName,
         });
-        await fetch(`${backendUrl()}/diagnostics/generate`, {
+        const res = await fetch(`${backendUrl()}/diagnostics/generate`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -167,6 +167,16 @@ export async function POST(request: NextRequest) {
           },
           body: JSON.stringify({ sessionId: session.id }),
         });
+        // Отказ разбираем вслух: HTTP-ошибка — не reject, и без этой ветки
+        // запрос, ушедший не на тот сервер, молчал бы. Ровно так 27.08
+        // Caddy без маршрута /diagnostics/* возвращал HTML логина, а лог
+        // был пуст — та же грабля, что с /cases/* 07.08
+        if (!res.ok) {
+          console.error(
+            `Генерация результата диагностики: HTTP ${res.status} ` +
+              `от ${backendUrl()} для сессии ${session.id}`
+          );
+        }
       })().catch((error) =>
         console.error("Генерация результата диагностики не запустилась:", error)
       );
