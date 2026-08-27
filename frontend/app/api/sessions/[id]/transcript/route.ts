@@ -31,6 +31,8 @@ export async function GET(
         // фоновой задачей через несколько секунд после конца разговора
         endedAt: true,
         durationSec: true,
+        diagnosticsResult: true,
+        diagnosticsShownAt: true,
         patient: { select: { name: true } },
         review: {
           select: {
@@ -80,6 +82,13 @@ export async function GET(
         durationSec: session.durationSec,
         topic: session.topic,
         patientName: session.patient?.name ?? null,
+        // Документ диагностики отдаём только показанный: середина
+        // расшифровки на него ссылается, и без него читателю не сойдётся
+        // контекст. Сгенерированный, но не показанный — не существовал
+        diagnosticsResult: session.diagnosticsShownAt
+          ? session.diagnosticsResult
+          : null,
+        diagnosticsShownAt: session.diagnosticsShownAt?.toISOString() ?? null,
       },
       manager: {
         firstName: manager?.firstName ?? "",

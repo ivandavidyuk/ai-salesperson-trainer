@@ -103,7 +103,7 @@ interface GeneratedCase {
   reviewNote?: string;
 }
 
-function backendUrl(): string {
+export function backendUrl(): string {
   // Адрес backend известен как ws://…; http-схему выводим из него, чтобы
   // не заводить вторую переменную окружения, которая разъедется с первой
   const ws = process.env.FASTAPI_WS_URL || "ws://localhost:8000";

@@ -40,6 +40,10 @@ export interface TranscriptData {
     durationSec: number | null;
     topic: string | null;
     patientName: string | null;
+    /** Документ диагностики, показанный менеджеру по кнопке. null —
+        не показывали (или разговор был до этой фичи), плашки нет */
+    diagnosticsResult: string | null;
+    diagnosticsShownAt: string | null;
   };
   manager: { firstName: string; lastName: string };
   messages: TranscriptMessage[];

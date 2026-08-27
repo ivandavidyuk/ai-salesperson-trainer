@@ -7,9 +7,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getAuthUser } from "@/lib/auth";
+import { getAuthUser, signToken } from "@/lib/auth";
 import { расходЧасовПользователя } from "@/lib/hours";
 import { демоСтатус, засечьПервыйРазговор } from "@/lib/demoAccess";
+import { backendUrl } from "@/lib/cases";
 
 export const runtime = "nodejs";
 
@@ -67,10 +68,13 @@ export async function POST(request: NextRequest) {
     // Тип тренировки сверяем с базой: принимать на веру идентификатор
     // от клиента нельзя, а неактивные типы в мастере видны
     let trainingTypeId: string | null = null;
+    // Сделочный ли разговор. Без типа — полный разговор (сессии до мастера
+    // настройки), как и backend считает через COALESCE(scoresDeal, true)
+    let scoresDeal = true;
     if (body.trainingType) {
       const type = await prisma.trainingType.findUnique({
         where: { id: body.trainingType },
-        select: { id: true, isActive: true },
+        select: { id: true, isActive: true, scoresDeal: true },
       });
       if (!type || !type.isActive) {
         return NextResponse.json(
@@ -79,6 +83,7 @@ export async function POST(request: NextRequest) {
         );
       }
       trainingTypeId = type.id;
+      scoresDeal = type.scoresDeal;
     }
 
     // Пациент, которого играет ИИ. Проверяем на сервере, что он активен:
@@ -139,6 +144,32 @@ export async function POST(request: NextRequest) {
     // сессии, а не до: упавший create не должен тратить клинике сутки
     if (демо) {
       await засечьПервыйРазговор(демо.organizationId);
+    }
+
+    // Результат диагностики готовится заранее, пока менеджер проверяет
+    // микрофон и читает анамнез, — к сценке в разговоре документ уже ждёт
+    // кнопки. Fire-and-forget по образцу rebuildCases: упавшая генерация
+    // не должна мешать старту разговора, кнопка добёрет синхронно.
+    // Только для сделочного разговора: в этапных упражнениях сценки нет
+    if (scoresDeal) {
+      void (async () => {
+        const token = await signToken({
+          userId: user.sub,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        });
+        await fetch(`${backendUrl()}/diagnostics/generate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ sessionId: session.id }),
+        });
+      })().catch((error) =>
+        console.error("Генерация результата диагностики не запустилась:", error)
+      );
     }
 
     // Формируем URL WebSocket-сервера (FastAPI).
