@@ -88,6 +88,10 @@ function SessionScreen() {
   // зайти напрямую — тогда работает прежний путь с активным пациентом.
   const chosenPatientId = searchParams.get("patient");
   const chosenType = searchParams.get("type");
+  // Полный разговор: тип «full» из мастера либо прямой заход без типа
+  // (сессии до мастера — полные, backend считает так же через COALESCE).
+  // Только в нём есть сценка диагностики и кнопка результата
+  const fullConversation = !chosenType || chosenType === "full";
   // Задание, по которому запущен разговор: закроется при завершении
   const assignmentId = searchParams.get("assignment");
 
@@ -97,6 +101,10 @@ function SessionScreen() {
   const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  // Результат диагностики: null — не показан, строка — документ на экране.
+  // waiting — кнопка нажата, ждём ответа сервера (или повтор при pending)
+  const [diagnostics, setDiagnostics] = useState<string | null>(null);
+  const [diagnosticsWaiting, setDiagnosticsWaiting] = useState(false);
   // Звучит ли сейчас ответ ИИ — от этого зависит индикатор и вид аватара
   const [aiSpeaking, setAiSpeaking] = useState(false);
   // Та же величина ссылкой: сторож тишины опрашивает её из интервала,
@@ -444,6 +452,16 @@ function SessionScreen() {
             case "error":
               setErrorMsg(msg.message || "Ошибка сервера");
               break;
+            case "diagnostics_result":
+              // Документ готов: карточка остаётся до конца разговора
+              setDiagnostics(String(msg.text || ""));
+              setDiagnosticsWaiting(false);
+              break;
+            case "diagnostics_pending":
+              // Генерация ещё идёт (стартовала на «Начать») — повторяем сами,
+              // менеджеру достаточно «готовим…» на кнопке
+              setTimeout(() => sendWs({ type: "diagnostics" }), 2500);
+              break;
             case "session_ended":
               break;
             // transcript_user / transcript_ai на экране не показываем —
@@ -479,6 +497,13 @@ function SessionScreen() {
   }
 
   // «Завершить разговор»: стоп по WS, освобождение ресурсов, переход к расшифровке
+  function handleDiagnostics() {
+    // Сценку менеджер уже отыграл голосом — кнопка только выдаёт документ.
+    // Ответ придёт событием diagnostics_result (или pending с авто-повтором)
+    setDiagnosticsWaiting(true);
+    sendWs({ type: "diagnostics" });
+  }
+
   async function handleStop() {
     setBusy(true);
     setScreenState("completing");
@@ -793,7 +818,36 @@ function SessionScreen() {
               </p>
             )}
 
+            {/* Документ диагностики. Карточка, а не модалка: менеджер читает
+                её между репликами, не теряя аватар и таймер. Появившись,
+                остаётся до конца разговора */}
+            {diagnostics && (
+              <div className="mt-6 w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-4">
+                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
+                  Результат диагностики
+                </div>
+                <div className="whitespace-pre-line font-mono text-[12.5px] leading-relaxed text-ink-label">
+                  {diagnostics}
+                </div>
+              </div>
+            )}
+
             <div className="mt-10 flex gap-3.5">
+              {/* Результат диагностики — только в полном разговоре и до
+                  показа. Маркера «сценка отыграна» нет намеренно: менеджер
+                  сам решает, когда пациент «сходил», — сценку он всё равно
+                  отыгрывает голосом, кнопка лишь выдаёт документ */}
+              {fullConversation && !diagnostics && (
+                <button
+                  type="button"
+                  onClick={handleDiagnostics}
+                  disabled={diagnosticsWaiting}
+                  className="rounded-input-lg border border-line-strong bg-white px-8 py-[15px] text-base font-semibold text-brand-hover transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:text-ink-muted"
+                >
+                  {diagnosticsWaiting ? "Готовим…" : "Результат диагностики"}
+                </button>
+              )}
+
               {screenState === "active" ? (
                 <button
                   type="button"

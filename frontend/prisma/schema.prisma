@@ -279,6 +279,12 @@ model Session {
   // Хранится отдельно, чтобы считать среднюю длину одним запросом.
   durationSec Int?
   isFavorite  Boolean       @default(false)
+  // Результат диагностики: генерируется backend-ом на старте полного
+  // разговора (свой на каждую сессию — реиграбельность), показывается
+  // менеджеру по кнопке. shownAt ставится только при показе — по нему
+  // расшифровка знает, было ли что вставлять и в какое место
+  diagnosticsResult  String?
+  diagnosticsShownAt DateTime?
   startedAt   DateTime      @default(now())
   endedAt     DateTime?
 

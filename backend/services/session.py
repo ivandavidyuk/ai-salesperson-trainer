@@ -343,6 +343,65 @@ class SessionStore:
         voice = (row["patient_voice"] or "").strip() if row else ""
         return voice or None
 
+    # --- Результат диагностики --------------------------------------------
+
+    async def get_diagnostics_context(self, session_id: str) -> Optional[dict]:
+        """Всё, что нужно генератору результата: имя, анамнез, отрасль —
+        и уже готовый результат, если генерация уже была (идемпотентность).
+
+        Анамнез — тем же COALESCE, что и боевой промпт: случай клиники
+        перекрывает исходный. Без анамнеза продолжать нечего — вернётся
+        None в поле, и вызывающий откажется честно.
+        """
+        assert self._pool is not None
+        return await self._pool.fetchrow(
+            'SELECT p."name" AS patient_name, '
+            'COALESCE(pc."anamnesis", p."anamnesis") AS anamnesis, '
+            'o."industry" AS industry, '
+            's."diagnosticsResult" AS existing_result, '
+            'COALESCE(t."scoresDeal", true) AS scores_deal '
+            'FROM "Session" s '
+            'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
+            'LEFT JOIN "TrainingType" t ON t."id" = s."trainingTypeId" '
+            'LEFT JOIN "User" u ON u."id" = s."userId" '
+            'LEFT JOIN "Organization" o ON o."id" = u."organizationId" '
+            'LEFT JOIN "PatientCase" pc ON pc."patientId" = s."patientId" '
+            '  AND pc."organizationId" = u."organizationId" '
+            'WHERE s."id" = $1',
+            session_id,
+        )
+
+    async def save_diagnostics_result(self, session_id: str, text: str) -> None:
+        """Сохраняет сгенерированный документ. Не перезаписывает готовый:
+        двойной старт генерации не должен подменить документ, который
+        менеджер, возможно, уже читает."""
+        assert self._pool is not None
+        await self._pool.execute(
+            'UPDATE "Session" SET "diagnosticsResult" = $2 '
+            'WHERE "id" = $1 AND "diagnosticsResult" IS NULL',
+            session_id,
+            text,
+        )
+
+    async def get_diagnostics_result(self, session_id: str) -> Optional[str]:
+        """Готовый документ сессии либо None, если генерация ещё идёт."""
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            'SELECT "diagnosticsResult" AS result FROM "Session" WHERE "id" = $1',
+            session_id,
+        )
+        return (row["result"] or None) if row else None
+
+    async def mark_diagnostics_shown(self, session_id: str) -> None:
+        """Отмечает момент показа. Только первый показ: по этому времени
+        расшифровка ставит плашку, и повторное нажатие не должно её двигать."""
+        assert self._pool is not None
+        await self._pool.execute(
+            'UPDATE "Session" SET "diagnosticsShownAt" = NOW() '
+            'WHERE "id" = $1 AND "diagnosticsShownAt" IS NULL',
+            session_id,
+        )
+
     # --- Итоговый разбор --------------------------------------------------
 
     async def get_transcript(self, session_id: str) -> list[dict]:

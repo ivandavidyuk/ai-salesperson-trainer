@@ -189,19 +189,55 @@ export default function TranscriptPage() {
 
             {data.messages.map((message, index) => {
               const isManager = message.role === "user";
+              // Плашка документа диагностики встаёт перед первой репликой,
+              // созданной после показа: середина разговора ссылается на
+              // документ, и читатель должен увидеть его там, где менеджер
+              const показДо =
+                data.session.diagnosticsResult &&
+                data.session.diagnosticsShownAt &&
+                message.createdAt >= data.session.diagnosticsShownAt &&
+                (index === 0 ||
+                  data.messages[index - 1].createdAt < data.session.diagnosticsShownAt);
               return (
-                <TranscriptMessage
-                  key={index}
-                  isManager={isManager}
-                  text={message.text}
-                  speakerName={isManager ? managerName : session?.patientName ?? null}
-                  offsetSec={messageOffsetSec(
-                    data.session.startedAt,
-                    message.createdAt
+                <div key={index}>
+                  {показДо && (
+                    <div className="mx-auto mb-5 max-w-[520px] rounded-xl border border-line bg-surface px-[18px] py-4">
+                      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
+                        Менеджеру показан результат диагностики
+                      </div>
+                      <div className="whitespace-pre-line font-mono text-[12.5px] leading-relaxed text-ink-label">
+                        {data.session.diagnosticsResult}
+                      </div>
+                    </div>
                   )}
-                />
+                  <TranscriptMessage
+                    isManager={isManager}
+                    text={message.text}
+                    speakerName={isManager ? managerName : session?.patientName ?? null}
+                    offsetSec={messageOffsetSec(
+                      data.session.startedAt,
+                      message.createdAt
+                    )}
+                  />
+                </div>
               );
             })}
+
+            {/* Показ случился после последней реплики — плашка в конце */}
+            {data.session.diagnosticsResult &&
+              data.session.diagnosticsShownAt &&
+              (data.messages.length === 0 ||
+                data.messages[data.messages.length - 1].createdAt <
+                  data.session.diagnosticsShownAt) && (
+                <div className="mx-auto max-w-[520px] rounded-xl border border-line bg-surface px-[18px] py-4">
+                  <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
+                    Менеджеру показан результат диагностики
+                  </div>
+                  <div className="whitespace-pre-line font-mono text-[12.5px] leading-relaxed text-ink-label">
+                    {data.session.diagnosticsResult}
+                  </div>
+                </div>
+              )}
           </div>
 
           <ReviewPanel review={data.review} pending={pendingReview} />

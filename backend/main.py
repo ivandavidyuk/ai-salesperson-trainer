@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 
 from core.auth import verify_token
 from core.config import get_settings
-from services import achievements, case_generator, llm, scoring, tts
+from services import achievements, case_generator, diagnostics, llm, scoring, tts
 from services.text import strip_for_speech
 from services.session import (
     STATUS_ACTIVE,
@@ -262,6 +262,70 @@ async def generate_case_endpoint(request: Request):
     return case
 
 
+@app.post("/diagnostics/generate")
+async def generate_diagnostics_endpoint(request: Request):
+    """Генерирует результат диагностики сессии. Зовёт Next.js на старте
+    полного разговора — fire-and-forget, пока менеджер проверяет микрофон
+    и читает анамнез.
+
+    В отличие от /cases/generate этот эндпоинт читает базу сам: анамнез
+    и отрасль уже лежат в ней, гонять их через Node туда-обратно незачем.
+    Идемпотентен: готовый результат не перегенерируется (двойной клик
+    «Начать», ретрай Node) — иначе повтор мог бы подменить документ,
+    который менеджер уже читает.
+    """
+    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
+    if verify_token(token) is None:
+        raise HTTPException(status_code=401, detail="Недействительный токен")
+
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Некорректный запрос") from None
+
+    session_id = str(body.get("sessionId") or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Нужен sessionId")
+
+    контекст = await store.get_diagnostics_context(session_id)
+    if контекст is None:
+        raise HTTPException(status_code=404, detail="Сессия не найдена")
+    if контекст["existing_result"]:
+        return {"status": "already"}
+    if not контекст["scores_deal"]:
+        # Этапная тренировка: сценка диагностики туда не помещается,
+        # и кнопки на фронте нет. Генерировать впустую не будем
+        return {"status": "skipped"}
+    анамнез = (контекст["anamnesis"] or "").strip()
+    if not анамнез:
+        # Продолжать нечего: без анамнеза генератор ставил бы диагноз
+        # с нуля — ровно то, от чего фича защищается своей опорой
+        logger.warning(
+            "Сессия %s: анамнеза нет, результат диагностики не генерируется",
+            session_id,
+        )
+        return {"status": "no_anamnesis"}
+
+    ключ, описание = diagnostics.выбрать_исход()
+    документ = await diagnostics.generate_result(
+        контекст["patient_name"] or "",
+        анамнез,
+        контекст["industry"] or "",
+        описание,
+    )
+    if документ is None:
+        raise HTTPException(status_code=502, detail="Не удалось сгенерировать")
+
+    await store.save_diagnostics_result(session_id, документ)
+    logger.info(
+        "Сессия %s: результат диагностики готов (%s, %d символов)",
+        session_id,
+        ключ,
+        len(документ),
+    )
+    return {"status": "ok", "outcome": ключ}
+
+
 async def safe_send(ws: WebSocket, message: dict) -> None:
     """Отправляет сообщение клиенту, не падая при закрытом соединении."""
     try:
@@ -327,6 +391,13 @@ class TurnManager:
         # порог там нечего — предлагать оплату менеджер и не собирается,
         # а лишние вызовы модели стоят денег и добавляют задержку
         self.scores_deal = scores_deal
+        # Документ диагностики после показа менеджером. До кнопки — None:
+        # пациент «ещё не сходил», и знать итог ему неоткуда. Живёт в памяти
+        # менеджера хода, а не в Redis: показ приходит по этому же сокету,
+        # и терять его при обрыве соединения не страшно — при переподключении
+        # клиент покажет карточку из своего состояния, а промпт добёрет
+        # документ из Postgres в ветке "diagnostics"
+        self.diagnostics_text: Optional[str] = None
         # Проставляется после создания ElevenLabsSTT (нужен seconds_since_voice)
         self.stt: Optional[ElevenLabsSTT] = None
         self.barge_in_enabled = get_settings().barge_in_enabled
@@ -637,6 +708,16 @@ class TurnManager:
         self.reply_words = set()
         self.task = asyncio.create_task(self._run(text))
 
+    def _with_diagnostics(self, prompt: str) -> str:
+        """Доклеивает документ диагностики, если менеджер его уже показал.
+
+        Блок идёт после строки доверия: оба — динамическое знание пациента,
+        и порядок их появления в разговоре обычно такой же.
+        """
+        if not self.diagnostics_text:
+            return prompt
+        return f"{prompt}\n\n{llm.diagnostics_instruction(self.diagnostics_text)}"
+
     async def _prompt_with_trust(self, turns: int) -> str:
         """Промпт хода: постоянная часть плюс строка про доверие.
 
@@ -668,12 +749,16 @@ class TurnManager:
                     self.session_id,
                     turns,
                 )
-                return self.system_prompt
-            return f"{self.system_prompt}\n\n{llm.trust_instruction(False)}"
+                return self._with_diagnostics(self.system_prompt)
+            return self._with_diagnostics(
+                f"{self.system_prompt}\n\n{llm.trust_instruction(False)}"
+            )
 
         average = scores.get("average", 0.0)
         reached = average >= settings.deal_score_threshold
-        return f"{self.system_prompt}\n\n{llm.trust_instruction(reached)}"
+        return self._with_diagnostics(
+            f"{self.system_prompt}\n\n{llm.trust_instruction(reached)}"
+        )
 
     def schedule_scoring(self) -> None:
         """Пересчитывает оценку этапов в фоне, не задерживая разговор.
@@ -1214,6 +1299,28 @@ async def session_ws(ws: WebSocket, session_id: str):
             elif msg_type == "resume":
                 await store.set_status(session_id, STATUS_ACTIVE)
                 logger.info("Сессия %s: возобновлена", session_id)
+
+            elif msg_type == "diagnostics":
+                # Менеджер отыграл сценку голосом и нажал кнопку. Документ
+                # сгенерирован на старте сессии и обычно уже ждёт; не готов —
+                # клиент получает pending и повторяет запрос сам
+                документ = await store.get_diagnostics_result(session_id)
+                if документ is None:
+                    logger.info(
+                        "Сессия %s: результат диагностики ещё не готов",
+                        session_id,
+                    )
+                    await safe_send(ws, {"type": "diagnostics_pending"})
+                else:
+                    manager.diagnostics_text = документ
+                    await store.mark_diagnostics_shown(session_id)
+                    await safe_send(
+                        ws, {"type": "diagnostics_result", "text": документ}
+                    )
+                    logger.info(
+                        "Сессия %s: результат диагностики показан менеджеру",
+                        session_id,
+                    )
 
             elif msg_type == "stop":
                 logger.info("Сессия %s: остановка", session_id)
