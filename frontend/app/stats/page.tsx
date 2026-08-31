@@ -468,16 +468,23 @@ export default function StatsPage() {
                   </div>
 
                   {awards.length > 0 ? (
-                    <div className="flex flex-1 gap-3.5">
+                    // Две колонки, а не четыре в строку. Ряд сводки закрыт
+                    // max-w-[1140px] (по ширине таблицы под ним), и на четыре
+                    // карточки в нём остаётся 704px — по 154px на карточку,
+                    // из них под текст 74px. В такую ширину не влезает ни один
+                    // ярлык: «Работает над собой» ломался на три строки.
+                    // В два столбца на карточку приходится 330px — содержимое
+                    // помещается в строку, и высота карточек выравнивается.
+                    <div className="grid flex-1 grid-cols-2 gap-3.5">
                       {awards.map((award) => (
                         <div
                           key={award.label}
-                          className="flex flex-1 items-center gap-3 rounded-xl border border-line-soft bg-surface px-3.5 py-3"
+                          className="flex min-w-0 items-center gap-3 rounded-xl border border-line-soft bg-surface px-3.5 py-3"
                         >
                           <Avatar manager={award.manager} size={40} />
                           <div className="min-w-0">
                             <span
-                              className={`inline-block rounded-full px-2.5 py-[3px] text-[10px] font-bold uppercase tracking-[.05em] ${award.tone}`}
+                              className={`inline-block whitespace-nowrap rounded-full px-2.5 py-[3px] text-[10px] font-bold uppercase tracking-[.05em] ${award.tone}`}
                             >
                               {award.label}
                             </span>
