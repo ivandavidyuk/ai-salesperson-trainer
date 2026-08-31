@@ -89,6 +89,27 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
+      - uses: actions/checkout@v4
+
+      # Конфиги стека кладём с раннера, а не тянем на сервере через git pull.
+      # 31.08 GitHub начал пачками отвечать 401 (www-authenticate: Basic) на
+      # анонимные git-запросы с российского адреса, и деплой падал на первой же
+      # строке скрипта. Раннер в GitHub авторизован и ходит не из России.
+      # Код приложения к этому отношения не имеет: он приезжает образом
+      # с Docker Hub, а из репозитория серверу нужны ровно эти два файла —
+      # описание стека (нужно ДО запуска образа) и маршруты Caddy
+      # (монтируются с диска каталогом ./deploy).
+      # Шаг добавлен раньше, чем убран git pull, чтобы сверить: файлы,
+      # положенные раннером, должны совпасть с прежними до байта.
+      - name: Положить конфиги стека на сервер
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.RU_HOST }}
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "docker-compose.prod.yml,deploy/Caddyfile"
+          target: /root/ai-salesperson-trainer
+
       - name: Pull & restart stack
         uses: appleboy/ssh-action@v1
         env:
