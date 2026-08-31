@@ -360,6 +360,13 @@ class SessionStore:
             'COALESCE(pc."description", p."description") AS description, '
             'pc."diagnosticsPreset" AS preset_document, '
             'o."industry" AS industry, '
+            # Прайс — только для проверки готового документа: назвавший
+            # услугу документ отдаёт менеджеру готовый ответ. В промпт
+            # генератора список не идёт, там он навредил бы
+            'COALESCE(('
+            '  SELECT array_agg(sv."name") FROM "Service" sv '
+            '  WHERE sv."organizationId" = u."organizationId"'
+            '), ARRAY[]::text[]) AS services, '
             's."diagnosticsResult" AS existing_result, '
             'COALESCE(t."scoresDeal", true) AS scores_deal '
             'FROM "Session" s '
