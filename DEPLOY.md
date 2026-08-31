@@ -151,6 +151,13 @@ cd ~/ai-trainer && docker compose pull && docker compose up -d
 Данные при этом лежат не здесь, а в томах Docker (`postgres-data`,
 `caddy-data`, `caddy-config`) — чистка каталога их не касается.
 
+Дев-файл `docker-compose.yml` убран оттуда же и не только ради порядка.
+Пока он лежал рядом, `docker compose ps` **без** `-f` подхватывал именно
+его и уверенно показывал дев-стек: redis, которого на RU нет, и ни слова
+про frontend с Caddy. Правдоподобный неверный ответ хуже ошибки — теперь
+та же команда честно отвечает `no configuration file provided`.
+Все команды ниже поэтому и пишутся с явным `-f docker-compose.prod.yml`.
+
 Файлы окружения:
 
 - `.env` (корень) — по [.env.production.example](.env.production.example): `DOMAIN`,
