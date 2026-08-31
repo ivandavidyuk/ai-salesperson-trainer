@@ -133,6 +133,9 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
       objections: пресетныйСлучай.objections,
       // Пресеты вычитаны людьми — пометке критика тут взяться неоткуда
       reviewNote: null,
+      // Документ диагностики: есть у случая — менеджер увидит его,
+      // нет — включится генератор
+      diagnosticsPreset: пресетныйСлучай.diagnostics ?? null,
     };
 
     await prisma.patientCase.upsert({

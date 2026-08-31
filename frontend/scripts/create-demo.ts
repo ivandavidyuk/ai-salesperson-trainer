@@ -134,19 +134,18 @@ async function main() {
     });
     if (случаи.length > 0) {
       await prisma.patientCase.createMany({
-        data: случаи.map((c) => ({
-          patientId: c.patientId,
+        // Спред, а не список полей поимённо. Список приходилось дописывать
+        // при каждой новой колонке, и забытая колонка молча не доезжала
+        // до демо: случай у клиента выглядел целым, но был беднее пресетного.
+        // Со спредом следующее поле поедет само.
+        data: случаи.map(({ organizationId: _, ...c }) => ({
+          ...c,
           organizationId: организация.id,
-          prompt: c.prompt,
           // Тип чтения Json допускает null, тип записи — нет: разводим явно
           caseData:
             c.caseData === null
               ? Prisma.JsonNull
               : (c.caseData as Prisma.InputJsonValue),
-          description: c.description,
-          anamnesis: c.anamnesis,
-          objections: c.objections,
-          reviewNote: c.reviewNote,
         })),
       });
     }
