@@ -358,6 +358,7 @@ class SessionStore:
             'SELECT p."name" AS patient_name, '
             'COALESCE(pc."anamnesis", p."anamnesis") AS anamnesis, '
             'COALESCE(pc."description", p."description") AS description, '
+            'pc."diagnosticsPreset" AS preset_document, '
             'o."industry" AS industry, '
             's."diagnosticsResult" AS existing_result, '
             'COALESCE(t."scoresDeal", true) AS scores_deal '

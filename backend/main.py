@@ -306,6 +306,22 @@ async def generate_diagnostics_endpoint(request: Request):
         )
         return {"status": "no_anamnesis"}
 
+    # Пресетный документ — основной путь. Он написан руками и вычитан врачом,
+    # генератор рядом с ним не нужен: показывать всё равно будем пресет,
+    # а вызов модели на каждый полный разговор — деньги за текст, который
+    # никто не увидит. Копируем в сессию, а не читаем по кнопке: расшифровка
+    # показывает то, что видел менеджер, и пересборка случая не должна
+    # переписывать задним числом уже состоявшиеся разговоры
+    пресет = (контекст["preset_document"] or "").strip()
+    if пресет:
+        await store.save_diagnostics_result(session_id, пресет)
+        logger.info(
+            "Сессия %s: результат диагностики — ПРЕСЕТ (%d символов), модель не вызывалась",
+            session_id,
+            len(пресет),
+        )
+        return {"status": "preset"}
+
     ключ, описание = diagnostics.выбрать_исход()
     документ = await diagnostics.generate_result(
         контекст["patient_name"] or "",
@@ -319,7 +335,7 @@ async def generate_diagnostics_endpoint(request: Request):
 
     await store.save_diagnostics_result(session_id, документ)
     logger.info(
-        "Сессия %s: результат диагностики готов (%s, %d символов)",
+        "Сессия %s: результат диагностики — ГЕНЕРАЦИЯ (%s, %d символов)",
         session_id,
         ключ,
         len(документ),
@@ -1306,6 +1322,26 @@ async def session_ws(ws: WebSocket, session_id: str):
                 # сгенерирован на старте сессии и обычно уже ждёт; не готов —
                 # клиент получает pending и повторяет запрос сам
                 документ = await store.get_diagnostics_result(session_id)
+
+                # Пресет вытягиваем прямо здесь, если на старте до него
+                # не дошло. Fire-and-forget из sessions/start отваливался
+                # уже дважды — оба раза из-за маршрутов Caddy, и оба раза
+                # это выглядело как вечное «Готовим…» без единой ошибки.
+                # Для пресетного случая ждать нечего: текст лежит в базе
+                if документ is None:
+                    контекст = await store.get_diagnostics_context(session_id)
+                    пресет = ""
+                    if контекст is not None:
+                        пресет = (контекст["preset_document"] or "").strip()
+                    if пресет:
+                        await store.save_diagnostics_result(session_id, пресет)
+                        документ = await store.get_diagnostics_result(session_id)
+                        logger.info(
+                            "Сессия %s: пресет подхвачен по кнопке — "
+                            "на старте генерация до него не дошла",
+                            session_id,
+                        )
+
                 if документ is None:
                     logger.info(
                         "Сессия %s: результат диагностики ещё не готов",
