@@ -8,7 +8,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireHead } from "@/lib/access";
-import { rebuildCases, сборкаЖива, идётСборка } from "@/lib/cases";
+import {
+  rebuildCases,
+  сборкаЖива,
+  идётСборка,
+  целиПересборки,
+} from "@/lib/cases";
+import { затронутыеСлучаи } from "@/lib/caseStaleness";
 import { ГЕНЕРАЦИЯ_ЗАКРЫТА, этоДемо } from "@/lib/demoAccess";
 
 export const runtime = "nodejs";
@@ -202,6 +208,30 @@ export async function PUT(request: NextRequest) {
 
     const organizationId = head.organizationId;
     const saved = await prisma.$transaction(async (tx) => {
+      // Снимок клиники ДО правки и происхождение её случаев.
+      //
+      // Читаем здесь и только здесь: ниже organization.update перепишет город
+      // с отраслью, а deleteMany снесёт прежние услуги и диагнозы — после них
+      // на вопрос «что именно изменилось» ответить будет нечем. Это и есть
+      // причина, по которой сверка живёт в роуте, а не в сборке случаев.
+      const было = organizationId
+        ? await tx.organization.findUnique({
+            where: { id: organizationId },
+            select: {
+              city: true,
+              industry: true,
+              services: { select: { name: true } },
+              diagnoses: { select: { name: true, complaint: true } },
+            },
+          })
+        : null;
+      const прежниеСлучаи = organizationId
+        ? await tx.patientCase.findMany({
+            where: { organizationId },
+            select: { patientId: true, diagnosisName: true, serviceName: true },
+          })
+        : [];
+
       const organization = organizationId
         ? await tx.organization.update({
             where: { id: organizationId },
@@ -249,13 +279,48 @@ export async function PUT(request: NextRequest) {
         })),
       });
 
+      // Кого правка задела. В той же транзакции, что и сама правка: иначе
+      // упавшее между ними сохранение оставило бы новый прайс со старыми
+      // отметками, и пересборка взялась бы не за тех
+      const затронуты = было
+        ? затронутыеСлучаи(было, { city, industry, services, diagnoses }, прежниеСлучаи)
+        : [];
+      if (затронуты.length > 0) {
+        await tx.patientCase.updateMany({
+          where: { organizationId: organization.id, patientId: { in: затронуты } },
+          data: { staleSince: new Date() },
+        });
+      }
+
       return organization.id;
     });
 
-    // Сборка случаев идёт после ответа: сто пациентов — сто вызовов модели,
-    // и держать HTTP-запрос открытым столько времени нельзя, его оборвут
-    // и Caddy, и браузер. Интерфейс вместо этого держит лоадер и опрашивает
-    // casesReady/casesTotal, которые пишет rebuildCases.
+    // Кого пересобираем на самом деле: помеченные правкой плюс те, у кого
+    // случая нет вовсе. Спрашиваем до запуска, потому что от ответа зависит,
+    // запускать ли вообще — правка цены не задевает никого, и платить
+    // за неё нечем
+    const { цели } = await целиПересборки(saved);
+
+    if (цели.length === 0) {
+      // Ничего не пересобираем — и счётчики обязаны сказать это честно.
+      // Оставь их от прошлой сборки, страница показала бы «пересобрали 21»
+      // над правкой, которая не тронула ни одного пациента
+      await prisma.organization.update({
+        where: { id: saved },
+        data: {
+          casesTotal: 0,
+          casesReady: 0,
+          casesRunning: false,
+          casesUpdatedAt: new Date(),
+        },
+      });
+      return NextResponse.json({ ...(await organizationForForm(saved)), affected: 0 });
+    }
+
+    // Сборка случаев идёт после ответа: держать HTTP-запрос открытым на
+    // десятки вызовов модели нельзя, его оборвут и Caddy, и браузер.
+    // Интерфейс вместо этого держит лоадер и опрашивает casesReady/casesTotal,
+    // которые пишет rebuildCases.
     //
     // Отпускаем без await намеренно, но с обработчиком: необработанное
     // отклонение в Node роняет процесс, а сборка случаев не имеет права
@@ -266,14 +331,22 @@ export async function PUT(request: NextRequest) {
     // на живом процессе
     await prisma.organization.update({
       where: { id: saved },
-      data: { casesRunning: true, casesUpdatedAt: new Date() },
+      data: {
+        casesRunning: true,
+        casesTotal: цели.length,
+        casesReady: 0,
+        casesUpdatedAt: new Date(),
+      },
     });
 
     void rebuildCases(saved, head.id).catch((error) =>
       console.error("Сборка случаев не удалась:", error)
     );
 
-    return NextResponse.json(await organizationForForm(saved));
+    return NextResponse.json({
+      ...(await organizationForForm(saved)),
+      affected: цели.length,
+    });
   } catch (error) {
     console.error("Ошибка в PUT /api/organization:", error);
     return NextResponse.json(

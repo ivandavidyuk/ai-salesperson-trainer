@@ -48,8 +48,12 @@ interface Organization {
   /** Демо-клиника: данные видны, но менять их нельзя — сохранение
       запускает платную пересборку, и сервер его отклоняет */
   isDemo: boolean;
+  /** Сколько пациентов пересобирается сейчас — не сколько их всего.
+      Правка, никого не задевшая, оставляет здесь ноль */
   casesTotal: number;
   casesReady: number;
+  /** Ответ PUT: скольких задела эта правка. Ноль — сборка не запускалась */
+  affected?: number;
   // Идёт ли сборка прямо сейчас. Сервер отдаёт не голый флаг, а живость:
   // задачу мог оборвать рестарт, и снять флаг тогда уже некому
   casesRunning: boolean;
@@ -593,7 +597,7 @@ function ClinicForm() {
   const [error, setError] = useState("");
   // Пересборка: null — не идёт, иначе прогресс с сервера
   const [progress, setProgress] = useState<Progress | null>(null);
-  const [outcome, setOutcome] = useState<"done" | "failed" | null>(null);
+  const [outcome, setOutcome] = useState<"done" | "failed" | "none" | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/organization");
@@ -677,6 +681,13 @@ function ClinicForm() {
       setSaved(data);
       setServices(data.services ?? []);
       setDiagnoses(data.diagnoses ?? []);
+      // Правка могла не задеть никого — например, поменяли только цену.
+      // Тогда сборки нет, и окно ожидания над ней было бы обманом:
+      // оно ждёт события, которого не будет
+      if (data.affected === 0) {
+        setOutcome("none");
+        return;
+      }
       setProgress({ ready: data.casesReady, total: data.casesTotal });
     } catch {
       setError("Не удалось сохранить");
@@ -690,6 +701,26 @@ function ClinicForm() {
     await fetch("/api/organization/rebuild", { method: "POST" });
     const data = await load();
     if (data) setProgress({ ready: data.casesReady, total: data.casesTotal });
+  }
+
+  // Пересобрать всех — по просьбе, а не по умолчанию. Нужна ровно для одного
+  // случая: руководитель добавил услугу или диагноз. Новая строка прайса
+  // ничей существующий случай не портит, поэтому выборочная пересборка
+  // и не находит, за что взяться, — а пациентов под неё всё-таки нет
+  async function handleRebuildAll() {
+    setOutcome(null);
+    const res = await fetch("/api/organization/rebuild", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ all: true }),
+    });
+    const ответ = await res.json().catch(() => null);
+    if (!ответ?.started) return;
+    const data = await load();
+    if (data) {
+      setSaved(data);
+      setProgress({ ready: data.casesReady, total: data.casesTotal });
+    }
   }
 
   function stopWaiting() {
@@ -719,7 +750,15 @@ function ClinicForm() {
       <div className="shrink-0 overflow-hidden rounded-2xl border border-line bg-surface-card">
         {outcome === "done" && done && (
           <div className="flex items-center gap-2.5 border-b border-good-surface bg-good-surface px-6 py-[11px] text-[13.5px] font-medium text-brand-hover">
-            Пациенты пересобраны под «{saved.industry}» — все {saved.casesTotal}.
+            Пересобрано пациентов под «{saved.industry}»: {saved.casesTotal}.
+          </div>
+        )}
+        {/* Молчать здесь нельзя: руководитель нажал «Сохранить» и вправе
+            знать, почему ничего не происходит. Без этой строки правка цены
+            выглядит как проглоченное нажатие */}
+        {outcome === "none" && (
+          <div className="flex items-center gap-2.5 border-b border-line bg-surface-bubble px-6 py-[11px] text-[13.5px] font-medium text-ink-muted">
+            Сохранено. Пациентов пересобирать не пришлось — правка их не коснулась.
           </div>
         )}
         {/* Плашка говорит о состоянии, а не о нажатой кнопке: недособранная
@@ -905,7 +944,7 @@ function ClinicForm() {
                   ? "Чтобы сохранить, заполните название, город и специализацию клиники, в каждой услуге — название и цену, в каждом диагнозе — и диагноз, и жалобу."
                   : !changed
                     ? "Изменений нет — пациенты уже собраны по этим данным."
-                    : "После сохранения тренажёр пересоберёт всех пациентов под вашу специализацию. На двадцати пациентах это занимает несколько минут — страницу можно закрыть, сборка не прервётся."}
+                    : "После сохранения тренажёр пересоберёт только затронутых пациентов: смена специализации или города касается всех, удалённая услуга или диагноз — тех, кто на них стоял. Правка цены не пересобирает никого. Страницу можно закрыть, сборка не прервётся."}
               </p>
               <Button
                 type="button"
@@ -917,6 +956,25 @@ function ClinicForm() {
                 Сохранить
               </Button>
             </div>
+          )}
+
+          {/* Единственный вход к полной пересборке. Спрятать его нельзя:
+              добавленная услуга не делает ни один случай неверным, значит
+              выборочная пересборка её не заметит, и пациенты под новую
+              услугу не появятся сами никогда */}
+          {!demo && saved && !progress && (
+            <p className="mt-3 text-[12px] leading-normal text-ink-muted">
+              Добавили услугу или диагноз и хотите, чтобы пациенты приходили
+              и с ними?{" "}
+              <button
+                type="button"
+                onClick={handleRebuildAll}
+                className="font-semibold text-brand underline"
+              >
+                Пересобрать всех заново
+              </button>
+              . Это займёт несколько минут и заменит все истории на новые.
+            </p>
           )}
         </div>
       </div>

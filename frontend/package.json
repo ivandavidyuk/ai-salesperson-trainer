@@ -17,6 +17,7 @@
     "seed:demo": "ts-node scripts/seed-demo.ts",
     "seed:presets": "ts-node scripts/seed-presets.ts",
     "check:prompts": "ts-node scripts/check-prompts.ts",
+    "check:staleness": "ts-node scripts/check-staleness.ts",
     "check:avatars": "ts-node scripts/check-avatars.ts",
     "dump:personalities": "ts-node scripts/dump-personalities.ts",
     "dump:presets": "ts-node scripts/dump-presets.ts",
