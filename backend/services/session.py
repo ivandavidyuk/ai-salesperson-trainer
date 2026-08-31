@@ -346,7 +346,7 @@ class SessionStore:
     # --- Результат диагностики --------------------------------------------
 
     async def get_diagnostics_context(self, session_id: str) -> Optional[dict]:
-        """Всё, что нужно генератору результата: имя, анамнез, отрасль —
+        """Всё, что нужно генератору результата: имя, анамнез, возраст, отрасль —
         и уже готовый результат, если генерация уже была (идемпотентность).
 
         Анамнез — тем же COALESCE, что и боевой промпт: случай клиники
@@ -357,6 +357,7 @@ class SessionStore:
         return await self._pool.fetchrow(
             'SELECT p."name" AS patient_name, '
             'COALESCE(pc."anamnesis", p."anamnesis") AS anamnesis, '
+            'COALESCE(pc."description", p."description") AS description, '
             'o."industry" AS industry, '
             's."diagnosticsResult" AS existing_result, '
             'COALESCE(t."scoresDeal", true) AS scores_deal '
