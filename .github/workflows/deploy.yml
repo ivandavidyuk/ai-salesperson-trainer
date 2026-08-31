@@ -53,20 +53,50 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
+      - uses: actions/checkout@v4
+
+      # То же, что и на RU, но лечит другую болезнь. На DE compose никогда
+      # не приезжал сам: ~/ai-trainer не репозиторий, и правки надо было
+      # копировать руками. DEPLOY.md держал это отдельной врезкой-ловушкой —
+      # "изменение уедет в git и молча не подействует". Теперь копирует раннер.
+      #
+      # Сверено 31.08: содержимое файла на сервере и в репозитории совпадает
+      # построчно, отличались только переводы строк (на сервере остался CRLF
+      # с чьей-то Windows-машины). После первой выкатки станет LF.
+      - name: Положить compose на сервер
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.DE_HOST }}
+          username: root
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: deploy/docker-compose.de.yml
+          target: /root/ai-trainer
+          strip_components: 1
+
       - name: Pull & restart backend
         uses: appleboy/ssh-action@v1
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GIT_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.DE_HOST }}
           username: root
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
-          envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
+          envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN,GIT_SHA
           script: |
             set -euo pipefail
             cd ~/ai-trainer
+            # Имя на сервере оставляем docker-compose.yml, а не .de.yml:
+            # тогда команды разбора работают без -f, как их и описывает
+            # DEPLOY.md. scp положить файл сразу под другим именем не умеет.
+            #
+            # Владелец: scp разворачивает архив, сохраняя uid раннера (1001,
+            # такого пользователя на сервере нет) — возвращаем root.
+            chown root:root docker-compose.de.yml
+            mv -f docker-compose.de.yml docker-compose.yml
+            echo "$GIT_SHA" > .deployed-sha
             # Авторизация в Docker Hub: анонимные загрузки ограничены и при
             # 429 pull молча прерывается, оставляя работать старый образ.
             echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
