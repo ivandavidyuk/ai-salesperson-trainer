@@ -40,10 +40,25 @@ flowchart LR
 1. **build** — сборка Docker-образов `ai-trainer-frontend` и `ai-trainer-backend`
    на раннерах GitHub и push в Docker Hub (решает проблему медленного npm на VPS).
 2. **deploy-de** — SSH на DE, `~/ai-trainer`.
-3. **deploy-ru** — SSH на RU, `~/ai-salesperson-trainer` (плюс `git pull`).
+3. **deploy-ru** — копирует конфиги стека с раннера, затем SSH на RU,
+   `~/ai-salesperson-trainer`.
 
 Оба деплой-шага делают одно и то же: логинятся в Docker Hub, тянут **только
 образ приложения** и проверяют, что контейнер поднялся именно на свежем образе.
+
+> **Сервер в GitHub не ходит.** Раньше deploy-ru начинался с `git pull` на RU.
+> 31.08.2026 это сломалось: GitHub пачками по несколько минут отвечает 401
+> (`www-authenticate: Basic`) на анонимные git-запросы с российского адреса,
+> и деплой падал на первой же строке — первое падение за 60 прогонов.
+> Теперь два нужных серверу файла (`docker-compose.prod.yml` и
+> `deploy/Caddyfile`) кладёт раннер по scp: он в GitHub авторизован и ходит
+> не из России. Код приложения этого никогда не касалось — он приезжает
+> образом с Docker Hub.
+>
+> Следствие: `~/ai-salesperson-trainer` на RU больше **не обновляется**.
+> Каталог остаётся ради файлов окружения, но как копия репозитория протухает.
+> Версия, выкаченная на сервер, — в `~/ai-salesperson-trainer/.deployed-sha`,
+> не в `git log`. Не делайте там `git pull` руками, решив, что деплой сломан.
 
 > Почему так. Раньше серверы ходили в Docker Hub анонимно и тянули все образы
 > сразу. Анонимные загрузки лимитированы: после нескольких выкаток подряд
@@ -89,10 +104,10 @@ SSH-аутентификация — **по ключу** (`appleboy/ssh-action`,
 └── backend.env          # секреты backend (см. backend/.env.production.example)
 ```
 
-> **Правки `deploy/docker-compose.de.yml` на DE сами не приезжают.** В отличие
-> от RU, где деплой делает `git pull`, здесь `~/ai-trainer` — не репозиторий, и
-> workflow только дёргает `docker compose pull && up -d`. Изменил compose —
-> скопируй руками, иначе изменение уедет в git и молча не подействует:
+> **Правки `deploy/docker-compose.de.yml` на DE сами не приезжают.**
+> `~/ai-trainer` — не репозиторий, и workflow только дёргает
+> `docker compose pull && up -d`. Изменил compose — скопируй руками, иначе
+> изменение уедет в git и молча не подействует:
 >
 > ```bash
 > scp deploy/docker-compose.de.yml de:~/ai-trainer/docker-compose.yml
@@ -115,7 +130,9 @@ cd ~/ai-trainer && docker compose pull && docker compose up -d
 
 ### RU-сервер — frontend, БД, Caddy
 
-Репозиторий в `~/ai-salesperson-trainer`, стек — [docker-compose.prod.yml](docker-compose.prod.yml).
+Каталог `~/ai-salesperson-trainer`, стек — [docker-compose.prod.yml](docker-compose.prod.yml).
+Это копия репозитория, но она больше не обновляется (см. врезку выше):
+деплой кладёт в неё только `docker-compose.prod.yml` и `deploy/Caddyfile`.
 
 Файлы окружения:
 

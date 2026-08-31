@@ -99,8 +99,8 @@ jobs:
       # с Docker Hub, а из репозитория серверу нужны ровно эти два файла —
       # описание стека (нужно ДО запуска образа) и маршруты Caddy
       # (монтируются с диска каталогом ./deploy).
-      # Шаг добавлен раньше, чем убран git pull, чтобы сверить: файлы,
-      # положенные раннером, должны совпасть с прежними до байта.
+      # Сверено 31.08: положенные раннером файлы совпали с прежними до байта
+      # (sha256 и размер), Caddy на reload ответил "config is unchanged".
       - name: Положить конфиги стека на сервер
         uses: appleboy/scp-action@v1
         with:
@@ -115,16 +115,27 @@ jobs:
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GIT_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.RU_HOST }}
           username: root
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script_stop: true
-          envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
+          envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN,GIT_SHA
           script: |
             set -euo pipefail
             cd ~/ai-salesperson-trainer
-            git pull
+            # git pull отсюда убран: сервер больше не ходит в GitHub. Конфиги
+            # кладёт шагом выше раннер, код приезжает образом с Docker Hub.
+            # Каталог остаётся ради файлов окружения (.env, frontend/.env),
+            # но как копия репозитория он протухает — версию сервера смотреть
+            # в .deployed-sha, а не в git log.
+            #
+            # scp разворачивает архив, сохраняя владельца с раннера (uid 1001,
+            # такого пользователя на сервере нет). Чтению это не мешает,
+            # но владельца возвращаем, чтобы каталог не зарастал чужими uid.
+            chown root:root docker-compose.prod.yml deploy/Caddyfile
+            echo "$GIT_SHA" > .deployed-sha
             # Авторизация в Docker Hub: анонимные загрузки ограничены и при
             # 429 pull молча прерывается, оставляя работать старый образ.
             echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
