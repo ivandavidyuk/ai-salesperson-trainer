@@ -141,7 +141,55 @@ async function generateOne(
 }
 
 /**
- * Пересобирает случаи всех пациентов под клинику.
+ * Кого пересобирать и какие диагнозы заняты теми, кто остаётся.
+ *
+ * Цель — случай с отметкой устаревания (её поставила правка формы) либо
+ * пациент, у которого случая нет вовсе. Прежний критерий — свежесть
+ * по времени (generatedAt против formSavedAt) — отвечал на другой вопрос:
+ * «собран ли случай после последнего сохранения». По нему правка одной цены
+ * делала устаревшими всех, потому что forma сохранялась целиком.
+ *
+ * Занятые диагнозы возвращаются вместе с целями и не случайно. Это счётчик
+ * равномерности, а не запрет: список диагнозов закрыт и короче списка
+ * пациентов (шесть на двадцать одного), поэтому повтор — норма, а выбор
+ * идёт на диагноз, доставшийся другим реже всех (clinical_picture.choose).
+ *
+ * Без него выборочная пересборка троих считала бы, что клиника пуста,
+ * и выдала бы им три самых вероятных диагноза — те же, что уже у половины
+ * нетронутых. Раньше список начинался пустым всегда, и после обрыва
+ * равномерность держалась на удаче.
+ */
+export async function целиПересборки(organizationId: string): Promise<{
+  цели: { id: string; name: string }[];
+  занятые: string[];
+}> {
+  const all = await prisma.patient.findMany({
+    where: { name: { in: PROFILES.map((p) => p.name) } },
+    select: {
+      id: true,
+      name: true,
+      cases: {
+        where: { organizationId },
+        select: { staleSince: true, diagnosisName: true },
+      },
+    },
+  });
+
+  const цели: { id: string; name: string }[] = [];
+  const занятые: string[] = [];
+  for (const пациент of all) {
+    const случай = пациент.cases[0];
+    if (!случай || случай.staleSince !== null) {
+      цели.push({ id: пациент.id, name: пациент.name });
+    } else if (случай.diagnosisName) {
+      занятые.push(случай.diagnosisName);
+    }
+  }
+  return { цели, занятые };
+}
+
+/**
+ * Пересобирает случаи затронутых пациентов.
  *
  * Не бросает: сбой на одном пациенте не должен ронять остальных, а сбой
  * всей сборки не должен ронять сохранение формы, которое уже произошло.
@@ -150,15 +198,16 @@ async function generateOne(
 // Пациентов собираем по одному, а не пачкой: сто параллельных запросов
 // упрутся в лимит провайдера, и половина сборки потеряется. Последовательно
 // дольше, но руководитель ждёт с лоадером один раз, а не каждый разговор.
-export async function rebuildCases(
-  organizationId: string,
-  headId: string,
-  { resume = false }: { resume?: boolean } = {}
-): Promise<void> {
-  // Все, у кого написана личность, — им и собираем случай. Брать список
-  // из тех, у кого случай уже есть, нельзя: ровно те, ради кого запускают
-  // сборку, в него и не попадут
-  const names = PROFILES.map((p) => p.name);
+export async function rebuildCases(organizationId: string, headId: string): Promise<void> {
+  // Флаг сборки поднимает вызывающий роут — до нас, чтобы страница не успела
+  // спросить статус в промежутке и решить, что сборка кончилась. Значит любой
+  // выход отсюда обязан его снять, включая ранние: иначе руководитель смотрит
+  // на лоадер до протухания пульса — три минуты над сборкой, которой не было
+  const снятьФлаг = () =>
+    prisma.organization.update({
+      where: { id: organizationId },
+      data: { casesRunning: false, casesUpdatedAt: new Date() },
+    });
 
   // Токен подписываем от имени руководителя, который сохранил форму: backend
   // проверяет подпись, и анонимный вызов туда пройти не должен
@@ -166,7 +215,10 @@ export async function rebuildCases(
     where: { id: headId },
     select: { id: true, email: true, firstName: true, lastName: true },
   });
-  if (!head) return;
+  if (!head) {
+    await снятьФлаг();
+    return;
+  }
 
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
@@ -174,7 +226,6 @@ export async function rebuildCases(
       name: true,
       city: true,
       industry: true,
-      formSavedAt: true,
       services: {
         orderBy: { position: "asc" },
         select: { name: true, price: true, description: true },
@@ -185,38 +236,30 @@ export async function rebuildCases(
       },
     },
   });
-  if (!organization) return;
+  if (!organization) {
+    await снятьФлаг();
+    return;
+  }
 
-  // Только те, кто есть в репозитории. Пациент, оставшийся в базе от прежних
-  // версий, личности не имеет — собирать ему случай не из чего
-  const all = await prisma.patient.findMany({
-    where: { name: { in: names } },
-    select: {
-      id: true,
-      name: true,
-      cases: {
-        where: { organizationId },
-        select: { generatedAt: true },
-      },
-    },
-  });
+  // Только затронутые. Пациент, оставшийся в базе от прежних версий,
+  // личности не имеет — собирать ему случай не из чего, и в цели он
+  // не попадёт: список идёт от PROFILES
+  const { цели, занятые } = await целиПересборки(organizationId);
+  // Цели могли исчезнуть между проверкой в роуте и стартом сборки: успела
+  // пройти чужая пересборка, сняв отметки. Работы нет — и флага быть не должно
+  if (цели.length === 0) {
+    await снятьФлаг();
+    return;
+  }
 
-  // «Собрать заново» после обрыва продолжает с места, а не идёт по кругу:
-  // случай, собранный позже последнего сохранения формы, уже отвечает текущим
-  // данным клиники. На сотне пациентов это вдвое меньше вызовов модели,
-  // а отказы провайдера — обычное дело.
-  const savedAt = organization.formSavedAt;
-  const isFresh = (patient: (typeof all)[number]) =>
-    Boolean(savedAt && patient.cases[0] && patient.cases[0].generatedAt >= savedAt);
-
-  const patients = resume ? all.filter((p) => !isFresh(p)) : all;
-  const alreadyDone = resume ? all.length - patients.length : 0;
-
+  // casesTotal — сколько пересобираем сейчас, а не сколько пациентов всего.
+  // Иначе «Готово 0 из 21» при трёх задачах: счётчик замрёт на трёх,
+  // и живая сборка будет выглядеть оборвавшейся
   await prisma.organization.update({
     where: { id: organizationId },
     data: {
-      casesTotal: all.length,
-      casesReady: alreadyDone,
+      casesTotal: цели.length,
+      casesReady: 0,
       casesUpdatedAt: new Date(),
     },
   });
@@ -235,10 +278,9 @@ export async function rebuildCases(
     lastName: head.lastName,
   });
 
-  let ready = alreadyDone;
   const остановитьПульс = запуститьПульс(organizationId);
   try {
-    ready = await generateAll(patients, organizationId, clinic, token, ready);
+    await generateAll(цели, organizationId, clinic, token, занятые);
   } finally {
     // Гасим ДО снятия флага: живой таймер после этого двигал бы пульс
     // у сборки, которой уже нет
@@ -246,10 +288,7 @@ export async function rebuildCases(
     // Флаг снимаем в любом исходе. Оставить его поднятым после падения —
     // это вечный лоадер у руководителя: страница будет считать, что сборка
     // всё ещё идёт, и никогда не покажет, что часть пациентов не собралась
-    await prisma.organization.update({
-      where: { id: organizationId },
-      data: { casesRunning: false, casesUpdatedAt: new Date() },
-    });
+    await снятьФлаг();
   }
 }
 
@@ -259,22 +298,24 @@ async function generateAll(
   organizationId: string,
   clinic: ClinicPayload,
   token: string,
-  alreadyDone: number
+  занятые: string[]
 ): Promise<number> {
   const byName = new Map(PROFILES.map((p) => [p.name, p]));
   // Занятые болезни копим по ходу сборки: сборка идёт последовательно,
   // и каждый следующий пациент знает, что уже выпало предыдущим. Это мягкое
   // предпочтение, а не запрет — правдоподобие важнее разнообразия.
   //
-  // При «собрать заново» после обрыва список начинается пустым: диагнозы
-  // готовых случаев в базе не лежат. Разнообразие от этого чуть слабее,
-  // но ни один случай не становится неверным.
-  const usedDiagnoses: string[] = [];
+  // Список начинается не с пустого: в нём диагнозы тех, кого пересборка
+  // не трогает, со всеми повторами — по ним backend считает, какой диагноз
+  // выдан реже всех (clinical_picture.choose). Пустой список означал бы
+  // «клиника пуста», и трое пересобранных получили бы самое вероятное,
+  // то есть то же, что уже стоит у половины нетронутых.
+  const usedDiagnoses: string[] = [...занятые];
   // Кого критик забраковал, а исправить не вышло. Пометка лежит в базе
   // полем reviewNote; здесь — чтобы итог сборки был виден сразу, не дожидаясь
   // запроса. Случай при этом сохраняется: пациент без случая хуже помеченного
   const помеченные: string[] = [];
-  let ready = alreadyDone;
+  let ready = 0;
 
   /** Одна попытка на пациента. true — случай сохранён. */
   const собрать = async (patient: { id: string; name: string }): Promise<boolean> => {
@@ -311,6 +352,11 @@ async function generateAll(
           anamnesis: generated.anamnesis,
           objections: generated.objections,
           reviewNote: generated.reviewNote || null,
+          // Происхождение случая: по нему следующая правка прайса поймёт,
+          // кого она задела. Генератор возвращал эти два поля и раньше —
+          // до сих пор их просто выбрасывали
+          diagnosisName: generated.diagnosis || null,
+          serviceName: generated.service || null,
         },
         update: {
           prompt,
@@ -328,6 +374,12 @@ async function generateAll(
           // поломки: менеджер документу верит, а пациент говорит о другом.
           // Пусто — включится генератор и напишет по новому случаю
           diagnosticsPreset: null,
+          diagnosisName: generated.diagnosis || null,
+          serviceName: generated.service || null,
+          // Отметку снимает только удачная сборка. Упавший пациент остаётся
+          // помеченным и попадёт в цели следующего запуска — иначе «Собрать
+          // заново» после обрыва не нашло бы, что доделывать
+          staleSince: null,
           generatedAt: new Date(),
         },
       });
