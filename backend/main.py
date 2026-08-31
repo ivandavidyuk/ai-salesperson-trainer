@@ -312,6 +312,7 @@ async def generate_diagnostics_endpoint(request: Request):
         анамнез,
         контекст["industry"] or "",
         описание,
+        контекст["description"] or "",
     )
     if документ is None:
         raise HTTPException(status_code=502, detail="Не удалось сгенерировать")
