@@ -25,6 +25,25 @@ export const dynamic = "force-dynamic";
 const MAX_SERVICES = 40;
 const MAX_DIAGNOSES = 40;
 
+/**
+ * Имя, встретившееся дважды, — или null.
+ *
+ * Сверка «кого задела правка» сворачивает списки в Map по имени
+ * (lib/caseStaleness.ts), и при одинаковых именах выживает последняя строка:
+ * правка первой прошла бы незамеченной, а добавление второй пересобрало бы
+ * всех носителей диагноза. Дешевле не пустить повтор в базу, чем разбирать
+ * потом, какая из двух строк чья.
+ */
+function повторИмени(имена: string[]): string | null {
+  const виденные = new Set<string>();
+  for (const имя of имена) {
+    const ключ = имя.trim().toLowerCase();
+    if (виденные.has(ключ)) return имя;
+    виденные.add(ключ);
+  }
+  return null;
+}
+
 interface ServiceBody {
   name?: string;
   price?: string;
@@ -175,6 +194,14 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const повторУслуги = повторИмени(services.map((у) => у.name));
+    if (повторУслуги) {
+      return NextResponse.json(
+        { error: `Услуга «${повторУслуги}» есть в списке дважды — оставьте одну` },
+        { status: 400 }
+      );
+    }
+
     const diagnoses = (body.diagnoses ?? [])
       .map((d) => ({
         name: d.name?.trim() ?? "",
@@ -206,6 +233,14 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const повторДиагноза = повторИмени(diagnoses.map((д) => д.name));
+    if (повторДиагноза) {
+      return NextResponse.json(
+        { error: `Диагноз «${повторДиагноза}» есть в списке дважды — оставьте один` },
+        { status: 400 }
+      );
+    }
+
     const organizationId = head.organizationId;
     const saved = await prisma.$transaction(async (tx) => {
       // Снимок клиники ДО правки и происхождение её случаев.
@@ -220,8 +255,14 @@ export async function PUT(request: NextRequest) {
             select: {
               city: true,
               industry: true,
-              services: { select: { name: true } },
-              diagnoses: { select: { name: true, complaint: true } },
+              services: {
+                orderBy: { position: "asc" },
+                select: { name: true, description: true },
+              },
+              diagnoses: {
+                orderBy: { position: "asc" },
+                select: { name: true, complaint: true },
+              },
             },
           })
         : null;

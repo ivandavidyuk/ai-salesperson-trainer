@@ -708,18 +708,34 @@ function ClinicForm() {
   // ничей существующий случай не портит, поэтому выборочная пересборка
   // и не находит, за что взяться, — а пациентов под неё всё-таки нет
   async function handleRebuildAll() {
+    setError("");
     setOutcome(null);
-    const res = await fetch("/api/organization/rebuild", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ all: true }),
-    });
-    const ответ = await res.json().catch(() => null);
-    if (!ответ?.started) return;
-    const data = await load();
-    if (data) {
-      setSaved(data);
-      setProgress({ ready: data.casesReady, total: data.casesTotal });
+    setBusy(true);
+    try {
+      const res = await fetch("/api/organization/rebuild", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
+      const ответ = await res.json().catch(() => null);
+      // Молчать нельзя ни в одной ветке: руководитель нажал кнопку и вправе
+      // видеть, что произошло. Отказ демо, чужая клиника, упавший сервер —
+      // всё это возвращается сюда, и тихий выход выглядел бы поломкой кнопки
+      if (!res.ok) {
+        setError(ответ?.error ?? "Не удалось запустить пересборку");
+        return;
+      }
+      const data = await load();
+      if (data) setSaved(data);
+      // alreadyRunning — сборку запустили из соседней вкладки. Показываем
+      // то же окно ожидания: сборка идёт, ждать её осмысленно
+      if (ответ?.started || ответ?.alreadyRunning) {
+        if (data) setProgress({ ready: data.casesReady, total: data.casesTotal });
+        return;
+      }
+      setOutcome("none");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -966,14 +982,27 @@ function ClinicForm() {
             <p className="mt-3 text-[12px] leading-normal text-ink-muted">
               Добавили услугу или диагноз и хотите, чтобы пациенты приходили
               и с ними?{" "}
-              <button
-                type="button"
-                onClick={handleRebuildAll}
-                className="font-semibold text-brand underline"
-              >
-                Пересобрать всех заново
-              </button>
-              . Это займёт несколько минут и заменит все истории на новые.
+              {/* Пересборка идёт по СОХРАНЁННОМУ прайсу. Пока правки лежат
+                  в форме, кнопка собрала бы пациентов по старому списку —
+                  за деньги и мимо цели, ради которой её нажимают */}
+              {changed ? (
+                <span className="font-semibold">
+                  Сначала сохраните — пересборка идёт по сохранённому прайсу.
+                </span>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleRebuildAll}
+                    disabled={busy}
+                    className="font-semibold text-brand underline disabled:opacity-50"
+                  >
+                    Пересобрать всех заново
+                  </button>
+                  . Займёт несколько минут и заменит истории всех пациентов
+                  на новые — включая тех, чьи случаи уже вычитаны.
+                </>
+              )}
             </p>
           )}
         </div>
