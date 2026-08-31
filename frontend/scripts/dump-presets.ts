@@ -35,6 +35,10 @@ const выгрузка = ПРЕСЕТЫ.flatMap((пресет) =>
       picture: случай.picture,
       service: случай.service,
       case: { anamnesis: случай.anamnesis },
+      // Документ диагностики — для отдельного критика (review_diagnostics.py),
+      // который читает пару «анамнез + документ». Пусто у случаев, где
+      // документа ещё нет
+      diagnostics: случай.diagnostics ?? null,
     };
   }),
 );
