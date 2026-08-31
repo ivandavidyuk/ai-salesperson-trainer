@@ -635,12 +635,24 @@ function SessionScreen() {
               </div>
             )}
 
+            {/* Высота ограничена, длинный анамнез прокручивается ВНУТРИ
+                карточки. Без потолка карточка росла вниз вместе с текстом
+                и уносила за экран кнопку «Начать тренировку»: у самого
+                длинного анамнеза 2242 знака при медиане 929, и на нём
+                кнопки просто не видно. Потолок в долях экрана, а не в
+                пикселях, — единственное место, где доля уместна: размер
+                диктует экран, а не содержимое. Короткий анамнез в потолок
+                не упирается и карточку не растягивает.
+
+                50vh, а не больше: замерено на 1440×800, 1440×900 и 1920×1080 —
+                при 56vh на самом низком экране кнопка снова уезжает, при 42vh
+                прокручивается даже средний анамнез (медиана 929 знаков) */}
             {patient?.anamnesis && (
-              <div className="mt-[22px] w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-4">
-                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
+              <div className="mt-[22px] flex max-h-[50vh] w-full max-w-[440px] flex-col rounded-xl border border-line bg-surface px-[18px] py-4">
+                <div className="mb-1.5 shrink-0 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
                   Анамнез
                 </div>
-                <div className="text-sm leading-normal text-ink-label">
+                <div className="min-h-0 overflow-y-auto text-sm leading-normal text-ink-label">
                   {patient.anamnesis}
                 </div>
               </div>
