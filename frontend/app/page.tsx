@@ -5,7 +5,7 @@
 // Все данные приходят одним запросом из GET /api/home.
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import AllConversationsModal from "@/app/components/AllConversationsModal";
 import AppShell from "@/app/components/AppShell";
 import ConversationRow from "@/app/components/ConversationRow";
@@ -16,6 +16,53 @@ import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import type { HomeData } from "@/lib/home";
 import { formatDuration, greeting } from "@/lib/format";
 import { formatDealsRate } from "@/lib/score";
+
+/**
+ * Сколько строк помещается в блок «Прошлые разговоры» без прокрутки.
+ *
+ * Считать нельзя, можно только померить: блок тянется на всю высоту колонки,
+ * и число строк зависит от экрана. На QHD помещается восемь, на ноутбуке
+ * РОПа — пять, и любое зашитое число будет неверным у половины людей.
+ *
+ * Меряем высоту первой строки, а не берём константу: вырастет шрифт или
+ * отступы — расчёт останется верным сам собой.
+ *
+ * Имя латиницей вопреки соглашению о русских именах: правило
+ * react-hooks/rules-of-hooks считает хуком только `use` + латинская
+ * заглавная, и с кириллицей линт падает.
+ *
+ * `useLayoutEffect` вместо `useEffect` намеренно: пересчёт до отрисовки,
+ * иначе виден кадр с лишними строками. Сервер отдаёт запас (см.
+ * `НЕДАВНИХ_РАЗГОВОРОВ` в lib/home.ts), лишние просто не рисуются.
+ */
+function useRowsThatFit(поумолчанию: number, строкВсего: number) {
+  const блок = useRef<HTMLDivElement>(null);
+  const [влезает, setВлезает] = useState(поумолчанию);
+
+  // Зависимость — число загруженных строк, а не пустой массив: сам блок
+  // появляется в разметке только вместе с данными, и эффект с [] отработал
+  // бы на пустой странице, когда ref ещё null, и больше не повторился
+  useLayoutEffect(() => {
+    const узел = блок.current;
+    if (!узел) return;
+
+    const пересчитать = () => {
+      const строка = узел.firstElementChild as HTMLElement | null;
+      const высотаСтроки = строка?.offsetHeight ?? 0;
+      // Ноль бывает, пока строки не отрисованы или в блоке стоит заглушка
+      // «первый разговор впереди» — тогда считать нечего
+      if (!высотаСтроки) return;
+      setВлезает(Math.max(1, Math.floor(узел.clientHeight / высотаСтроки)));
+    };
+
+    пересчитать();
+    const наблюдатель = new ResizeObserver(пересчитать);
+    наблюдатель.observe(узел);
+    return () => наблюдатель.disconnect();
+  }, [строкВсего]);
+
+  return { блок, влезает };
+}
 
 // Карточка одного показателя статистики.
 //
@@ -114,6 +161,13 @@ export default function HomePage() {
       }
     },
     []
+  );
+
+  // Три строки — консервативное начало на первый кадр: столько помещается
+  // даже на низком окне, и расширяется сразу после замера
+  const { блок: списокРазговоров, влезает } = useRowsThatFit(
+    3,
+    data?.recent.length ?? 0
   );
 
   const hasConversations = (data?.stats.total ?? 0) > 0;
@@ -228,7 +282,13 @@ export default function HomePage() {
                 )}
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto rounded-[14px] border border-line bg-surface-card">
+              {/* overflow-hidden, а не auto: показываем ровно столько строк,
+                  сколько влезает, поэтому прокрутке взяться неоткуда.
+                  Остальное — за кнопкой «Все» */}
+              <div
+                ref={списокРазговоров}
+                className="min-h-0 flex-1 overflow-hidden rounded-[14px] border border-line bg-surface-card"
+              >
                 {data.recent.length === 0 ? (
                   <div className="flex h-full min-h-[180px] flex-col items-center justify-center px-6 text-center">
                     <div className="text-2xl">🎧</div>
@@ -241,7 +301,7 @@ export default function HomePage() {
                     </p>
                   </div>
                 ) : (
-                  data.recent.map((conversation) => (
+                  data.recent.slice(0, влезает).map((conversation) => (
                     <ConversationRow
                       key={conversation.id}
                       conversation={{
