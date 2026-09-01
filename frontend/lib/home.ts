@@ -89,6 +89,20 @@ export interface HomeData {
 // разговора, а он рисуется на клиенте — сюда Prisma тянуть нельзя
 const PROGRESS_METRICS = STAGE_METRICS;
 
+/**
+ * Сколько разговоров показать на главной в блоке «Прошлые разговоры».
+ *
+ * Блок тянется на всю высоту колонки (`flex-1` в page.tsx), поэтому при трёх
+ * строках под ними оставалась пустота в половину блока — у новичка это
+ * выглядело как недоделанный экран.
+ *
+ * Восемь — сколько строк по 45 пикселей помещается в блок на десктопе,
+ * под который рисовался макет. На экране ниже лишние уедут под прокрутку:
+ * она у блока уже есть (`overflow-y-auto`), и прокрутка честнее пустоты.
+ * Полный список открывается кнопкой «Все» — там лимита нет вовсе.
+ */
+const НЕДАВНИХ_РАЗГОВОРОВ = 8;
+
 // Завершённые разговоры пользователя, свежие сверху.
 // limit не задан — вернём все (для модалки «Все разговоры»).
 export async function listConversations(
@@ -213,7 +227,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
       where: { session: completed },
       _avg: { overallScore: true },
     }),
-    listConversations(userId, 3),
+    listConversations(userId, НЕДАВНИХ_РАЗГОВОРОВ),
     averageScores(userId, weekStart, now),
     averageScores(userId, prevWeekStart, weekStart),
     prisma.sessionReview.findFirst({
