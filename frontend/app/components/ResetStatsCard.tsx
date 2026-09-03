@@ -74,10 +74,10 @@ export function ResetStatsCard() {
           <div>
             {/* Именно «менеджера», в единственном числе: «Статистика отдела»
                 читалась так, будто кнопка обнуляет весь отдел разом */}
-            <div className="text-[15.5px] font-semibold text-ink">
+            <div className="text-[17px] font-semibold text-ink">
               Сброс статистики менеджера
             </div>
-            <p className="mt-1 max-w-[420px] text-[13px] leading-normal text-ink-muted">
+            <p className="mt-1 max-w-[420px] text-[14.5px] leading-normal text-ink-muted">
               Вы можете очистить статистику менеджеров вашего отдела. Это может
               быть необходимо в случае замены менеджера
             </p>
@@ -88,7 +88,7 @@ export function ResetStatsCard() {
               setPicked(null);
               setOpen(true);
             }}
-            className="shrink-0 whitespace-nowrap rounded-[10px] border border-danger-border bg-surface-card px-[18px] py-2.5 text-[13.5px] font-semibold text-danger-text transition-colors hover:bg-danger-wash"
+            className="shrink-0 whitespace-nowrap rounded-[10px] border border-danger-border bg-surface-card px-[18px] py-2.5 text-[15px] font-semibold text-danger-text transition-colors hover:bg-danger-wash"
           >
             Очистить статистику
           </button>
@@ -99,7 +99,7 @@ export function ResetStatsCard() {
         {обнулённые.length > 0 && (
           <div className="mt-4 flex flex-col gap-2 border-t border-line-soft pt-3.5">
             {обнулённые.map((m) => (
-              <div key={m.id} className="flex items-center gap-3 text-[13px]">
+              <div key={m.id} className="flex items-center gap-3 text-[14.5px]">
                 <span className="min-w-0 flex-1 truncate text-ink-body">
                   {m.name} — статистика считается с {дата(m.statsResetAt!)}
                 </span>
@@ -123,10 +123,10 @@ export function ResetStatsCard() {
             {!выбранный ? (
               <>
                 <div className="shrink-0 px-[26px] pb-4 pt-6">
-                  <div className="text-[18px] font-semibold text-ink">
+                  <div className="text-[19.5px] font-semibold text-ink">
                     Очистить статистику
                   </div>
-                  <p className="mt-1 text-[13px] leading-normal text-ink-muted">
+                  <p className="mt-1 text-[14.5px] leading-normal text-ink-muted">
                     Выберите менеджера, которому хотите очистить статистику
                     разговоров
                   </p>
@@ -143,14 +143,14 @@ export function ResetStatsCard() {
                           : "border-line-soft hover:border-line-accent"
                       }`}
                     >
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[14.5px] font-semibold text-brand">
                         {initials(m.name)}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[14px] font-semibold text-ink">
+                        <span className="block truncate text-[15.5px] font-semibold text-ink">
                           {m.name}
                         </span>
-                        <span className="block truncate text-[12.5px] text-ink-muted">
+                        <span className="block truncate text-[14px] text-ink-muted">
                           {m.statsResetAt
                             ? `Очищена ${дата(m.statsResetAt)}`
                             : `${m.jobTitle} · ${
@@ -165,7 +165,7 @@ export function ResetStatsCard() {
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
-                    className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-2.5 text-[14px] font-semibold text-ink transition-colors hover:bg-surface-bubble"
+                    className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-2.5 text-[15.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble"
                   >
                     Закрыть
                   </button>
@@ -174,15 +174,15 @@ export function ResetStatsCard() {
             ) : (
               <>
                 <div className="shrink-0 px-[26px] pb-4 pt-6">
-                  <div className="text-[18px] font-semibold text-ink">
+                  <div className="text-[19.5px] font-semibold text-ink">
                     Очистить статистику {выбранный.name}?
                   </div>
-                  <p className="mt-2 text-[13.5px] leading-normal text-ink-body">
+                  <p className="mt-2 text-[15px] leading-normal text-ink-body">
                     Из статистики пропадёт {разговоров(выбранный.total)}. Сами
                     разговоры, расшифровки и разборы останутся на месте —
                     считаться будет только то, что после очистки.
                   </p>
-                  <p className="mt-2 text-[13px] leading-normal text-ink-muted">
+                  <p className="mt-2 text-[14.5px] leading-normal text-ink-muted">
                     Передумаете — вернёте одним нажатием, ничего не потеряется.
                   </p>
                 </div>
@@ -190,7 +190,7 @@ export function ResetStatsCard() {
                   <button
                     type="button"
                     onClick={() => setPicked(null)}
-                    className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-2.5 text-[14px] font-semibold text-ink transition-colors hover:bg-surface-bubble"
+                    className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-2.5 text-[15.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble"
                   >
                     Назад
                   </button>
@@ -198,7 +198,7 @@ export function ResetStatsCard() {
                     type="button"
                     loading={busy}
                     onClick={() => обнулить(выбранный.id, false)}
-                    className="px-5 py-2.5 text-[14px]"
+                    className="px-5 py-2.5 text-[15.5px]"
                   >
                     Очистить
                   </Button>

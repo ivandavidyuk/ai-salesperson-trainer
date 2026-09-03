@@ -174,7 +174,7 @@ export default function AchievementToasts() {
           <button
             type="button"
             onClick={() => закрыть(наЭкране.map((бейдж) => бейдж.id))}
-            className="text-[12.5px] font-semibold text-ink-muted transition-colors hover:text-ink"
+            className="text-[14px] font-semibold text-ink-muted transition-colors hover:text-ink"
           >
             Скрыть все
           </button>
@@ -187,7 +187,7 @@ export default function AchievementToasts() {
             сделать */}
         <Link
           href="/achievements"
-          className="text-[12.5px] font-semibold text-brand transition-colors hover:text-brand-hover"
+          className="text-[14px] font-semibold text-brand transition-colors hover:text-brand-hover"
         >
           Все достижения →
         </Link>
@@ -234,17 +234,17 @@ function ToastCard({
       <div className="min-w-0 flex-1">
         {/* Статус один для всех: шуточный бейдж отличается только цветом
             медальона, но не словами */}
-        <div className={`text-[11px] font-semibold ${тон.status}`}>
+        <div className={`text-[12.5px] font-semibold ${тон.status}`}>
           Открыто достижение
         </div>
-        <div className="truncate text-[14px] font-semibold leading-tight text-ink">
+        <div className="truncate text-[15.5px] font-semibold leading-tight text-ink">
           {бейдж.name}
         </div>
         {/* Условие — только когда плашка одна: место есть, а знать, за что
             дали, важнее всего в первый раз. От двух строка уходит, иначе
             стопка растёт */}
         {одна && (
-          <div className="mt-0.5 text-pretty text-[12px] leading-snug text-ink-muted">
+          <div className="mt-0.5 text-pretty text-[13.5px] leading-snug text-ink-muted">
             {бейдж.description}
           </div>
         )}

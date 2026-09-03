@@ -31,7 +31,7 @@ export default function Loader({ label, className = "" }: LoaderProps) {
           />
         ))}
       </span>
-      {label && <span className="text-[13px] text-ink-subtle">{label}</span>}
+      {label && <span className="text-[14.5px] text-ink-subtle">{label}</span>}
     </div>
   );
 }

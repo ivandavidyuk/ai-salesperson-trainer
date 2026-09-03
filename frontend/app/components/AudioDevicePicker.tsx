@@ -44,7 +44,7 @@ const selectClass =
   "w-full rounded-input border-[length:1.5px] border-line bg-surface-card px-3 py-2.5 text-sm text-ink outline-none transition-colors focus:border-brand";
 
 const labelClass =
-  "mb-1.5 block font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover";
+  "mb-1.5 block font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover";
 
 /** Короткий тестовый сигнал на выбранный динамик. */
 async function playTestTone(deviceId: string | null): Promise<void> {
@@ -146,7 +146,7 @@ export default function AudioDevicePicker({
         {/* Подписи под шкалой: без них засечка — просто чёрточка, и человек
             не понимает, что именно должно её перешагнуть */}
         {!compact && (
-          <div className="relative mt-1 h-[13px] text-[10px] text-ink-placeholder">
+          <div className="relative mt-1 h-[13px] text-[11.5px] text-ink-placeholder">
             <span className="absolute left-0">тихо</span>
             <span
               style={{ left: `${(VOICE_RMS / FULL_SCALE_RMS) * 100}%` }}
@@ -159,7 +159,7 @@ export default function AudioDevicePicker({
         )}
 
         <div
-          className={`mt-2 text-[12.5px] leading-snug ${
+          className={`mt-2 text-[14px] leading-snug ${
             status === "heard" ? "text-good" : "text-ink-subtle"
           }`}
         >
@@ -174,7 +174,7 @@ export default function AudioDevicePicker({
             Показываем, только когда стало ясно, что текущий вход не годится —
             иначе это ещё одна строка в и без того плотной плашке */}
         {onRefresh && !compact && status === "silent" && (
-          <div className="mt-2 flex items-baseline gap-2 text-[12px] text-ink-placeholder">
+          <div className="mt-2 flex items-baseline gap-2 text-[13.5px] text-ink-placeholder">
             <span>Подключили новое устройство?</span>
             <button
               type="button"
@@ -214,7 +214,7 @@ export default function AudioDevicePicker({
                 await playTestTone(outputId);
                 window.setTimeout(() => setTesting(false), 500);
               }}
-              className="shrink-0 whitespace-nowrap rounded-input border border-line-strong bg-surface-card px-4 py-2.5 text-[13.5px] font-semibold text-ink transition-colors hover:bg-surface disabled:text-ink-subtle"
+              className="shrink-0 whitespace-nowrap rounded-input border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-ink transition-colors hover:bg-surface disabled:text-ink-subtle"
             >
               Проиграть звук
             </button>

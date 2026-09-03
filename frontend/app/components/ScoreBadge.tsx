@@ -11,7 +11,7 @@ export default function ScoreBadge({ score }: ScoreBadgeProps) {
   // Разбора ещё нет — показываем нейтральную заглушку вместо пустоты
   if (score === null) {
     return (
-      <span className="shrink-0 rounded-full bg-surface-bubble px-2.5 py-1 text-[11px] font-medium text-ink-subtle">
+      <span className="shrink-0 rounded-full bg-surface-bubble px-2.5 py-1 text-[12.5px] font-medium text-ink-subtle">
         без оценки
       </span>
     );
@@ -21,7 +21,7 @@ export default function ScoreBadge({ score }: ScoreBadgeProps) {
 
   if (score >= 10) {
     return (
-      <span className="inline-flex shrink-0 items-center rounded-full bg-gradient-to-br from-gold-from to-gold-to px-[11px] py-1 text-[11px] font-bold text-gold-text shadow-[inset_0_1px_0_rgba(255,255,255,.55),0_2px_6px_-2px_rgba(199,150,43,.6)]">
+      <span className="inline-flex shrink-0 items-center rounded-full bg-gradient-to-br from-gold-from to-gold-to px-[11px] py-1 text-[12.5px] font-bold text-gold-text shadow-[inset_0_1px_0_rgba(255,255,255,.55),0_2px_6px_-2px_rgba(199,150,43,.6)]">
         {text}
       </span>
     );
@@ -37,7 +37,7 @@ export default function ScoreBadge({ score }: ScoreBadgeProps) {
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${toneClass}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[12.5px] font-semibold ${toneClass}`}
     >
       {text}
     </span>

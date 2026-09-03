@@ -34,7 +34,7 @@ interface TeamStatsModalProps {
 function Tile({ value, label }: { value: string; label: string }) {
   return (
     <div className="flex-1 rounded-xl border border-line-soft bg-surface px-4 py-3.5 text-center">
-      <div className="font-mono text-[22px] text-ink">{value}</div>
+      <div className="font-mono text-[23.5px] text-ink">{value}</div>
       <div className="mt-0.5 text-xs text-ink-subtle">{label}</div>
     </div>
   );
@@ -45,7 +45,7 @@ function Delta({ delta }: { delta: number | null }) {
   const up = delta > 0;
   return (
     <span
-      className={`rounded-full px-[7px] py-0.5 text-[11px] font-semibold ${
+      className={`rounded-full px-[7px] py-0.5 text-[12.5px] font-semibold ${
         up ? "bg-good-surface text-good" : "bg-danger-soft text-danger-strong"
       }`}
     >
@@ -110,7 +110,7 @@ export default function TeamStatsModal({
         <div
           className={`flex shrink-0 items-center gap-4 border-b border-line px-[26px] py-6 ${PLACE_BANNER[place] ?? "bg-surface-accent"}`}
         >
-          <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-[length:3px] border-surface-card bg-brand-soft text-[20px] font-semibold text-brand shadow-[0_4px_14px_-6px_rgba(20,40,38,.5)]">
+          <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-[length:3px] border-surface-card bg-brand-soft text-[21.5px] font-semibold text-brand shadow-[0_4px_14px_-6px_rgba(20,40,38,.5)]">
             {manager.avatarUpdatedAt ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -130,16 +130,16 @@ export default function TeamStatsModal({
                 {placeLabel(place)}
               </span>
             </div>
-            <div className="mt-0.5 text-[13.5px] text-ink-muted">
+            <div className="mt-0.5 text-[15px] text-ink-muted">
               {manager.jobTitle}
             </div>
           </div>
 
           <div className="shrink-0 text-center">
-            <div className={`font-mono text-[26px] font-medium leading-none ${avgClass}`}>
+            <div className={`font-mono text-[27px] font-medium leading-none ${avgClass}`}>
               {manager.avgScore ?? "—"}
             </div>
-            <div className="mt-1 text-[11px] text-ink-subtle">ср. оценка</div>
+            <div className="mt-1 text-[12.5px] text-ink-subtle">ср. оценка</div>
           </div>
 
           <button
@@ -147,7 +147,7 @@ export default function TeamStatsModal({
             onClick={onClose}
             title="Закрыть"
             aria-label="Закрыть"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-card text-[17px] leading-none text-ink-muted transition-colors hover:bg-surface-bubble"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-card text-[18.5px] leading-none text-ink-muted transition-colors hover:bg-surface-bubble"
           >
             ×
           </button>
@@ -169,18 +169,18 @@ export default function TeamStatsModal({
 
           <div className="mb-6 flex flex-wrap items-stretch gap-[26px]">
             <div className="min-w-[300px] flex-[1.4]">
-              <div className="mb-3.5 font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+              <div className="mb-3.5 font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
                 Прогресс по этапам
               </div>
               <div className="flex flex-col gap-3">
                 {manager.stages.map((stage) => (
                   <div key={stage.key}>
                     <div className="mb-1.5 flex items-center justify-between gap-3">
-                      <span className="text-[13px] text-ink-body">
+                      <span className="text-[14.5px] text-ink-body">
                         {stage.label}
                       </span>
                       <span className="inline-flex items-center gap-2">
-                        <span className="font-mono text-[13px] text-ink">
+                        <span className="font-mono text-[14.5px] text-ink">
                           {stage.value ?? "—"}
                         </span>
                         <Delta delta={stage.delta} />
@@ -203,32 +203,32 @@ export default function TeamStatsModal({
                   за неделю и за всё время. Без подписи руководитель читает
                   их как характеристику менеджера вообще */}
               {(manager.strength || manager.growthPoint) && (
-                <div className="font-mono text-[10.5px] uppercase tracking-[.12em] text-ink-placeholder">
+                <div className="font-mono text-[12px] uppercase tracking-[.12em] text-ink-placeholder">
                   По последнему разговору
                 </div>
               )}
               {manager.strength && (
                 <div>
-                  <span className="rounded-full bg-good-surface px-2.5 py-[3px] text-[10.5px] font-semibold uppercase tracking-[.08em] text-good">
+                  <span className="rounded-full bg-good-surface px-2.5 py-[3px] text-[12px] font-semibold uppercase tracking-[.08em] text-good">
                     Сильная сторона
                   </span>
-                  <p className="mt-2 text-pretty text-[13.5px] leading-snug text-ink-body">
+                  <p className="mt-2 text-pretty text-[15px] leading-snug text-ink-body">
                     {manager.strength}
                   </p>
                 </div>
               )}
               {manager.growthPoint && (
                 <div>
-                  <span className="rounded-full bg-warn-surface px-2.5 py-[3px] text-[10.5px] font-semibold uppercase tracking-[.08em] text-warn">
+                  <span className="rounded-full bg-warn-surface px-2.5 py-[3px] text-[12px] font-semibold uppercase tracking-[.08em] text-warn">
                     Точка роста
                   </span>
-                  <p className="mt-2 text-pretty text-[13.5px] leading-snug text-ink-body">
+                  <p className="mt-2 text-pretty text-[15px] leading-snug text-ink-body">
                     {manager.growthPoint}
                   </p>
                 </div>
               )}
               {!manager.strength && !manager.growthPoint && (
-                <p className="text-[13.5px] leading-normal text-ink-muted">
+                <p className="text-[15px] leading-normal text-ink-muted">
                   Выводы появятся после разбора разговоров.
                 </p>
               )}
@@ -236,7 +236,7 @@ export default function TeamStatsModal({
           </div>
 
           <div className="mb-2.5 flex items-center gap-3">
-            <div className="font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+            <div className="font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
               Все разговоры
             </div>
             <div className="h-px flex-1 bg-line-soft" />
@@ -273,7 +273,7 @@ export default function TeamStatsModal({
                     {formatConversationDate(session.startedAt)}
                   </div>
                 </div>
-                <span className="shrink-0 font-mono text-[12.5px] text-ink-muted">
+                <span className="shrink-0 font-mono text-[14px] text-ink-muted">
                   {formatDuration(session.durationSec)}
                 </span>
                 <ScoreBadge score={session.score} />

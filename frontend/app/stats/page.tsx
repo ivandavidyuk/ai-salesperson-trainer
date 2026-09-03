@@ -74,7 +74,7 @@ function Sparkline({ activity }: { activity: number[] }) {
                 value >= max * 0.66 ? "bg-brand" : "bg-brand-sparkline"
               } group-hover:bg-brand-hover`}
             />
-            <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-10 -translate-x-1/2 translate-y-[3px] whitespace-nowrap rounded-[7px] bg-ink px-2.5 py-1.5 text-[11px] font-medium text-white opacity-0 shadow-[0_8px_20px_-8px_rgba(12,26,24,.6)] transition-[opacity,transform] group-hover:translate-y-0 group-hover:opacity-100">
+            <span className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-10 -translate-x-1/2 translate-y-[3px] whitespace-nowrap rounded-[7px] bg-ink px-2.5 py-1.5 text-[12.5px] font-medium text-white opacity-0 shadow-[0_8px_20px_-8px_rgba(12,26,24,.6)] transition-[opacity,transform] group-hover:translate-y-0 group-hover:opacity-100">
               {day} · {value}{" "}
               {plural(value, "тренировка", "тренировки", "тренировок")}
             </span>
@@ -88,8 +88,8 @@ function Sparkline({ activity }: { activity: number[] }) {
 function MiniStat({ value, label }: { value: number | string; label: string }) {
   return (
     <div className="flex-1 rounded-[11px] border border-line-soft bg-surface px-2 py-[11px] text-center">
-      <div className="font-mono text-[19px] text-ink">{value}</div>
-      <div className="mt-0.5 text-[11px] text-ink-subtle">{label}</div>
+      <div className="font-mono text-[20.5px] text-ink">{value}</div>
+      <div className="mt-0.5 text-[12.5px] text-ink-subtle">{label}</div>
     </div>
   );
 }
@@ -121,22 +121,22 @@ function PodiumCard({
         </div>
 
         <div className="flex flex-1 flex-col px-5 pb-5 pt-[46px]">
-          <div className="text-center text-[16.5px] font-semibold text-ink">
+          <div className="text-center text-[18px] font-semibold text-ink">
             {manager.name}
           </div>
-          <div className="mt-0.5 text-center text-[12.5px] text-ink-subtle">
+          <div className="mt-0.5 text-center text-[14px] text-ink-subtle">
             {manager.jobTitle}
           </div>
 
           <div className="mt-4 flex items-baseline justify-center gap-[5px]">
             <span
-              className={`font-mono text-[34px] font-medium leading-none ${scoreClass(manager.avgScore)}`}
+              className={`font-mono text-[35px] font-medium leading-none ${scoreClass(manager.avgScore)}`}
             >
               {manager.avgScore ?? "—"}
             </span>
-            <span className="font-mono text-[15px] text-ink-placeholder">/ 10</span>
+            <span className="font-mono text-[16.5px] text-ink-placeholder">/ 10</span>
           </div>
-          <div className="mt-[5px] text-center text-[11.5px] uppercase tracking-[.04em] text-ink-subtle">
+          <div className="mt-[5px] text-center text-[13px] uppercase tracking-[.04em] text-ink-subtle">
             средняя оценка по тренировкам
           </div>
 
@@ -154,7 +154,7 @@ function PodiumCard({
           </div>
 
           <div className="mt-[18px]">
-            <div className="mb-2 text-[10.5px] uppercase tracking-[.1em] text-ink-placeholder">
+            <div className="mb-2 text-[12px] uppercase tracking-[.1em] text-ink-placeholder">
               Активность · 7 дней
             </div>
             <Sparkline activity={manager.activity} />
@@ -197,41 +197,41 @@ function OtherRow({
 }) {
   return (
     <div className="flex items-center gap-[18px] rounded-[14px] border border-line bg-surface-card px-5 py-3.5">
-      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-surface-bubble font-mono text-[13px] text-ink-muted">
+      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-surface-bubble font-mono text-[14.5px] text-ink-muted">
         {place}
       </span>
       <Avatar manager={manager} size={44} />
 
       <div className="min-w-0 flex-1">
-        <div className="text-[15px] font-semibold text-ink">{manager.name}</div>
-        <div className="mt-px text-[12.5px] text-ink-subtle">{manager.jobTitle}</div>
+        <div className="text-[16.5px] font-semibold text-ink">{manager.name}</div>
+        <div className="mt-px text-[14px] text-ink-subtle">{manager.jobTitle}</div>
       </div>
 
       <div className="w-24 text-center">
-        <div className={`font-mono text-[19px] ${scoreClass(manager.avgScore)}`}>
+        <div className={`font-mono text-[20.5px] ${scoreClass(manager.avgScore)}`}>
           {manager.avgScore ?? "—"}
         </div>
-        <div className="mt-0.5 text-[11px] text-ink-subtle">ср. по трен.</div>
+        <div className="mt-0.5 text-[12.5px] text-ink-subtle">ср. по трен.</div>
       </div>
       <div className="w-[84px] text-center">
-        <div className="font-mono text-[19px] text-ink">{manager.total}</div>
-        <div className="mt-0.5 text-[11px] text-ink-subtle">разговоров</div>
+        <div className="font-mono text-[20.5px] text-ink">{manager.total}</div>
+        <div className="mt-0.5 text-[12.5px] text-ink-subtle">разговоров</div>
       </div>
       <div className="w-[84px] text-center">
-        <div className="font-mono text-[19px] text-ink">{manager.week}</div>
-        <div className="mt-0.5 text-[11px] text-ink-subtle">за неделю</div>
+        <div className="font-mono text-[20.5px] text-ink">{manager.week}</div>
+        <div className="mt-0.5 text-[12.5px] text-ink-subtle">за неделю</div>
       </div>
       <div className="w-[84px] text-center">
-        <div className="font-mono text-[19px] text-ink">
+        <div className="font-mono text-[20.5px] text-ink">
           {formatDealsRate(manager.paidDeals, manager.dealTotal).label}
         </div>
-        <div className="mt-0.5 text-[11px] text-ink-subtle">закрыто</div>
+        <div className="mt-0.5 text-[12.5px] text-ink-subtle">закрыто</div>
       </div>
 
       <button
         type="button"
         onClick={onOpen}
-        className="shrink-0 whitespace-nowrap rounded-[10px] border border-line-accent bg-surface-accent px-[18px] py-2.5 text-[13.5px] font-semibold text-brand-hover transition-colors hover:bg-brand-soft"
+        className="shrink-0 whitespace-nowrap rounded-[10px] border border-line-accent bg-surface-accent px-[18px] py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-brand-soft"
       >
         Смотреть статистику
       </button>
@@ -375,16 +375,16 @@ export default function StatsPage() {
       <div className="mx-auto w-full max-w-[1520px] px-10 pb-9 pt-[30px]">
         {forbidden && (
           <div className="rounded-[14px] border border-line bg-surface-card px-6 py-14 text-center">
-            <div className="text-[15px] font-semibold text-ink">
+            <div className="text-[16.5px] font-semibold text-ink">
               Раздел доступен только руководителю
             </div>
-            <p className="mx-auto mt-2 max-w-[420px] text-[13.5px] leading-normal text-ink-muted">
+            <p className="mx-auto mt-2 max-w-[420px] text-[15px] leading-normal text-ink-muted">
               Здесь собрана статистика по менеджерам отдела. Свои показатели
               вы найдёте на главной.
             </p>
             <Link
               href="/"
-              className="mt-6 inline-block rounded-input border border-line-strong bg-surface-card px-5 py-[11px] text-[15px] font-semibold text-ink transition-colors hover:bg-surface"
+              className="mt-6 inline-block rounded-input border border-line-strong bg-surface-card px-5 py-[11px] text-[16.5px] font-semibold text-ink transition-colors hover:bg-surface"
             >
               На главную
             </Link>
@@ -395,7 +395,7 @@ export default function StatsPage() {
           <>
             <div className="mb-2 flex items-baseline justify-between gap-3">
               <div>
-                <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink">
+                <h1 className="text-[22.5px] font-semibold tracking-[-.01em] text-ink">
                   Менеджеры отдела
                 </h1>
                 <p className="mt-1 text-sm text-ink-muted">
@@ -433,12 +433,12 @@ export default function StatsPage() {
                 {/* Сводка: средняя по отделу и награды */}
                 <div className="mx-auto mb-[26px] flex max-w-[1140px] items-stretch gap-6 rounded-2xl border border-line bg-surface-card px-[26px] py-5">
                   <div className="flex shrink-0 flex-col justify-center border-r border-line-soft pr-[26px]">
-                    <div className="text-[11px] uppercase tracking-[.06em] text-ink-subtle">
+                    <div className="text-[12.5px] uppercase tracking-[.06em] text-ink-subtle">
                       Средняя оценка отдела
                     </div>
                     <div className="mt-1.5 flex items-baseline gap-1.5">
                       <span
-                        className={`font-mono text-[40px] font-medium leading-none ${scoreClass(teamAvg)}`}
+                        className={`font-mono text-[41px] font-medium leading-none ${scoreClass(teamAvg)}`}
                       >
                         {teamAvg ?? "—"}
                       </span>
@@ -456,10 +456,10 @@ export default function StatsPage() {
                   {/* Процент по отделу — ориентир для менеджера: сравнение
                       идёт с отделом, а не со ста процентами */}
                   <div className="flex shrink-0 flex-col justify-center border-r border-line-soft pr-[26px]">
-                    <div className="text-[11px] uppercase tracking-[.06em] text-ink-subtle">
+                    <div className="text-[12.5px] uppercase tracking-[.06em] text-ink-subtle">
                       Закрытых сделок
                     </div>
-                    <div className="mt-1.5 font-mono text-[40px] font-medium leading-none text-ink">
+                    <div className="mt-1.5 font-mono text-[41px] font-medium leading-none text-ink">
                       {teamDeals.label}
                     </div>
                     <div className="mt-[7px] whitespace-nowrap text-xs text-ink-subtle">
@@ -484,14 +484,14 @@ export default function StatsPage() {
                           <Avatar manager={award.manager} size={40} />
                           <div className="min-w-0">
                             <span
-                              className={`inline-block whitespace-nowrap rounded-full px-2.5 py-[3px] text-[10px] font-bold uppercase tracking-[.05em] ${award.tone}`}
+                              className={`inline-block whitespace-nowrap rounded-full px-2.5 py-[3px] text-[11.5px] font-bold uppercase tracking-[.05em] ${award.tone}`}
                             >
                               {award.label}
                             </span>
                             <div className="mt-1.5 text-sm font-semibold text-ink">
                               {award.manager.name}
                             </div>
-                            <div className="mt-px text-[11.5px] text-ink-subtle">
+                            <div className="mt-px text-[13px] text-ink-subtle">
                               {award.metric}
                             </div>
                           </div>
@@ -499,7 +499,7 @@ export default function StatsPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="flex flex-1 items-center text-[13.5px] text-ink-muted">
+                    <div className="flex flex-1 items-center text-[15px] text-ink-muted">
                       Награды появятся, когда у менеджеров наберутся разговоры.
                     </div>
                   )}

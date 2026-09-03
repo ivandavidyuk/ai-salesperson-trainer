@@ -17,11 +17,11 @@ interface FieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "size">
 // Размеры из макетов
 const SIZES = {
   md: {
-    label: "text-[13px]",
-    input: "mt-[7px] rounded-input px-[14px] py-[13px] text-[15px]",
+    label: "text-[14.5px]",
+    input: "mt-[7px] rounded-input px-[14px] py-[13px] text-[16.5px]",
   },
   lg: {
-    label: "text-[13.5px]",
+    label: "text-[15px]",
     input: "mt-2 rounded-input-lg px-4 py-[15px] text-base",
   },
 } as const;

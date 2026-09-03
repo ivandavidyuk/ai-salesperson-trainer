@@ -65,7 +65,7 @@ function ScoreRing({ score }: { score: number }) {
           className="stroke-brand"
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center font-mono text-[15px] font-semibold text-ink">
+      <span className="absolute inset-0 flex items-center justify-center font-mono text-[16.5px] font-semibold text-ink">
         {score}
       </span>
     </span>
@@ -160,7 +160,7 @@ function Stamp({
       </span>
 
       <div
-        className={`animate-textrise relative text-[18px] font-semibold tracking-[-.01em] ${
+        className={`animate-textrise relative text-[19.5px] font-semibold tracking-[-.01em] ${
           closed ? "text-white" : "text-ink"
         }`}
       >
@@ -168,7 +168,7 @@ function Stamp({
       </div>
 
       <span
-        className={`animate-stampbadge absolute right-4 top-1/2 -mt-[13px] rounded-[7px] border-2 px-[9px] py-[3px] font-mono text-[11px] font-semibold tracking-[.14em] ${
+        className={`animate-stampbadge absolute right-4 top-1/2 -mt-[13px] rounded-[7px] border-2 px-[9px] py-[3px] font-mono text-[12.5px] font-semibold tracking-[.14em] ${
           closed
             ? "border-white/45 text-white/80"
             : "border-danger-border text-danger-strong"
@@ -185,7 +185,7 @@ function PendingReview() {
   return (
     <div className="rounded-xl border border-line px-[18px] py-8">
       <Loader label="Считаем разбор" />
-      <p className="mt-3 text-center text-[13px] leading-normal text-ink-muted">
+      <p className="mt-3 text-center text-[14.5px] leading-normal text-ink-muted">
         Оценщик читает расшифровку целиком — обычно это занимает несколько
         секунд. Страница обновится сама, обновлять её вручную не нужно.
       </p>
@@ -222,10 +222,10 @@ export default function ReviewPanel({
               <path d="M9 12h6M9 16h4" />
             </svg>
           </span>
-          <div className="mt-3 text-[15px] font-semibold text-ink">
+          <div className="mt-3 text-[16.5px] font-semibold text-ink">
             {emptyReason === "no-messages" ? "Разбирать нечего" : "Разбора нет"}
           </div>
-          <p className="mt-1.5 text-pretty text-center text-[13px] leading-normal text-ink-subtle">
+          <p className="mt-1.5 text-pretty text-center text-[14.5px] leading-normal text-ink-subtle">
             {emptyReason === "no-messages"
               ? "В этом разговоре не прозвучало ни одной реплики — обычно так бывает, когда не поднялся микрофон. В статистику он не идёт."
               : "Оценка по этому разговору не появилась. Расшифровка на месте — её можно прочитать целиком."}
@@ -248,7 +248,7 @@ export default function ReviewPanel({
               <ScoreRing score={review.overallScore} />
               <div>
                 <div className="text-sm font-semibold text-ink">Общая оценка</div>
-                <div className="text-[12.5px] text-ink-subtle">
+                <div className="text-[14px] text-ink-subtle">
                   {review.drillPassed !== null && review.drillPassed !== undefined
                     ? "за упражнение, из 10"
                     : "среднее пяти этапов, из 10"}
@@ -264,7 +264,7 @@ export default function ReviewPanel({
                 if (value === null || value === undefined) {
                   return (
                     <div key={key}>
-                      <div className="mb-1.5 flex justify-between gap-3 text-[12.5px] text-ink-muted">
+                      <div className="mb-1.5 flex justify-between gap-3 text-[14px] text-ink-muted">
                         <span>{label}</span>
                         <span className="font-mono text-ink-subtle">—</span>
                       </div>
@@ -274,7 +274,7 @@ export default function ReviewPanel({
                 }
                 return (
                   <div key={key}>
-                    <div className="mb-1.5 flex justify-between gap-3 text-[12.5px] text-ink-muted">
+                    <div className="mb-1.5 flex justify-between gap-3 text-[14px] text-ink-muted">
                       <span>{label}</span>
                       <span className="font-mono text-ink">{value}</span>
                     </div>
@@ -298,13 +298,13 @@ export default function ReviewPanel({
               <div className="text-xs font-semibold text-brand-hover">
                 Сильное место
               </div>
-              <p className="mt-1 text-[13px] leading-snug text-ink-label">
+              <p className="mt-1 text-[14.5px] leading-snug text-ink-label">
                 {review.strength}
               </p>
             </div>
             <div className="rounded-lg border border-line border-l-[3px] border-l-warn px-3.5 py-3">
               <div className="text-xs font-semibold text-warn">Точка роста</div>
-              <p className="mt-1 text-[13px] leading-snug text-ink-label">
+              <p className="mt-1 text-[14.5px] leading-snug text-ink-label">
                 {review.growthPoint}
               </p>
             </div>

@@ -17,7 +17,7 @@ export default function Alert({ children, className = "" }: AlertProps) {
       <span aria-hidden="true" className="shrink-0 font-bold text-danger">
         !
       </span>
-      <div className="text-[13.5px] leading-snug text-danger-text">
+      <div className="text-[15px] leading-snug text-danger-text">
         {children}
       </div>
     </div>

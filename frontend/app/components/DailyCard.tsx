@@ -48,10 +48,10 @@ export default function DailyCard({ tip, motivation }: DailyCardProps) {
   if (!tip && !motivation) {
     return (
       <div className="flex flex-1 flex-col rounded-card border border-line bg-surface-card px-5 py-[18px]">
-        <div className="font-mono text-[12px] uppercase tracking-[.14em] text-ink-subtle">
+        <div className="font-mono text-[13.5px] uppercase tracking-[.14em] text-ink-subtle">
           Совет дня
         </div>
-        <div className="mt-2.5 text-[13.5px] leading-normal text-ink-subtle">
+        <div className="mt-2.5 text-[15px] leading-normal text-ink-subtle">
           Появится, как только добавим подборку советов.
         </div>
       </div>
@@ -63,10 +63,10 @@ export default function DailyCard({ tip, motivation }: DailyCardProps) {
       <div
         className={`flex flex-1 flex-col rounded-card border border-line bg-surface-card px-5 py-[18px] ${fade}`}
       >
-        <div className="font-mono text-[12px] uppercase tracking-[.14em] text-brand-hover">
+        <div className="font-mono text-[13.5px] uppercase tracking-[.14em] text-brand-hover">
           Совет дня
         </div>
-        <div className="mt-2.5 text-pretty text-[13.5px] leading-normal text-ink-body">
+        <div className="mt-2.5 text-pretty text-[15px] leading-normal text-ink-body">
           {tip}
         </div>
       </div>
@@ -77,10 +77,10 @@ export default function DailyCard({ tip, motivation }: DailyCardProps) {
     <div
       className={`flex flex-1 flex-col rounded-card bg-surface-dark px-5 py-[18px] ${fade}`}
     >
-      <div className="font-mono text-[12px] uppercase tracking-[.14em] text-brand-on-dark">
+      <div className="font-mono text-[13.5px] uppercase tracking-[.14em] text-brand-on-dark">
         Мотивация
       </div>
-      <div className="mt-2.5 text-pretty text-[13.5px] leading-normal text-brand-text-on-dark">
+      <div className="mt-2.5 text-pretty text-[15px] leading-normal text-brand-text-on-dark">
         {motivation}
       </div>
     </div>
