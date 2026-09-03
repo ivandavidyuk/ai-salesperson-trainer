@@ -113,11 +113,9 @@ export default function ProfilePage() {
             <AvatarCard profile={profile} onChange={setProfile} />
 
             <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto pr-1.5">
-              {/* Менеджеру — та же карточка, что у руководителя, на том же
-                  месте, но без правки: услуги и цены ему нужны в разговоре.
-                  До 03.09 он их не видел вовсе и на пресете чужой клиники
-                  называл цены из головы — два сорванных разговора на живом
-                  тесте только из-за этого */}
+              {/* Менеджеру — та же карточка на том же месте, но без правки:
+                  цены ему нужны в разговоре, а на пресете чужой клиники
+                  он их иначе называет из головы и срывает сделки */}
               {profile.role === "head" ? (
                 <>
                   <ClinicForm />
@@ -671,7 +669,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
     (saved.city ?? "") !== city ||
     saved.industry !== industry ||
     JSON.stringify(saved.services) !== JSON.stringify(services) ||
-    JSON.stringify(saved.diagnoses) !== JSON.stringify(diagnoses);
+    JSON.stringify(редактируемое(saved.diagnoses)) !== JSON.stringify(редактируемое(diagnoses));
 
   async function handleSave() {
     setError("");
@@ -708,7 +706,13 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
 
   async function handleRetry() {
     setOutcome(null);
-    await fetch("/api/organization/rebuild", { method: "POST" });
+    const res = await fetch("/api/organization/rebuild", { method: "POST" });
+    // Отказ сервера показываем, а не превращаем в окно «Сборка прервалась»
+    if (!res.ok) {
+      const ответ = await res.json().catch(() => null);
+      setError(ответ?.error ?? "Не удалось запустить пересборку");
+      return;
+    }
     const data = await load();
     if (data) setProgress({ ready: data.casesReady, total: data.casesTotal });
   }
@@ -772,13 +776,19 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
   const demo = Boolean(saved?.isDemo);
   // Пустые строки списков и кнопки правки — только тому, кто правит
   const editable = !readOnly;
-  // Диагнозы, которым не достался ни один пациент. Судим по самим случаям,
-  // а не по casesTotal: у клиники, посаженной на пресет копированием,
-  // счётчик сборки ноль, а пациенты есть. До первой сборки нулём у всех
-  // сказать нечего — тогда пометки нет ни у кого
-  const случаиЕсть = diagnoses.some((d) => (d.patients ?? 0) > 0);
+  // Сколько пациентов у диагноза — из последнего ответа сервера, а не из
+  // формы: опрос во время пересборки обновляет только saved, и числа
+  // подтягиваются сами. Судим по самим случаям, а не по casesTotal:
+  // у клиники, посаженной на пресет копированием, счётчик сборки ноль,
+  // а пациенты есть. До первой сборки нулём у всех сказать нечего —
+  // тогда пометки нет ни у кого. Новая, ещё не сохранённая строка
+  // в saved отсутствует и пометки не получает
+  const пациентовУ = new Map(
+    (saved?.diagnoses ?? []).map((d) => [d.name, d.patients ?? 0] as const)
+  );
+  const случаиЕсть = [...пациентовУ.values()].some((n) => n > 0);
   const безПациентов = случаиЕсть
-    ? diagnoses.filter((d) => d.patients === 0).length
+    ? diagnoses.filter((d) => пациентовУ.get(d.name) === 0).length
     : 0;
 
   return (
@@ -922,7 +932,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                       : "Руководитель ещё не заполнил прайс клиники"}
                   </div>
                 </div>
-                {editable && (
+                {editable && !demo && (
                   <button
                     type="button"
                     onClick={() => {
@@ -953,9 +963,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                         Руководителю об этом говорим здесь, менеджеру не за чем */}
                     {editable && безПациентов > 0 && (
                       <span className="ml-2 text-[12.5px] font-medium text-warn">
-                        {безПациентов === 1
-                          ? "1 без пациентов"
-                          : `${безПациентов} без пациентов`}
+                        {безПациентов} без пациентов
                       </span>
                     )}
                   </div>
@@ -983,7 +991,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                       : "Руководитель ещё не заполнил диагнозы клиники"}
                   </div>
                 </div>
-                {editable && (
+                {editable && !demo && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1001,15 +1009,15 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
 
           {error && <Alert className="mt-4">{error}</Alert>}
 
-          {/* В демо форма читается, но не правится: за сохранением идёт
-              пересборка случаев — сотня вызовов модели, и запускать её
-              нажатием из демо нельзя. Кнопку не гасим, а убираем вовсе:
-              серая кнопка выглядит поломкой, а не правилом */}
+          {/* Три подвала: менеджеру — зачем ему это, демо — почему нельзя
+              сохранить, руководителю — кнопка. Кнопку в первых двух не гасим,
+              а убираем вовсе: серая кнопка выглядит поломкой, а не правилом.
+              В демо за сохранением идёт пересборка случаев — сотня вызовов
+              модели, запускать её нажатием из демо нельзя */}
           {!editable ? (
             <div className="mt-5 border-t border-line-soft pt-[18px]">
               <p className="max-w-[560px] text-[12.5px] leading-normal text-ink-muted">
-                Услуги, цены и диагнозы задаёт руководитель. Здесь их можно
-                посмотреть перед разговором — цены лучше называть по прайсу,
+                Посмотрите перед разговором: цены лучше называть по прайсу,
                 а не по памяти.
               </p>
             </div>
@@ -1088,14 +1096,17 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
       {diagsOpen && (
         <DiagnosesModal
           diagnoses={diagnoses}
+          patientsByName={пациентовУ}
           onChange={setDiagnoses}
           onClose={() => setDiagsOpen(false)}
           readOnly={demo || !editable}
           showCoverage={editable && случаиЕсть}
         />
       )}
-      {progress && <RebuildModal progress={progress} industry={industry} onGiveUp={stopWaiting} />}
-      {outcome === "failed" && partial && !progress && (
+      {editable && progress && (
+        <RebuildModal progress={progress} industry={industry} onGiveUp={stopWaiting} />
+      )}
+      {editable && outcome === "failed" && partial && !progress && (
         <FailedModal
           ready={saved.casesReady}
           total={saved.casesTotal}
@@ -1105,6 +1116,13 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
       )}
     </>
   );
+}
+
+// Поля диагноза, которые правит руководитель. Число пациентов приходит
+// с сервера и в «изменилось ли» не участвует: иначе после каждой пересборки
+// форма навсегда считалась бы изменённой
+function редактируемое(rows: DiagnosisRow[]): Array<Pick<DiagnosisRow, "name" | "complaint">> {
+  return rows.map(({ name, complaint }) => ({ name, complaint }));
 }
 
 function pluralDiagnoses(n: number): string {
@@ -1257,7 +1275,7 @@ function ServicesModal({
           ) : (
             <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-ink-muted">
               {readOnly
-                ? "Цены — как в прайсе клиники. Называйте их по списку, а не по памяти."
+                ? "Цены — как в прайсе клиники."
                 : "Изменения попадут в тренажёр после «Сохранить» в профиле."}
             </p>
           )}
@@ -1283,6 +1301,7 @@ function DiagnosesModal({
   onClose,
   readOnly = false,
   showCoverage = false,
+  patientsByName,
 }: {
   diagnoses: DiagnosisRow[];
   onChange: (rows: DiagnosisRow[]) => void;
@@ -1291,6 +1310,9 @@ function DiagnosesModal({
   readOnly?: boolean;
   /** Руководителю после сборки: подсветить диагнозы без единого пациента */
   showCoverage?: boolean;
+  /** Сколько пациентов у сохранённого диагноза, по имени. Строки, которых
+      в сохранённом списке нет, пометки не получают */
+  patientsByName?: Map<string, number>;
 }) {
   const [removed, setRemoved] = useState<{ row: DiagnosisRow; at: number } | null>(null);
 
@@ -1365,11 +1387,10 @@ function DiagnosesModal({
                   и до этой строки руководитель узнавал об этом только
                   пересчитав пациентов руками. Новая, ещё не сохранённая
                   строка (patients нет) сюда не попадает */}
-              {showCoverage && row.patients === 0 && (
+              {showCoverage && patientsByName?.get(row.name) === 0 && (
                 <p className="mt-2 text-[12px] leading-snug text-warn">
-                  Ни одного пациента с этим диагнозом: либо в прайсе нет услуги,
-                  которая его лечит, либо после добавления пациентов ещё не
-                  пересобирали.
+                  Ни одного пациента с этим диагнозом — обычно его нечем лечить
+                  в прайсе, или пациентов после правки ещё не пересобирали.
                 </p>
               )}
             </div>
@@ -1416,7 +1437,9 @@ function DiagnosesModal({
             </div>
           ) : (
             <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-ink-muted">
-              Изменения попадут в тренажёр после «Сохранить» в профиле.
+              {readOnly
+                ? "С этим к вам приходят пациенты."
+                : "Изменения попадут в тренажёр после «Сохранить» в профиле."}
             </p>
           )}
           <Button

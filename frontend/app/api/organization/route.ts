@@ -15,6 +15,7 @@ import {
   идётСборка,
   целиПересборки,
 } from "@/lib/cases";
+import { ключ } from "@/lib/caseStaleness";
 import { затронутыеСлучаи } from "@/lib/caseStaleness";
 import { ГЕНЕРАЦИЯ_ЗАКРЫТА, этоДемо } from "@/lib/demoAccess";
 
@@ -100,13 +101,20 @@ async function organizationForForm(id: string) {
     where: { organizationId: id },
     _count: { _all: true },
   });
-  const пациентов = new Map(поДиагнозам.map((г) => [г.diagnosisName, г._count._all]));
+  // Имена сверяем той же нормализацией, что и правки прайса: diagnosisName
+  // в случае пишет модель, и «миопия» там встречается наравне с «Миопия»
+  const пациентов = new Map<string, number>();
+  for (const г of поДиагнозам) {
+    if (!г.diagnosisName) continue;
+    const к = ключ(г.diagnosisName);
+    пациентов.set(к, (пациентов.get(к) ?? 0) + г._count._all);
+  }
 
   return {
     ...organization,
     diagnoses: organization.diagnoses.map((д) => ({
       ...д,
-      patients: пациентов.get(д.name) ?? 0,
+      patients: пациентов.get(ключ(д.name)) ?? 0,
     })),
     casesRunning: сборкаЖива(organization),
   };
