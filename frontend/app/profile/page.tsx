@@ -800,7 +800,10 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
         {/* Плашка говорит о состоянии, а не о нажатой кнопке: недособранная
             организация должна быть видна и после перезагрузки страницы,
             иначе часть пациентов молча останется с чужой отраслью */}
-        {partial && !progress && (
+        {/* Недособранность — забота того, кто может дособрать. Менеджеру
+            баннер с «Собрать заново» ни к чему: кнопка ведёт в API,
+            закрытое для него, и упёрлась бы в 403 */}
+        {editable && partial && !progress && (
           <div className="flex items-start gap-2.5 border-b border-warn-border bg-warn-surface px-6 py-[13px] text-[13.5px] leading-normal text-warn">
             <div>
               <span className="font-semibold">
