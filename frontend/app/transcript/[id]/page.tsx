@@ -29,6 +29,10 @@ function reviewExpected(data: TranscriptData | null): boolean {
   if (!data || data.review) return false;
   // Без endedAt сессию никто не закрыл штатно — разбор не запускался
   if (!data.session.endedAt) return false;
+  // Без единой реплики разбирать нечего: оценщик на пустую историю
+  // не зовётся вовсе (backend: review_conversation), и две минуты
+  // «Оценщик читает расшифровку» здесь были бы обещанием впустую
+  if (data.messages.length === 0) return false;
   return Date.now() - new Date(data.session.endedAt).getTime() < REVIEW_WAIT_MS;
 }
 
@@ -97,6 +101,19 @@ export default function TranscriptPage() {
   }, [sessionId, router]);
 
   const pendingReview = reviewExpected(data);
+  const noMessages = data !== null && data.messages.length === 0;
+
+  // «Ещё разговор» — повторить того же пациента тем же типом тренировки:
+  // после разбора человек хочет отыграть заново с тем же собеседником.
+  // Раньше кнопка вела на /session без параметров, а страница брала
+  // «первого активного» — то есть с любой расшифровки всегда к Тамаре.
+  // У сессий до мастера настройки id нет — тогда как прежде, на /session
+  const repeatHref = (() => {
+    if (!data?.session.patientId) return "/session";
+    const params = new URLSearchParams({ patient: data.session.patientId });
+    if (data.session.trainingTypeId) params.set("type", data.session.trainingTypeId);
+    return `/session?${params.toString()}`;
+  })();
 
   const session = data?.session;
   const managerName = data
@@ -152,7 +169,7 @@ export default function TranscriptPage() {
             Скачать
           </Button>
           <Button
-            onClick={() => router.push("/session")}
+            onClick={() => router.push(repeatHref)}
             className="px-4 py-2 text-[13.5px]"
           >
             Ещё разговор
@@ -240,7 +257,11 @@ export default function TranscriptPage() {
               )}
           </div>
 
-          <ReviewPanel review={data.review} pending={pendingReview} />
+          <ReviewPanel
+            review={data.review}
+            pending={pendingReview}
+            emptyReason={noMessages ? "no-messages" : undefined}
+          />
         </div>
       )}
     </div>

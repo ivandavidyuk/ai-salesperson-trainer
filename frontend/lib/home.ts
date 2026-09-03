@@ -110,7 +110,8 @@ export async function listConversations(
   limit?: number
 ): Promise<HomeConversation[]> {
   const rows = await prisma.session.findMany({
-    where: { userId, status: "completed" },
+    // Без реплик — не разговор, см. `завершённые` в statsWindow.ts
+    where: { userId, status: "completed", messages: { some: {} } },
     orderBy: { startedAt: "desc" },
     ...(limit ? { take: limit } : {}),
     select: {

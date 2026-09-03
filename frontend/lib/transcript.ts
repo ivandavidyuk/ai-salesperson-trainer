@@ -40,6 +40,10 @@ export interface TranscriptData {
     durationSec: number | null;
     topic: string | null;
     patientName: string | null;
+    /** Для «Ещё разговор» — повторить того же пациента и тот же тип.
+        null у старых сессий, начатых до мастера настройки */
+    patientId: string | null;
+    trainingTypeId: string | null;
     /** Документ диагностики, показанный менеджеру по кнопке. null —
         не показывали (или разговор был до этой фичи), плашки нет */
     diagnosticsResult: string | null;
