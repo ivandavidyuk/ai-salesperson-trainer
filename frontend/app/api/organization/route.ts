@@ -1,19 +1,21 @@
 // GET/PUT /api/organization
-// Клиника руководителя: название, город, отрасль, услуги и диагнозы.
+// Клиника: название, город, отрасль, услуги и диагнозы.
 //
-// Только для руководителя: отрасль и прайс — это данные организации, а не
-// личные, и менеджеру их менять нечего. Проверка ролью, а не наличием
+// Читать может любой сотрудник клиники — менеджеру прайс нужен в разговоре,
+// без него он называет цены из головы. Менять — только руководитель: отрасль
+// и прайс — данные организации, а не личные. Проверка ролью, а не наличием
 // организации: менеджер тоже в ней состоит.
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireHead } from "@/lib/access";
+import { getUserWithRole, requireHead } from "@/lib/access";
 import {
   rebuildCases,
   сборкаЖива,
   идётСборка,
   целиПересборки,
 } from "@/lib/cases";
+import { ключ } from "@/lib/caseStaleness";
 import { затронутыеСлучаи } from "@/lib/caseStaleness";
 import { ГЕНЕРАЦИЯ_ЗАКРЫТА, этоДемо } from "@/lib/demoAccess";
 
@@ -90,24 +92,50 @@ async function organizationForForm(id: string) {
   });
   if (!organization) return null;
 
-  return { ...organization, casesRunning: сборкаЖива(organization) };
+  // Сколько пациентов досталось каждому диагнозу. Диагноз без единого
+  // пациента — обычно тот, который в прайсе нечем лечить: генератор такие
+  // пары честно отбраковывает (clinical_picture.match_services), но молча.
+  // Руководитель заводил диагноз и вправе увидеть, что он не работает
+  const поДиагнозам = await prisma.patientCase.groupBy({
+    by: ["diagnosisName"],
+    where: { organizationId: id },
+    _count: { _all: true },
+  });
+  // Имена сверяем той же нормализацией, что и правки прайса: diagnosisName
+  // в случае пишет модель, и «миопия» там встречается наравне с «Миопия»
+  const пациентов = new Map<string, number>();
+  for (const г of поДиагнозам) {
+    if (!г.diagnosisName) continue;
+    const к = ключ(г.diagnosisName);
+    пациентов.set(к, (пациентов.get(к) ?? 0) + г._count._all);
+  }
+
+  return {
+    ...organization,
+    diagnoses: organization.diagnoses.map((д) => ({
+      ...д,
+      patients: пациентов.get(ключ(д.name)) ?? 0,
+    })),
+    casesRunning: сборкаЖива(organization),
+  };
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const head = await requireHead(request);
-    if (!head) {
-      return NextResponse.json(
-        { error: "Доступно только руководителю" },
-        { status: 403 }
-      );
+    // Читать прайс и диагнозы может любой сотрудник клиники: менеджеру они
+    // нужны в разговоре — на пресете чужой клиники он иначе называет цены
+    // из головы и срывает сделки. Менять по-прежнему может только
+    // руководитель, см. PUT
+    const user = await getUserWithRole(request);
+    if (!user) {
+      return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
     }
-    if (!head.organizationId) {
-      // Руководитель без клиники — состояние возможное (пустая база,
+    if (!user.organizationId) {
+      // Сотрудник без клиники — состояние возможное (пустая база,
       // пользователь заведён до организаций). Отдаём null, форма покажет пустую
       return NextResponse.json(null);
     }
-    return NextResponse.json(await organizationForForm(head.organizationId));
+    return NextResponse.json(await organizationForForm(user.organizationId));
   } catch (error) {
     console.error("Ошибка в GET /api/organization:", error);
     return NextResponse.json(
