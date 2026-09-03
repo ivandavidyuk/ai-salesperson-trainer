@@ -30,13 +30,13 @@ export default function TranscriptMessage({
       {/* Портрет только у клиента: у менеджера здесь его собственные инициалы,
           а своё фото он видит в профиле */}
       {isManager ? (
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand text-[11px] font-semibold text-white">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand text-[12.5px] font-semibold text-white">
           {initials(speakerName)}
         </span>
       ) : (
         <PatientAvatar
           name={speakerName}
-          className="h-8 w-8 bg-brand-soft text-[11px] font-semibold text-brand"
+          className="h-8 w-8 bg-brand-soft text-[12.5px] font-semibold text-brand"
           lazy
         />
       )}
@@ -44,7 +44,7 @@ export default function TranscriptMessage({
       <div className="max-w-[74%]">
         {/* Скруглённый угол «смотрит» на аватар — так видно, кто говорит */}
         <div
-          className={`px-[15px] py-3 text-[14.5px] leading-normal ${
+          className={`px-[15px] py-3 text-[16px] leading-normal ${
             isManager
               ? "rounded-[14px_14px_4px_14px] bg-brand text-white"
               : "rounded-[14px_14px_14px_4px] border border-line bg-surface-card text-ink"
@@ -53,7 +53,7 @@ export default function TranscriptMessage({
           {text}
         </div>
         <div
-          className={`mt-[5px] font-mono text-[11px] text-ink-subtle ${
+          className={`mt-[5px] font-mono text-[12.5px] text-ink-subtle ${
             isManager ? "text-right" : ""
           }`}
         >

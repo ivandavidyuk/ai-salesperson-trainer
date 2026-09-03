@@ -33,7 +33,7 @@ interface PatientInfoModalProps {
 
 function SectionTitle({ children }: { children: string }) {
   return (
-    <div className="font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+    <div className="font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
       {children}
     </div>
   );
@@ -43,7 +43,7 @@ function Section({ title, children }: { title: string; children: string }) {
   return (
     <div>
       <SectionTitle>{title}</SectionTitle>
-      <p className="mt-1.5 text-pretty text-[13.5px] leading-normal text-ink-body">
+      <p className="mt-1.5 text-pretty text-[15px] leading-normal text-ink-body">
         {children}
       </p>
     </div>
@@ -87,7 +87,7 @@ export default function PatientInfoModal({
         <div className="flex shrink-0 items-start gap-4 px-7 pb-5 pt-[26px]">
           <PatientAvatar
             name={patient.name}
-            className="h-14 w-14 bg-brand-soft text-[18px] font-semibold text-brand"
+            className="h-14 w-14 bg-brand-soft text-[19.5px] font-semibold text-brand"
           />
           <div className="min-w-0 flex-1">
             <div className="text-pretty text-xl font-semibold tracking-[-.01em] text-ink">
@@ -96,12 +96,12 @@ export default function PatientInfoModal({
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
               {age && (
                 <>
-                  <span className="text-[13.5px] text-ink-subtle">{age}</span>
-                  <span className="text-[13.5px] text-line-strong">·</span>
+                  <span className="text-[15px] text-ink-subtle">{age}</span>
+                  <span className="text-[15px] text-line-strong">·</span>
                 </>
               )}
               <span
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-[11px] py-1 text-[11.5px] font-semibold ${difficulty.pill}`}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-[11px] py-1 text-[13px] font-semibold ${difficulty.pill}`}
               >
                 <span
                   className={`inline-block h-1.5 w-1.5 rounded-full ${difficulty.dot}`}
@@ -140,12 +140,12 @@ export default function PatientInfoModal({
               но здесь анамнез виден целиком: ради этого окно и открывают */}
           <div>
             {reason && (
-              <div className="text-pretty text-[19px] font-semibold leading-[1.35] text-ink">
+              <div className="text-pretty text-[20.5px] font-semibold leading-[1.35] text-ink">
                 {reason}
               </div>
             )}
             <p
-              className={`text-pretty text-[14.5px] leading-[1.65] text-ink-label ${
+              className={`text-pretty text-[16px] leading-[1.65] text-ink-label ${
                 reason ? "mt-3" : ""
               }`}
             >
@@ -168,7 +168,7 @@ export default function PatientInfoModal({
                 {patient.objections.map((objection) => (
                   <div key={objection} className="flex items-start gap-2.5">
                     <span className="mt-[7px] inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-danger-strong" />
-                    <span className="text-pretty text-[13.5px] leading-normal text-ink-body">
+                    <span className="text-pretty text-[15px] leading-normal text-ink-body">
                       {objection}
                     </span>
                   </div>
@@ -185,7 +185,7 @@ export default function PatientInfoModal({
 
           {patient.approach && (
             <div className="rounded-xl border border-line-accent bg-surface-accent px-4 py-3.5">
-              <div className="flex items-center gap-[7px] font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+              <div className="flex items-center gap-[7px] font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
                 <svg
                   width="14"
                   height="14"
@@ -216,7 +216,7 @@ export default function PatientInfoModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-input border border-line-strong bg-surface-card px-5 py-[11px] text-[14.5px] font-medium text-ink transition-colors hover:border-brand hover:text-brand-hover"
+            className="rounded-input border border-line-strong bg-surface-card px-5 py-[11px] text-[16px] font-medium text-ink transition-colors hover:border-brand hover:text-brand-hover"
           >
             Закрыть
           </button>
@@ -231,7 +231,7 @@ export default function PatientInfoModal({
                   ? undefined
                   : "Для этого пациента ещё не готов промпт"
               }
-              className={`flex items-center gap-2 rounded-input px-[22px] py-[11px] text-[15px] font-semibold text-white transition-colors ${
+              className={`flex items-center gap-2 rounded-input px-[22px] py-[11px] text-[16.5px] font-semibold text-white transition-colors ${
                 patient.isActive
                   ? "bg-brand hover:bg-brand-hover"
                   : "cursor-not-allowed bg-disabled"

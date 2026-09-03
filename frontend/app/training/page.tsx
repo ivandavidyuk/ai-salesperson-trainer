@@ -91,7 +91,7 @@ function SectionTitle({
     <div
       className={`mb-3 flex gap-2.5 ${actions ? "items-center" : "items-baseline"}`}
     >
-      <div className="font-mono text-[11px] uppercase tracking-[.12em] text-brand-hover">
+      <div className="font-mono text-[12.5px] uppercase tracking-[.12em] text-brand-hover">
         {children}
       </div>
       <div className="h-px flex-1 bg-line" />
@@ -121,7 +121,7 @@ function StageCarousel({ title, count, children }: { title: string; count: numbe
       <SectionTitle
         actions={
           <>
-            <span className="shrink-0 whitespace-nowrap font-mono text-[11px] text-ink-placeholder">
+            <span className="shrink-0 whitespace-nowrap font-mono text-[12.5px] text-ink-placeholder">
               {count} этапов · листайте
             </span>
             <CarouselArrow direction="prev" onClick={() => scrollBy(-1)} />
@@ -178,7 +178,7 @@ function CarouselArrow({
 
 function SoonBadge() {
   return (
-    <span className="rounded-full bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-subtle">
+    <span className="rounded-full bg-surface px-2 py-0.5 text-[12px] font-semibold text-ink-subtle">
       скоро
     </span>
   );
@@ -218,7 +218,7 @@ export default function TrainingPage() {
   return (
     <AppShell title="Тренировка">
       <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px]">
-        <div className="mb-1.5 text-[21px] font-semibold tracking-[-.01em] text-ink">
+        <div className="mb-1.5 text-[22.5px] font-semibold tracking-[-.01em] text-ink">
           Выберите формат
         </div>
         <p className="mb-6 text-sm text-ink-muted">
@@ -313,8 +313,8 @@ function FullCard({ type, onStart }: CardProps) {
       </span>
 
       <div className="min-w-0 flex-1">
-        <div className="text-[21px] font-bold">{type.title}</div>
-        <p className="mt-1.5 max-w-[560px] text-pretty text-[14.5px] leading-normal text-white/[.86]">
+        <div className="text-[22.5px] font-bold">{type.title}</div>
+        <p className="mt-1.5 max-w-[560px] text-pretty text-[16px] leading-normal text-white/[.86]">
           {type.description}
         </p>
         <div className="mt-3.5 flex flex-wrap gap-2">
@@ -333,7 +333,7 @@ function FullCard({ type, onStart }: CardProps) {
         type="button"
         onClick={onStart}
         disabled={blocked}
-        className={`flex shrink-0 items-center gap-2 rounded-xl px-[30px] py-3.5 text-[15px] font-bold transition-colors ${
+        className={`flex shrink-0 items-center gap-2 rounded-xl px-[30px] py-3.5 text-[16.5px] font-bold transition-colors ${
           blocked
             ? "cursor-not-allowed bg-white/40 text-white/80"
             : "bg-white text-brand-hover hover:bg-brand-panel-meta"
@@ -369,17 +369,17 @@ function StageCard({
         </span>
         <div className="flex items-center gap-2">
           {blocked && <SoonBadge />}
-          <span className="font-mono text-[13px] font-medium text-ink-placeholder">
+          <span className="font-mono text-[14.5px] font-medium text-ink-placeholder">
             {String(number).padStart(2, "0")}
           </span>
         </div>
       </div>
 
-      <div className="mt-4 text-pretty text-[15.5px] font-semibold leading-tight text-ink">
+      <div className="mt-4 text-pretty text-[17px] font-semibold leading-tight text-ink">
         {type.title}
       </div>
       {/* flex-1 выравнивает кнопки по низу при описаниях разной длины */}
-      <p className="mt-1.5 flex-1 text-pretty text-[13px] leading-normal text-ink-muted">
+      <p className="mt-1.5 flex-1 text-pretty text-[14.5px] leading-normal text-ink-muted">
         {type.description}
       </p>
 
@@ -387,7 +387,7 @@ function StageCard({
         type="button"
         onClick={onStart}
         disabled={blocked}
-        className={`mt-[18px] flex items-center justify-center gap-2 rounded-input py-[11px] text-[14.5px] font-semibold text-white transition-colors ${
+        className={`mt-[18px] flex items-center justify-center gap-2 rounded-input py-[11px] text-[16px] font-semibold text-white transition-colors ${
           blocked
             ? "cursor-not-allowed bg-disabled"
             : "bg-brand hover:bg-brand-hover"
@@ -420,10 +420,10 @@ function SpecialCard({ type, onStart }: CardProps) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <div className="text-[17px] font-semibold text-ink">{type.title}</div>
+          <div className="text-[18.5px] font-semibold text-ink">{type.title}</div>
           {blocked && <SoonBadge />}
         </div>
-        <p className="mt-1 max-w-[620px] text-pretty text-[13.5px] leading-normal text-ink-muted">
+        <p className="mt-1 max-w-[620px] text-pretty text-[15px] leading-normal text-ink-muted">
           {type.description}
         </p>
       </div>
@@ -432,7 +432,7 @@ function SpecialCard({ type, onStart }: CardProps) {
         type="button"
         onClick={onStart}
         disabled={blocked}
-        className={`flex shrink-0 items-center gap-2 rounded-input px-7 py-[13px] text-[15px] font-semibold text-white transition-colors ${
+        className={`flex shrink-0 items-center gap-2 rounded-input px-7 py-[13px] text-[16.5px] font-semibold text-white transition-colors ${
           blocked
             ? "cursor-not-allowed bg-disabled"
             : "bg-brand hover:bg-brand-hover"

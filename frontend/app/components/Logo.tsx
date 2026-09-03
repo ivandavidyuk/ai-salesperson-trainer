@@ -11,9 +11,9 @@ interface LogoProps {
 
 // Размеры из макетов: у каждого экрана свой масштаб логотипа
 const SIZES = {
-  sm: { word: "text-[18px]", pill: "text-[12px] rounded-[4px] px-[5px] py-[2px] -top-0.5" },
-  md: { word: "text-[22px]", pill: "text-[15px] rounded-[5px] px-1.5 py-[3px] -top-0.5" },
-  lg: { word: "text-[30px]", pill: "text-[19px] rounded-md px-2 py-[3px] -top-[3px]" },
+  sm: { word: "text-[19.5px]", pill: "text-[13.5px] rounded-[4px] px-[5px] py-[2px] -top-0.5" },
+  md: { word: "text-[23.5px]", pill: "text-[16.5px] rounded-[5px] px-1.5 py-[3px] -top-0.5" },
+  lg: { word: "text-[31px]", pill: "text-[20.5px] rounded-md px-2 py-[3px] -top-[3px]" },
 } as const;
 
 export default function Logo({

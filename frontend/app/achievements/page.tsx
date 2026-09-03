@@ -112,10 +112,10 @@ export default function AchievementsPage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-[26px] font-bold text-ink">
+                    <span className="text-[27px] font-bold text-ink">
                       {data.unlocked}
                     </span>
-                    <span className="text-[15px] text-ink-subtle">
+                    <span className="text-[16.5px] text-ink-subtle">
                       из {data.total}{" "}
                       {plural(data.total, "достижения", "достижений", "достижений")}{" "}
                       получено
@@ -138,7 +138,7 @@ export default function AchievementsPage() {
                       key={item.key}
                       type="button"
                       onClick={() => setFilter(item.key)}
-                      className={`inline-flex items-center whitespace-nowrap rounded-full border px-[15px] py-2 text-[13px] font-semibold transition-colors ${
+                      className={`inline-flex items-center whitespace-nowrap rounded-full border px-[15px] py-2 text-[14.5px] font-semibold transition-colors ${
                         active
                           ? "border-brand bg-brand text-white"
                           : "border-line-strong bg-surface-card text-ink-muted hover:border-brand-soft"
@@ -221,7 +221,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
       </div>
 
       <div
-        className={`mt-3 text-pretty text-[14.5px] font-semibold leading-tight ${
+        className={`mt-3 text-pretty text-[16px] font-semibold leading-tight ${
           unlocked ? "text-ink" : "text-ink-subtle"
         }`}
       >
@@ -229,7 +229,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
       </div>
       {/* flex-1 держит строку статуса у нижнего края при разной длине описаний */}
       <div
-        className={`mt-1 flex-1 text-pretty text-[12.5px] leading-normal ${
+        className={`mt-1 flex-1 text-pretty text-[14px] leading-normal ${
           unlocked ? "text-ink-muted" : "text-locked-text"
         }`}
       >
@@ -237,7 +237,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
       </div>
 
       <div
-        className={`mt-3 flex items-center gap-1.5 text-[11.5px] font-semibold ${
+        className={`mt-3 flex items-center gap-1.5 text-[13px] font-semibold ${
           unlocked ? tone.status : "text-locked-icon"
         }`}
       >

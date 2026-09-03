@@ -60,7 +60,7 @@ export default function ConversationRow({
         </div>
       </div>
 
-      <div className="shrink-0 font-mono text-[12.5px] text-ink-muted">
+      <div className="shrink-0 font-mono text-[14px] text-ink-muted">
         {formatDuration(conversation.durationSec)}
       </div>
 

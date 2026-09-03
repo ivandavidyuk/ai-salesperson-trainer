@@ -95,21 +95,21 @@ function StatCard({
     >
       <div
         className={`font-mono leading-[1.1] ${
-          accent ? "text-2xl text-brand-score" : "text-[26px] text-ink"
+          accent ? "text-2xl text-brand-score" : "text-[27px] text-ink"
         }`}
       >
         {value}
         {/* Приписку прячем у прочерка: «— / 10» читается как поломка */}
         {suffix && value !== "—" && (
           <span
-            className={accent ? "text-[15px] text-brand-score-muted" : "text-sm text-ink-muted"}
+            className={accent ? "text-[16.5px] text-brand-score-muted" : "text-sm text-ink-muted"}
           >
             {suffix}
           </span>
         )}
       </div>
       <div
-        className={`mt-[3px] whitespace-nowrap text-[11.5px] ${
+        className={`mt-[3px] whitespace-nowrap text-[13px] ${
           accent ? "text-brand-score-label" : "text-ink-muted"
         }`}
       >
@@ -196,7 +196,7 @@ export default function HomePage() {
               только боковые поля, колонки не расползаются */}
           <div className="mx-auto w-full max-w-[1760px] shrink-0 px-10 pb-1 pt-[26px]">
             <div className="mb-[22px]">
-              <div className="text-[28px] font-bold tracking-[-.02em] text-ink">
+              <div className="text-[29px] font-bold tracking-[-.02em] text-ink">
                 {greeting()}, {data.user.firstName} 👋
               </div>
               {/* Должность из профиля, а не подпись «менеджер по продажам»
@@ -213,10 +213,10 @@ export default function HomePage() {
               {/* Запуск тренировки */}
               <div className="flex min-h-[150px] flex-col justify-between rounded-card bg-brand px-6 py-[22px] text-white">
                 <div>
-                  <div className="text-[19px] font-semibold tracking-[-.01em]">
+                  <div className="text-[20.5px] font-semibold tracking-[-.01em]">
                     Готовы начать подход?
                   </div>
-                  <div className="mt-[7px] text-[13.5px] leading-normal text-brand-panel-text">
+                  <div className="mt-[7px] text-[15px] leading-normal text-brand-panel-text">
                     Нажмите кнопку «Начать тренировку», а затем выберите тип
                     тренировки и пациента.
                   </div>
@@ -224,7 +224,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => setSetupOpen(true)}
-                  className="mt-[18px] inline-flex max-w-[260px] items-center justify-center gap-2.5 self-start rounded-input bg-white px-[22px] py-3 text-[14.5px] font-semibold text-brand-hover transition-colors hover:bg-brand-panel-meta"
+                  className="mt-[18px] inline-flex max-w-[260px] items-center justify-center gap-2.5 self-start rounded-input bg-white px-[22px] py-3 text-[16px] font-semibold text-brand-hover transition-colors hover:bg-brand-panel-meta"
                 >
                   <span className="inline-block h-2 w-2 rounded-full bg-brand" />
                   Начать тренировку
@@ -275,7 +275,7 @@ export default function HomePage() {
                   <button
                     type="button"
                     onClick={() => setAllOpen(true)}
-                    className="text-[13.5px] font-medium text-brand transition-colors hover:text-brand-hover"
+                    className="text-[15px] font-medium text-brand transition-colors hover:text-brand-hover"
                   >
                     Все →
                   </button>
@@ -295,7 +295,7 @@ export default function HomePage() {
                     <div className="mt-2 text-base font-semibold text-ink">
                       Первый разговор впереди
                     </div>
-                    <p className="mt-1.5 max-w-[420px] text-[13.5px] leading-normal text-ink-muted">
+                    <p className="mt-1.5 max-w-[420px] text-[15px] leading-normal text-ink-muted">
                       Проведите живой голосовой разговор с ИИ-клиентом. Он
                       появится здесь вместе с расшифровкой, а позже — с разбором.
                     </p>

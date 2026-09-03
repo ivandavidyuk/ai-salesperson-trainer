@@ -33,13 +33,13 @@ export default function StubPage({ title, description }: StubPageProps) {
         </div>
 
         <h1 className="mt-4 text-xl font-semibold text-ink">{title}</h1>
-        <p className="mt-2 max-w-[440px] text-[13.5px] leading-normal text-ink-muted">
+        <p className="mt-2 max-w-[440px] text-[15px] leading-normal text-ink-muted">
           {description}
         </p>
 
         <Link
           href="/"
-          className="mt-6 rounded-input border border-line-strong bg-surface-card px-5 py-[11px] text-[15px] font-semibold text-ink transition-colors hover:bg-surface"
+          className="mt-6 rounded-input border border-line-strong bg-surface-card px-5 py-[11px] text-[16.5px] font-semibold text-ink transition-colors hover:bg-surface"
         >
           Вернуться на главную
         </Link>

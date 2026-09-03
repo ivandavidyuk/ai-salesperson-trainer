@@ -164,13 +164,13 @@ export default function TranscriptPage() {
             variant="secondary"
             disabled
             title="Скоро"
-            className="px-4 py-2 text-[13.5px]"
+            className="px-4 py-2 text-[15px]"
           >
             Скачать
           </Button>
           <Button
             onClick={() => router.push(repeatHref)}
-            className="px-4 py-2 text-[13.5px]"
+            className="px-4 py-2 text-[15px]"
           >
             Ещё разговор
           </Button>
@@ -193,7 +193,7 @@ export default function TranscriptPage() {
         <div className="flex w-full min-h-0 max-w-[1760px] flex-1 self-center">
           <div className="min-h-0 flex-[1.7] overflow-y-auto border-r border-line px-9 py-8">
             <div className="mb-6 text-center">
-              <span className="rounded-full bg-surface-bubble px-3 py-1 font-mono text-[11px] tracking-wide text-ink-placeholder">
+              <span className="rounded-full bg-surface-bubble px-3 py-1 font-mono text-[12.5px] tracking-wide text-ink-placeholder">
                 НАЧАЛО · 00:00
               </span>
             </div>
@@ -219,10 +219,10 @@ export default function TranscriptPage() {
                 <div key={index}>
                   {показДо && (
                     <div className="mx-auto mb-5 max-w-[520px] rounded-xl border border-line bg-surface px-[18px] py-4">
-                      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
+                      <div className="mb-1.5 text-[12.5px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
                         Менеджеру показан результат диагностики
                       </div>
-                      <div className="whitespace-pre-line font-mono text-[12.5px] leading-relaxed text-ink-label">
+                      <div className="whitespace-pre-line font-mono text-[14px] leading-relaxed text-ink-label">
                         {data.session.diagnosticsResult}
                       </div>
                     </div>
@@ -247,10 +247,10 @@ export default function TranscriptPage() {
                 data.messages[data.messages.length - 1].createdAt <
                   data.session.diagnosticsShownAt) && (
                 <div className="mx-auto max-w-[520px] rounded-xl border border-line bg-surface px-[18px] py-4">
-                  <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
+                  <div className="mb-1.5 text-[12.5px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
                     Менеджеру показан результат диагностики
                   </div>
-                  <div className="whitespace-pre-line font-mono text-[12.5px] leading-relaxed text-ink-label">
+                  <div className="whitespace-pre-line font-mono text-[14px] leading-relaxed text-ink-label">
                     {data.session.diagnosticsResult}
                   </div>
                 </div>

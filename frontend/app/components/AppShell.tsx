@@ -368,14 +368,14 @@ export default function AppShell({ title, children }: AppShellProps) {
                 {/* В свёрнутом меню счётчик висит на иконке, в развёрнутом
                     уходит вправо — места для подписи там уже хватает */}
                 {badge !== null && !navOpen && (
-                  <span className="absolute -right-[5px] -top-1 inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-full border-[length:1.5px] border-surface-card bg-brand px-[3px] text-[9px] font-bold text-white">
+                  <span className="absolute -right-[5px] -top-1 inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-full border-[length:1.5px] border-surface-card bg-brand px-[3px] text-[10.5px] font-bold text-white">
                     {badge}
                   </span>
                 )}
               </span>
               {navOpen && <span className="whitespace-nowrap">{item.label}</span>}
               {badge !== null && navOpen && (
-                <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-bold text-white">
+                <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1.5 text-[12.5px] font-bold text-white">
                   {badge}
                 </span>
               )}
@@ -392,7 +392,7 @@ export default function AppShell({ title, children }: AppShellProps) {
               <Logo size="sm" />
             </Link>
             <span className="h-5 w-px bg-line" aria-hidden="true" />
-            <div className="text-[15px] font-semibold text-ink">{title}</div>
+            <div className="text-[16.5px] font-semibold text-ink">{title}</div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -400,7 +400,7 @@ export default function AppShell({ title, children }: AppShellProps) {
                 плашка объясняет, почему страница выглядит иначе.
                 Стоит рядом с именем: это признак смотрящего, а не страницы */}
             {user?.role === "head" && (
-              <span className="rounded-full bg-brand-soft px-2.5 py-[3px] text-[10.5px] font-bold uppercase tracking-[.06em] text-brand-hover">
+              <span className="rounded-full bg-brand-soft px-2.5 py-[3px] text-[12px] font-bold uppercase tracking-[.06em] text-brand-hover">
                 Руководитель
               </span>
             )}
@@ -411,7 +411,7 @@ export default function AppShell({ title, children }: AppShellProps) {
                 onClick={() => setUserMenuOpen((open) => !open)}
                 className="flex items-center gap-2.5 rounded-input py-[5px] pl-1.5 pr-2.5 transition-colors hover:bg-surface-bubble"
               >
-                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
+                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[14.5px] font-semibold text-brand">
                   {user?.avatarUpdatedAt ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img

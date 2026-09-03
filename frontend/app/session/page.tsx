@@ -614,7 +614,7 @@ function SessionScreen() {
         {inCall && <Timer seconds={seconds} paused={screenState === "paused"} size="lg" />}
 
         {screenState === "completing" && (
-          <span className="font-mono text-[15px] text-ink-subtle">
+          <span className="font-mono text-[16.5px] text-ink-subtle">
             {String(Math.floor(seconds / 60)).padStart(2, "0")}:
             {String(seconds % 60).padStart(2, "0")}
           </span>
@@ -626,7 +626,7 @@ function SessionScreen() {
         {screenState === "idle" && (
           <>
             <CallAvatar name={patient?.name ?? null} state="idle" />
-            <div className="mt-[18px] text-[22px] font-semibold text-ink">
+            <div className="mt-[18px] text-[23.5px] font-semibold text-ink">
               {patient?.name ?? "Пациент"}
             </div>
             {patient?.description && (
@@ -649,7 +649,7 @@ function SessionScreen() {
                 прокручивается даже средний анамнез (медиана 929 знаков) */}
             {patient?.anamnesis && (
               <div className="mt-[22px] flex max-h-[50vh] w-full max-w-[440px] flex-col rounded-xl border border-line bg-surface px-[18px] py-4">
-                <div className="mb-1.5 shrink-0 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
+                <div className="mb-1.5 shrink-0 text-[12.5px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
                   Анамнез
                 </div>
                 <div className="min-h-0 overflow-y-auto text-sm leading-normal text-ink-label">
@@ -669,7 +669,7 @@ function SessionScreen() {
               <span className="inline-block h-2 w-2 rounded-full bg-white" />
               Начать тренировку
             </button>
-            <p className="mt-3 text-[12.5px] text-ink-placeholder">
+            <p className="mt-3 text-[14px] text-ink-placeholder">
               Понадобится доступ к микрофону
             </p>
           </>
@@ -678,10 +678,10 @@ function SessionScreen() {
         {/* --- Проверка звука: отдельный шаг между карточкой и разговором --- */}
         {screenState === "check" && (
           <>
-            <div className="text-[21px] font-semibold text-ink">
+            <div className="text-[22.5px] font-semibold text-ink">
               Проверим, что вас слышно
             </div>
-            <p className="mt-2 max-w-[420px] text-pretty text-center text-[14.5px] leading-normal text-ink-muted">
+            <p className="mt-2 max-w-[420px] text-pretty text-center text-[16px] leading-normal text-ink-muted">
               Скажите вслух пару слов. Полоса должна перешагивать засечку —
               тогда разговор пойдёт как надо.
             </p>
@@ -699,7 +699,7 @@ function SessionScreen() {
                 onRefresh={() => void refreshDevices()}
               />
               {micError && (
-                <p className="mt-3 text-[12.5px] leading-normal text-danger-text">
+                <p className="mt-3 text-[14px] leading-normal text-danger-text">
                   {micError.text}
                 </p>
               )}
@@ -732,7 +732,7 @@ function SessionScreen() {
               </button>
             </div>
 
-            <p className="mt-3 text-[12px] text-ink-placeholder">
+            <p className="mt-3 text-[13.5px] text-ink-placeholder">
               Выбор устройств запомним для следующих разговоров
             </p>
           </>
@@ -743,16 +743,16 @@ function SessionScreen() {
           <>
             <div className="relative flex h-[120px] w-[120px] items-center justify-center">
               <span className="absolute inset-0 animate-spin rounded-full border-[3px] border-brand-soft border-t-brand" />
-              <div className="flex h-[104px] w-[104px] items-center justify-center rounded-full bg-brand-soft text-[34px] font-semibold text-brand opacity-70">
+              <div className="flex h-[104px] w-[104px] items-center justify-center rounded-full bg-brand-soft text-[35px] font-semibold text-brand opacity-70">
                 {patient?.name ? patient.name.slice(0, 1) : "—"}
               </div>
             </div>
             <div className="mt-5 text-xl font-semibold text-ink">Подключаемся…</div>
             <div className="mt-5 flex w-full max-w-[440px] items-start gap-3 rounded-xl border border-[#BCD8D3] bg-brand-soft px-4 py-3.5">
-              <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-brand text-[13px] text-white">
+              <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-brand text-[14.5px] text-white">
                 🎙
               </span>
-              <div className="text-[13.5px] leading-snug text-brand-hover">
+              <div className="text-[15px] leading-snug text-brand-hover">
                 Разрешите доступ к микрофону в окне браузера, чтобы начать
                 разговор.
               </div>
@@ -774,7 +774,7 @@ function SessionScreen() {
                     : "listening"
               }
             />
-            <div className="mt-[30px] text-[30px] font-semibold text-ink">
+            <div className="mt-[30px] text-[31px] font-semibold text-ink">
               {patient?.name ?? "Пациент"}
             </div>
             <div className="mt-3">
@@ -799,7 +799,7 @@ function SessionScreen() {
                     ? "Микрофон не даёт сигнала"
                     : "Вас плохо слышно"}
                 </div>
-                <p className="mt-1 text-[13px] leading-normal text-ink-body">
+                <p className="mt-1 text-[14.5px] leading-normal text-ink-body">
                   {micAlert === "no-signal"
                     ? "Похоже, выбрано не то устройство: звука нет совсем. Переключите микрофон — разговор не прервётся."
                     : "Звук есть, но слишком тихий для распознавания. Говорите громче, придвиньтесь к микрофону или прибавьте его громкость в настройках системы."}
@@ -835,10 +835,10 @@ function SessionScreen() {
                 остаётся до конца разговора */}
             {diagnostics && (
               <div className="mt-6 w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-4">
-                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
+                <div className="mb-1.5 text-[12.5px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
                   Результат диагностики
                 </div>
-                <div className="whitespace-pre-line font-mono text-[12.5px] leading-relaxed text-ink-label">
+                <div className="whitespace-pre-line font-mono text-[14px] leading-relaxed text-ink-label">
                   {diagnostics}
                 </div>
               </div>
@@ -903,18 +903,18 @@ function SessionScreen() {
             его подключить, и шаги про замок только сбили бы с толку */}
         {screenState === "micError" && micError && (
           <>
-            <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-danger-border bg-danger-surface text-[40px] text-danger">
+            <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-danger-border bg-danger-surface text-[41px] text-danger">
               🎙
             </div>
-            <div className="mt-[18px] text-[21px] font-semibold text-ink">
+            <div className="mt-[18px] text-[22.5px] font-semibold text-ink">
               {micError.title}
             </div>
-            <p className="mt-2 max-w-[420px] text-pretty text-center text-[14.5px] leading-normal text-ink-muted">
+            <p className="mt-2 max-w-[420px] text-pretty text-center text-[16px] leading-normal text-ink-muted">
               {micError.text}
             </p>
 
             {micError.steps.length > 0 && (
-              <ol className="mt-5 w-full max-w-[440px] list-inside list-decimal rounded-xl border border-line bg-surface px-4 py-3.5 text-[13px] leading-relaxed text-ink-label">
+              <ol className="mt-5 w-full max-w-[440px] list-inside list-decimal rounded-xl border border-line bg-surface px-4 py-3.5 text-[14.5px] leading-relaxed text-ink-label">
                 {micError.steps.map((step) => (
                   <li key={step}>{step}</li>
                 ))}
@@ -926,7 +926,7 @@ function SessionScreen() {
                 type="button"
                 onClick={handleStart}
                 disabled={busy}
-                className="rounded-input bg-brand px-7 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
+                className="rounded-input bg-brand px-7 py-3 text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
               >
                 {micError.retryLabel}
               </button>
@@ -934,7 +934,7 @@ function SessionScreen() {
                 <button
                   type="button"
                   onClick={() => void refreshDevices()}
-                  className="rounded-input border border-line-strong bg-surface-card px-5 py-3 text-[15px] font-semibold text-ink transition-colors hover:bg-surface"
+                  className="rounded-input border border-line-strong bg-surface-card px-5 py-3 text-[16.5px] font-semibold text-ink transition-colors hover:bg-surface"
                 >
                   Обновить список
                 </button>
@@ -942,7 +942,7 @@ function SessionScreen() {
             </div>
 
             {micError.note && (
-              <p className="mt-3 max-w-[420px] text-center text-[12.5px] leading-snug text-ink-placeholder">
+              <p className="mt-3 max-w-[420px] text-center text-[14px] leading-snug text-ink-placeholder">
                 {micError.note}
               </p>
             )}
@@ -956,10 +956,10 @@ function SessionScreen() {
               <span className="absolute inset-0 animate-spin rounded-full border-[3px] border-brand-soft border-t-brand" />
               <span className="text-3xl text-brand">✓</span>
             </div>
-            <div className="mt-[22px] text-[21px] font-semibold text-ink">
+            <div className="mt-[22px] text-[22.5px] font-semibold text-ink">
               Разговор завершён
             </div>
-            <div className="mt-1.5 text-[14.5px] text-ink-muted">
+            <div className="mt-1.5 text-[16px] text-ink-muted">
               Готовим расшифровку…
             </div>
           </>

@@ -23,8 +23,8 @@ const variantClasses: Record<Variant, string> = {
 // Размеры: md — кнопки экранов, lg — крупная кнопка формы входа
 // (у lg свой радиус: на входе весь масштаб крупнее)
 const sizeClasses: Record<Size, string> = {
-  md: "rounded-input px-5 py-[11px] text-[15px]",
-  lg: "rounded-input-lg px-5 py-4 text-[17px]",
+  md: "rounded-input px-5 py-[11px] text-[16.5px]",
+  lg: "rounded-input-lg px-5 py-4 text-[18.5px]",
 };
 
 export default function Button({

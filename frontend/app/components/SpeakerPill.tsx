@@ -12,7 +12,7 @@ interface SpeakerPillProps {
 
 export default function SpeakerPill({ state, size = "md" }: SpeakerPillProps) {
   const pad = size === "lg" ? "px-[18px] py-2" : "px-3.5 py-1.5";
-  const text = size === "lg" ? "text-[15px]" : "text-sm";
+  const text = size === "lg" ? "text-[16.5px]" : "text-sm";
 
   if (state === "paused") {
     return (

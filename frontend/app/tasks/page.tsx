@@ -51,7 +51,7 @@ export default function TasksPage() {
       <div className="mx-auto w-full max-w-[980px] px-10 pb-11 pt-[26px]">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink">
+            <h1 className="text-[22.5px] font-semibold tracking-[-.01em] text-ink">
               {isHead ? "Выставленные задания" : "От вашего руководителя"}
             </h1>
             <p className="mt-1 text-sm text-ink-muted">
@@ -72,7 +72,7 @@ export default function TasksPage() {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-brand px-[22px] py-3 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover"
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-brand px-[22px] py-3 text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
             >
               <svg
                 width="18"
@@ -104,10 +104,10 @@ export default function TasksPage() {
 
         {assignments && count === 0 && (
           <div className="rounded-[14px] border border-line bg-surface-card px-6 py-14 text-center">
-            <div className="text-[15px] font-semibold text-ink">
+            <div className="text-[16.5px] font-semibold text-ink">
               Заданий пока нет
             </div>
-            <p className="mx-auto mt-2 max-w-[420px] text-[13.5px] leading-normal text-ink-muted">
+            <p className="mx-auto mt-2 max-w-[420px] text-[15px] leading-normal text-ink-muted">
               {isHead
                 ? "Нажмите «Создать», чтобы назначить менеджеру тренировку."
                 : "Когда руководитель назначит тренировку, она появится здесь. А пока можно начать разговор самостоятельно с главной."}
@@ -190,7 +190,7 @@ function AssignmentCard({
               у обычного — встаёт рядом с заголовком (как в макете) */}
           {assignment.isPriority && (
             <div className="mb-2.5 flex flex-wrap items-center gap-2.5">
-              <span className="rounded-full bg-danger-soft px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[.06em] text-danger-strong">
+              <span className="rounded-full bg-danger-soft px-2.5 py-1 text-[12px] font-bold uppercase tracking-[.06em] text-danger-strong">
                 Приоритет
               </span>
               {due && (
@@ -202,7 +202,7 @@ function AssignmentCard({
           )}
 
           <div className="flex items-baseline justify-between gap-3">
-            <div className="text-[16.5px] font-semibold text-ink">
+            <div className="text-[18px] font-semibold text-ink">
               {assignment.title}
             </div>
             {!assignment.isPriority && due && (
@@ -241,14 +241,14 @@ function AssignmentCard({
                 <path d="M9 6l6 6-6 6" />
               </svg>
             </button>
-            <span className="rounded-full bg-brand-soft px-[11px] py-1 text-[13px] font-semibold text-brand-hover">
+            <span className="rounded-full bg-brand-soft px-[11px] py-1 text-[14.5px] font-semibold text-brand-hover">
               {assignment.trainingType.title}
             </span>
 
             {/* Кому назначено — только у руководителя, у менеджера это он сам */}
             {isHead && assignment.assignee && (
               <span className="ml-auto inline-flex items-center gap-2.5 rounded-full border border-line-accent bg-surface-accent py-[5px] pl-1.5 pr-3.5">
-                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[11.5px] font-semibold text-brand">
+                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
                   {assignment.assignee.avatarUpdatedAt ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -261,10 +261,10 @@ function AssignmentCard({
                   )}
                 </span>
                 <span className="flex flex-col leading-[1.15]">
-                  <span className="font-mono text-[8.5px] uppercase tracking-[.12em] text-brand-score-label">
+                  <span className="font-mono text-[10px] uppercase tracking-[.12em] text-brand-score-label">
                     Кому
                   </span>
-                  <span className="text-[13.5px] font-semibold text-brand-hover">
+                  <span className="text-[15px] font-semibold text-brand-hover">
                     {assignment.assignee.name}
                   </span>
                 </span>
@@ -274,12 +274,12 @@ function AssignmentCard({
 
           <div className="mt-3.5 rounded-[10px] bg-surface px-3.5 py-3">
             <div className="flex items-center gap-[7px] text-xs text-ink-subtle">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[9px] font-semibold text-brand">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[10.5px] font-semibold text-brand">
                 {initials(assignment.author)}
               </span>
               {assignment.author} · Руководитель
             </div>
-            <p className="mt-[7px] text-pretty text-[13.5px] leading-normal text-ink-body">
+            <p className="mt-[7px] text-pretty text-[15px] leading-normal text-ink-body">
               {assignment.comment}
             </p>
           </div>

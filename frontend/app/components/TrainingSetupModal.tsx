@@ -100,7 +100,7 @@ function Radio({ selected, disabled }: { selected: boolean; disabled: boolean })
 
 function SoonBadge() {
   return (
-    <span className="ml-auto shrink-0 rounded-full bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-subtle">
+    <span className="ml-auto shrink-0 rounded-full bg-surface px-2 py-0.5 text-[12px] font-semibold text-ink-subtle">
       скоро
     </span>
   );
@@ -111,7 +111,7 @@ function GroupTitle({ children, tone }: { children: string; tone?: "warn" }) {
   return (
     <div className="mb-3 flex items-baseline gap-2.5">
       <div
-        className={`font-mono text-[11px] uppercase tracking-[.12em] ${
+        className={`font-mono text-[12.5px] uppercase tracking-[.12em] ${
           tone === "warn" ? "text-warn" : "text-brand-hover"
         }`}
       >
@@ -128,7 +128,7 @@ function DifficultyPill({ difficulty }: { difficulty: DifficultyKey }) {
     // Без точки: заливка плашки сама несёт цвет сложности. Точки остались
     // только в фильтрах, где кнопки белые и цвету взяться неоткуда.
     <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-[3px] text-[10.5px] font-semibold ${tone.pill}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-[3px] text-[12px] font-semibold ${tone.pill}`}
     >
       {tone.label}
     </span>
@@ -400,10 +400,10 @@ export default function TrainingSetupModal({
       >
         <Radio selected={selected} disabled={disabled} />
         <span className="min-w-0">
-          <span className="block text-[14.5px] font-semibold text-ink">
+          <span className="block text-[16px] font-semibold text-ink">
             {type.title}
           </span>
-          <span className="mt-0.5 block text-pretty text-[12.5px] text-ink-muted">
+          <span className="mt-0.5 block text-pretty text-[14px] text-ink-muted">
             {type.description}
           </span>
         </span>
@@ -443,10 +443,10 @@ export default function TrainingSetupModal({
         <div className="shrink-0 bg-surface-card px-6 pt-5">
           <div className="flex items-start gap-3.5">
             <div className="min-w-0 flex-1">
-              <div className="text-[19px] font-semibold tracking-[-.01em] text-ink">
+              <div className="text-[20.5px] font-semibold tracking-[-.01em] text-ink">
                 Настройка тренировки
               </div>
-              <div className="mt-[3px] text-pretty text-[13.5px] text-ink-muted">
+              <div className="mt-[3px] text-pretty text-[15px] text-ink-muted">
                 {assignment
                   ? `Задание: ${assignment.title}`
                   : `Шаг ${step + 1} из ${steps.length} · ${STEP_META[currentStep].hint}`}
@@ -476,7 +476,7 @@ export default function TrainingSetupModal({
                   className={`flex items-center ${last ? "flex-none" : "min-w-0 flex-1"}`}
                 >
                   <span
-                    className={`inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full font-mono text-[12.5px] font-bold ${
+                    className={`inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full font-mono text-[14px] font-bold ${
                       done || active
                         ? "bg-brand text-white"
                         : "border-[length:1.5px] border-line-strong bg-surface-card text-ink-placeholder"
@@ -485,7 +485,7 @@ export default function TrainingSetupModal({
                     {done ? "✓" : index + 1}
                   </span>
                   <span
-                    className={`ml-2.5 whitespace-nowrap text-[13px] ${
+                    className={`ml-2.5 whitespace-nowrap text-[14.5px] ${
                       active
                         ? "font-semibold text-ink"
                         : done
@@ -584,10 +584,10 @@ export default function TrainingSetupModal({
                           )}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block text-[14.5px] font-semibold text-ink">
+                          <span className="block text-[16px] font-semibold text-ink">
                             {manager.name}
                           </span>
-                          <span className="mt-px block text-[12.5px] text-ink-subtle">
+                          <span className="mt-px block text-[14px] text-ink-subtle">
                             {manager.jobTitle}
                           </span>
                         </span>
@@ -677,7 +677,7 @@ export default function TrainingSetupModal({
                       key={item.key}
                       type="button"
                       onClick={() => setFilter(item.key)}
-                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[14px] font-semibold transition-colors ${
                         active
                           ? "border-brand bg-brand text-white"
                           : "border-line-strong bg-surface-card text-ink-muted hover:border-brand-soft"
@@ -740,11 +740,11 @@ export default function TrainingSetupModal({
                           lazy
                         />
                         <span className="min-w-0 text-left">
-                          <span className="block whitespace-nowrap text-[14.5px] font-semibold text-ink">
+                          <span className="block whitespace-nowrap text-[16px] font-semibold text-ink">
                             {patient.name}
                           </span>
                           {patient.description && (
-                            <span className="block truncate text-[12px] text-ink-subtle">
+                            <span className="block truncate text-[13.5px] text-ink-subtle">
                               {patient.description}
                             </span>
                           )}
@@ -775,10 +775,10 @@ export default function TrainingSetupModal({
 
               {patients && visiblePatients.length === 0 && (
                 <div className="px-5 py-9 text-center">
-                  <div className="text-[15px] font-semibold text-ink-muted">
+                  <div className="text-[16.5px] font-semibold text-ink-muted">
                     Ничего не найдено
                   </div>
-                  <div className="mt-1.5 text-[13px] text-ink-subtle">
+                  <div className="mt-1.5 text-[14.5px] text-ink-subtle">
                     Измените запрос или сбросьте фильтр.
                   </div>
                 </div>
@@ -801,7 +801,7 @@ export default function TrainingSetupModal({
           {currentStep === "review" && selectedType && selectedPatient && (
             <>
               <div>
-                <div className="mb-2.5 font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+                <div className="mb-2.5 font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
                   Тип тренировки
                 </div>
                 <div className="flex items-center gap-3 rounded-xl border-[length:1.5px] border-line-accent bg-surface-accent px-4 py-[15px]">
@@ -820,21 +820,21 @@ export default function TrainingSetupModal({
                     </svg>
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-semibold text-ink">
+                    <span className="block text-[16.5px] font-semibold text-ink">
                       {selectedType.title}
                     </span>
-                    <span className="mt-0.5 block text-[13px] text-ink-muted">
+                    <span className="mt-0.5 block text-[14.5px] text-ink-muted">
                       {selectedType.description}
                     </span>
                   </span>
-                  <span className="shrink-0 whitespace-nowrap rounded-full border border-line-accent bg-surface-card px-2.5 py-1 text-[10.5px] font-semibold text-brand-hover">
+                  <span className="shrink-0 whitespace-nowrap rounded-full border border-line-accent bg-surface-card px-2.5 py-1 text-[12px] font-semibold text-brand-hover">
                     {GROUP_SHORT[selectedType.group]}
                   </span>
                 </div>
               </div>
 
               <div>
-                <div className="mb-2.5 font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+                <div className="mb-2.5 font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
                   Пациент
                 </div>
                 <div className="rounded-xl border-[length:1.5px] border-line-accent bg-surface-accent px-4 py-[15px]">
@@ -847,14 +847,14 @@ export default function TrainingSetupModal({
                     >
                       <PatientAvatar
                         name={selectedPatient.name}
-                        className="h-[52px] w-[52px] bg-brand-soft text-[17px] font-semibold text-brand"
+                        className="h-[52px] w-[52px] bg-brand-soft text-[18.5px] font-semibold text-brand"
                       />
                       <span className="min-w-0 text-left">
                         <span className="block whitespace-nowrap text-base font-semibold text-ink">
                           {selectedPatient.name}
                         </span>
                         {selectedPatient.description && (
-                          <span className="block text-[12.5px] text-ink-subtle">
+                          <span className="block text-[14px] text-ink-subtle">
                             {selectedPatient.description}
                           </span>
                         )}
@@ -878,7 +878,7 @@ export default function TrainingSetupModal({
                     </span>
                   </div>
                   {selectedPatient.anamnesis && (
-                    <p className="mt-3 text-pretty text-[13px] leading-normal text-ink-body">
+                    <p className="mt-3 text-pretty text-[14.5px] leading-normal text-ink-body">
                       {selectedPatient.anamnesis}
                     </p>
                   )}
@@ -887,17 +887,17 @@ export default function TrainingSetupModal({
 
               {assignment && (
                 <div>
-                  <div className="mb-2.5 font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+                  <div className="mb-2.5 font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
                     Комментарий руководителя
                   </div>
                   <div className="rounded-xl border border-line bg-surface-card px-4 py-3.5">
                     <div className="flex items-center gap-[7px] text-xs text-ink-subtle">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[9px] font-semibold text-brand">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[10.5px] font-semibold text-brand">
                         {initials(assignment.author)}
                       </span>
                       {assignment.author} · Руководитель
                     </div>
-                    <p className="mt-[7px] text-pretty text-[13.5px] leading-normal text-ink-body">
+                    <p className="mt-[7px] text-pretty text-[15px] leading-normal text-ink-body">
                       {assignment.comment}
                     </p>
                   </div>
@@ -907,11 +907,11 @@ export default function TrainingSetupModal({
               {createMode && selectedManager && (
                 <>
                   <div>
-                    <div className="mb-2.5 font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+                    <div className="mb-2.5 font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
                       Кому назначено
                     </div>
                     <div className="flex items-center gap-3 rounded-xl border border-line bg-surface-card px-4 py-3.5">
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[15px] font-semibold text-brand">
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[16.5px] font-semibold text-brand">
                         {selectedManager.avatarUpdatedAt ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -924,15 +924,15 @@ export default function TrainingSetupModal({
                         )}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[15px] font-semibold text-ink">
+                        <span className="block text-[16.5px] font-semibold text-ink">
                           {selectedManager.name}
                         </span>
-                        <span className="mt-px block text-[12.5px] text-ink-subtle">
+                        <span className="mt-px block text-[14px] text-ink-subtle">
                           {selectedManager.jobTitle}
                         </span>
                       </span>
                       {isPriority && (
-                        <span className="shrink-0 rounded-full bg-danger-soft px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[.06em] text-danger-strong">
+                        <span className="shrink-0 rounded-full bg-danger-soft px-2.5 py-1 text-[12px] font-bold uppercase tracking-[.06em] text-danger-strong">
                           Приоритет
                         </span>
                       )}
@@ -940,12 +940,12 @@ export default function TrainingSetupModal({
                   </div>
 
                   <div>
-                    <div className="mb-2.5 font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+                    <div className="mb-2.5 font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
                       Задание
                     </div>
                     <div className="rounded-xl border border-line bg-surface-card px-4 py-3.5">
                       <div className="flex items-baseline justify-between gap-3">
-                        <div className="text-[15px] font-semibold text-ink">
+                        <div className="text-[16.5px] font-semibold text-ink">
                           {title.trim()}
                         </div>
                         {dueAt && (
@@ -954,7 +954,7 @@ export default function TrainingSetupModal({
                           </span>
                         )}
                       </div>
-                      <p className="mt-[7px] text-pretty text-[13.5px] leading-normal text-ink-body">
+                      <p className="mt-[7px] text-pretty text-[15px] leading-normal text-ink-body">
                         {comment.trim() || "Без комментария"}
                       </p>
                     </div>
@@ -998,7 +998,7 @@ export default function TrainingSetupModal({
                 type="button"
                 onClick={handleRandom}
                 title="Выбрать случайно и перейти к обзору"
-                className="inline-flex items-center gap-2 rounded-input border border-line-accent bg-surface-card px-[18px] py-3 text-[14.5px] font-semibold text-brand-hover transition-colors hover:bg-surface-accent"
+                className="inline-flex items-center gap-2 rounded-input border border-line-accent bg-surface-card px-[18px] py-3 text-[16px] font-semibold text-brand-hover transition-colors hover:bg-surface-accent"
               >
                 <svg
                   width="16"
@@ -1026,7 +1026,7 @@ export default function TrainingSetupModal({
                 type="button"
                 disabled={!canNext}
                 onClick={() => setStep(step + 1)}
-                className={`rounded-input px-[26px] py-3 text-[15px] font-semibold text-white transition-colors ${
+                className={`rounded-input px-[26px] py-3 text-[16.5px] font-semibold text-white transition-colors ${
                   canNext
                     ? "bg-brand hover:bg-brand-hover"
                     : "cursor-not-allowed bg-disabled"
@@ -1039,7 +1039,7 @@ export default function TrainingSetupModal({
                 type="button"
                 onClick={handleCreate}
                 disabled={starting || !selectedManager || !selectedType || !selectedPatient}
-                className="inline-flex items-center gap-2 rounded-input bg-brand px-[26px] py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
+                className="inline-flex items-center gap-2 rounded-input bg-brand px-[26px] py-[13px] text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
               >
                 {starting ? (
                   <Spinner />
@@ -1065,7 +1065,7 @@ export default function TrainingSetupModal({
                 type="button"
                 onClick={handleStart}
                 disabled={starting}
-                className="inline-flex items-center gap-2.5 rounded-input bg-brand px-[26px] py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
+                className="inline-flex items-center gap-2.5 rounded-input bg-brand px-[26px] py-[13px] text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
               >
                 {starting ? (
                   <Spinner />

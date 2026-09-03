@@ -12,7 +12,7 @@ interface TimerProps {
 
 export default function Timer({ seconds, paused = false, size = "md" }: TimerProps) {
   const scale =
-    size === "lg" ? "px-4 py-[7px] text-base" : "px-[13px] py-[5px] text-[15px]";
+    size === "lg" ? "px-4 py-[7px] text-base" : "px-[13px] py-[5px] text-[16.5px]";
 
   return (
     <div

@@ -69,11 +69,11 @@ export default function PatientsPage() {
     <AppShell title="Пациенты">
       <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px]">
         <div className="mb-1.5 flex items-baseline justify-between gap-4">
-          <h1 className="text-[21px] font-semibold tracking-[-.01em] text-ink">
+          <h1 className="text-[22.5px] font-semibold tracking-[-.01em] text-ink">
             Библиотека пациентов
           </h1>
           {patients && (
-            <div className="shrink-0 text-[13px] text-ink-subtle">
+            <div className="shrink-0 text-[14.5px] text-ink-subtle">
               {visible.length}{" "}
               {plural(visible.length, "пациент", "пациента", "пациентов")}
             </div>
@@ -106,7 +106,7 @@ export default function PatientsPage() {
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Поиск по имени или анамнезу"
               aria-label="Поиск пациента"
-              className="min-w-0 flex-1 bg-transparent text-[14.5px] text-ink outline-none placeholder:text-ink-placeholder"
+              className="min-w-0 flex-1 bg-transparent text-[16px] text-ink outline-none placeholder:text-ink-placeholder"
             />
           </div>
 
@@ -119,7 +119,7 @@ export default function PatientsPage() {
                   key={item.key}
                   type="button"
                   onClick={() => setFilter(item.key)}
-                  className={`inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border px-[15px] py-2 text-[13px] font-semibold transition-colors ${
+                  className={`inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border px-[15px] py-2 text-[14.5px] font-semibold transition-colors ${
                     active
                       ? "border-brand bg-brand text-white"
                       : "border-line-strong bg-surface-card text-ink-muted hover:border-brand-soft"
@@ -222,7 +222,7 @@ function Identity({ patient }: { patient: PatientCardProps["patient"] }) {
     <div className="flex items-center gap-[13px]">
       <PatientAvatar
         name={patient.name}
-        className="h-[52px] w-[52px] bg-brand-soft text-[17px] font-semibold text-brand"
+        className="h-[52px] w-[52px] bg-brand-soft text-[18.5px] font-semibold text-brand"
         lazy
       />
       <div className="min-w-0 flex-1">
@@ -232,12 +232,12 @@ function Identity({ patient }: { patient: PatientCardProps["patient"] }) {
         <div className="mt-[5px] flex flex-wrap items-center gap-[7px]">
           {age && (
             <>
-              <span className="text-[13px] text-ink-subtle">{age}</span>
-              <span className="text-[13px] text-line-strong">·</span>
+              <span className="text-[14.5px] text-ink-subtle">{age}</span>
+              <span className="text-[14.5px] text-line-strong">·</span>
             </>
           )}
           <span
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${difficulty.pill}`}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-semibold ${difficulty.pill}`}
           >
             <span
               className={`inline-block h-1.5 w-1.5 rounded-full ${difficulty.dot}`}
@@ -283,11 +283,11 @@ function PatientCard({
           flex-1 выравнивает кнопки по низу, даже если тексты разной длины */}
       <div className="mt-[15px] flex-1">
         {reason && (
-          <div className="text-pretty text-[15px] font-semibold leading-[1.35] text-ink">
+          <div className="text-pretty text-[16.5px] font-semibold leading-[1.35] text-ink">
             {reason}
           </div>
         )}
-        <p className="mt-[7px] line-clamp-4 text-pretty text-[13px] leading-normal text-ink-muted">
+        <p className="mt-[7px] line-clamp-4 text-pretty text-[14.5px] leading-normal text-ink-muted">
           {patient.anamnesis || "Анамнез пока не заполнен."}
         </p>
       </div>
@@ -331,7 +331,7 @@ function PatientCard({
           title={blocked ? "Для этого пациента ещё не готов промпт" : undefined}
           // Шире «Подробнее» в 1,3 раза: равные по виду кнопки заставляли бы
           // выбирать, а читать необязательно — тренироваться цель
-          className={`flex flex-[1.3] items-center justify-center gap-2 rounded-input px-2 py-3 text-[15px] font-semibold text-white transition-colors ${
+          className={`flex flex-[1.3] items-center justify-center gap-2 rounded-input px-2 py-3 text-[16.5px] font-semibold text-white transition-colors ${
             blocked
               ? "cursor-not-allowed bg-disabled"
               : "bg-brand hover:bg-brand-hover"

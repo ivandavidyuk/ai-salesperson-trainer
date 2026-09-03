@@ -91,22 +91,22 @@ export function HoursCard() {
     <div className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-[15.5px] font-semibold text-ink">Часы разговоров</div>
-          <p className="mt-1 max-w-[430px] text-[13px] leading-normal text-ink-muted">
+          <div className="text-[17px] font-semibold text-ink">Часы разговоров</div>
+          <p className="mt-1 max-w-[430px] text-[14.5px] leading-normal text-ink-muted">
             Час считается от старта разговора до его завершения — вместе
             с паузами и молчанием.
           </p>
         </div>
-        <span className="shrink-0 whitespace-nowrap rounded-full bg-brand-soft px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[.06em] text-brand-hover">
+        <span className="shrink-0 whitespace-nowrap rounded-full bg-brand-soft px-2.5 py-1 text-[12px] font-bold uppercase tracking-[.06em] text-brand-hover">
           Тариф · {лимитЧасов} ч в месяц
         </span>
       </div>
 
       <div className="mt-5 flex items-end gap-3">
-        <span className={`font-mono text-[38px] leading-none ${числоЦвет}`}>
+        <span className={`font-mono text-[39px] leading-none ${числоЦвет}`}>
           {вид === "out" ? "0 ч" : formatHours(hours.leftSec)}
         </span>
-        <span className="pb-1 text-[13px] text-ink-muted">
+        <span className="pb-1 text-[14.5px] text-ink-muted">
           {вид === "out" ? "новые разговоры не начинаются" : "осталось в этом месяце"}
         </span>
       </div>
@@ -117,7 +117,7 @@ export function HoursCard() {
           style={{ width: `${Math.max(0, Math.min(100, процент))}%` }}
         />
       </div>
-      <div className="mt-2 flex justify-between gap-3 font-mono text-[11.5px] text-ink-muted">
+      <div className="mt-2 flex justify-between gap-3 font-mono text-[13px] text-ink-muted">
         <span>
           потрачено {formatHours(hours.usedSec)} из {лимитЧасов} ч
         </span>
@@ -125,13 +125,13 @@ export function HoursCard() {
       </div>
 
       {вид === "low" && (
-        <div className="mt-4 rounded-[11px] border border-warn-border bg-warn-surface px-3.5 py-3 text-[13px] leading-normal text-warn">
+        <div className="mt-4 rounded-[11px] border border-warn-border bg-warn-surface px-3.5 py-3 text-[14.5px] leading-normal text-warn">
           Часы на исходе. Когда они кончатся, новые разговоры перестанут
           начинаться у всего отдела — до {обновится}.
         </div>
       )}
       {вид === "out" && (
-        <div className="mt-4 rounded-[11px] border border-danger-border bg-danger-surface px-3.5 py-3 text-[13px] leading-normal text-danger-text">
+        <div className="mt-4 rounded-[11px] border border-danger-border bg-danger-surface px-3.5 py-3 text-[14.5px] leading-normal text-danger-text">
           Часы кончились. Начатый разговор доигрывается до конца, новый уже
           не начнётся. {обновится} лимит обновится — снова {лимитЧасов} ч.
         </div>

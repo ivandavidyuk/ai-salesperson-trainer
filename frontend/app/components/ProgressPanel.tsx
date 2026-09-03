@@ -28,7 +28,7 @@ function Delta({ delta }: { delta: number | null }) {
     <span className="flex h-[18px] items-center">
       {visible && (
         <span
-          className={`rounded-full px-[7px] py-0.5 text-[10.5px] font-semibold ${
+          className={`rounded-full px-[7px] py-0.5 text-[12px] font-semibold ${
             up ? "bg-good-surface text-good" : "bg-danger-soft text-danger-strong"
           }`}
         >
@@ -69,7 +69,7 @@ export default function ProgressPanel({
             за поломку статистики — у него было 18 разговоров, просто все
             старше недели. Текст обязан называть окно, иначе он врёт. */}
         {!hasData && (
-          <p className="text-[13.5px] leading-normal text-ink-muted">
+          <p className="text-[15px] leading-normal text-ink-muted">
             За последние семь дней разговоров нет. Проведите тренировку —
             оценки по этапам появятся здесь после разбора.
           </p>
@@ -78,10 +78,10 @@ export default function ProgressPanel({
         {hasData && (
           <>
             <div className="mb-3.5 flex items-baseline justify-between">
-              <span className="font-mono text-[10.5px] uppercase tracking-[.12em] text-brand-hover">
+              <span className="font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
                 Оценка по этапам
               </span>
-              <span className="font-mono text-[10.5px] text-ink-placeholder">
+              <span className="font-mono text-[12px] text-ink-placeholder">
                 0 – 10
               </span>
             </div>
@@ -101,12 +101,12 @@ export default function ProgressPanel({
             <div className="flex shrink-0 flex-col gap-2.5">
               {metrics.map((metric, index) => (
                 <div key={metric.key} className="flex items-center gap-[11px]">
-                  <span className="w-[13px] shrink-0 text-right font-mono text-[11px] text-ink-placeholder">
+                  <span className="w-[13px] shrink-0 text-right font-mono text-[12.5px] text-ink-placeholder">
                     {index + 1}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="mb-[5px] flex items-baseline gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium tracking-[-.005em] text-ink-body">
+                      <span className="min-w-0 flex-1 truncate text-[14px] font-medium tracking-[-.005em] text-ink-body">
                         {metric.label}
                       </span>
                       <span
@@ -155,16 +155,16 @@ export default function ProgressPanel({
                 читаются как итог недели. Тогда конкретная формулировка
                 («перебили, когда она заговорила про мужа») выглядит
                 непонятной, хотя она точная */}
-            <div className="mb-2 font-mono text-[10.5px] uppercase tracking-[.12em] text-ink-placeholder">
+            <div className="mb-2 font-mono text-[12px] uppercase tracking-[.12em] text-ink-placeholder">
               По последнему разговору
             </div>
 
             {strength && (
               <div className="mb-2">
-                <span className="rounded-full bg-good-surface px-2.5 py-[3px] text-[10.5px] font-semibold uppercase tracking-[.08em] text-good">
+                <span className="rounded-full bg-good-surface px-2.5 py-[3px] text-[12px] font-semibold uppercase tracking-[.08em] text-good">
                   Сильная сторона
                 </span>
-                <p className="mt-1.5 text-pretty text-[13.5px] leading-snug text-ink-body">
+                <p className="mt-1.5 text-pretty text-[15px] leading-snug text-ink-body">
                   {strength}
                 </p>
               </div>
@@ -172,10 +172,10 @@ export default function ProgressPanel({
 
             {growthPoint && (
               <div>
-                <span className="rounded-full bg-warn-surface px-2.5 py-[3px] text-[10.5px] font-semibold uppercase tracking-[.08em] text-warn">
+                <span className="rounded-full bg-warn-surface px-2.5 py-[3px] text-[12px] font-semibold uppercase tracking-[.08em] text-warn">
                   Точка роста
                 </span>
-                <p className="mt-1.5 text-pretty text-[13.5px] leading-snug text-ink-body">
+                <p className="mt-1.5 text-pretty text-[15px] leading-snug text-ink-body">
                   {growthPoint}
                 </p>
               </div>

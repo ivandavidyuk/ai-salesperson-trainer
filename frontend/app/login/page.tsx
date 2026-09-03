@@ -61,7 +61,7 @@ export default function LoginPage() {
 
         {/* Ограничиваем длину строк, чтобы текст не растягивался на всю панель */}
         <div>
-          <p className="max-w-[620px] text-[46px] font-semibold leading-[1.18] tracking-[-0.01em]">
+          <p className="max-w-[620px] text-[47px] font-semibold leading-[1.18] tracking-[-0.01em]">
             Тренируйте живой разговор с клиентом до звонка настоящему.
           </p>
           <p className="mt-6 max-w-[540px] text-lg leading-relaxed text-brand-panel-text">
@@ -70,7 +70,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <p className="font-mono text-[13px] tracking-[0.04em] text-brand-panel-meta">
+        <p className="font-mono text-[14.5px] tracking-[0.04em] text-brand-panel-meta">
           Инструмент обучения · внутренний доступ
         </p>
       </aside>
@@ -81,7 +81,7 @@ export default function LoginPage() {
           {/* Пока панель скрыта на узких экранах — показываем логотип здесь */}
           <Logo className="mb-8 md:hidden" />
 
-          <h1 className="text-[32px] font-semibold tracking-[-0.01em] text-ink">
+          <h1 className="text-[33px] font-semibold tracking-[-0.01em] text-ink">
             Вход в аккаунт
           </h1>
           <p className="mt-2 text-base text-ink-muted">
@@ -122,13 +122,13 @@ export default function LoginPage() {
           {/* Восстановления пароля пока нет — ссылка-заглушка, как в макете */}
           <div className="mt-2.5 flex justify-end">
             {loading ? (
-              <span className="text-[13.5px] text-ink-placeholder">
+              <span className="text-[15px] text-ink-placeholder">
                 Забыли пароль?
               </span>
             ) : (
               <a
                 href="#"
-                className="text-[13.5px] text-brand hover:text-brand-hover"
+                className="text-[15px] text-brand hover:text-brand-hover"
               >
                 Забыли пароль?
               </a>
