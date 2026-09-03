@@ -9,7 +9,9 @@ import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
   name: "Оксана Викторовна",
-  difficulty: PatientDifficulty.hard,
+  // Одно препятствие: распознать манипуляцию жалостью и не поддаться.
+  // Свекровь и сестра — отговорки, рассрочку берёт.
+  difficulty: PatientDifficulty.mid,
   // Голос заменён 25.08: прежний Lea Wander звучал старше её тридцати
   // восьми. Ariana — эмоциональная, под нервную скороговорку
   voice: "xyu8HSCv1JYrhLx4m8UG",

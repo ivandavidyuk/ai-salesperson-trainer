@@ -11,7 +11,9 @@ import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
   name: "Елена Андреевна",
-  difficulty: PatientDifficulty.mid,
+  // Препятствий к сделке нет: муж — ложное возражение, деньги есть,
+  // тайны нет. Премиум-подача — навык менеджера, а не препятствие.
+  difficulty: PatientDifficulty.easy,
   // Голос подобран 24.08 под возраст и манеру персонажа: Elen Kuragina
   voice: "TPIitICAZ8CqlGZ81AKm",
   personality: {

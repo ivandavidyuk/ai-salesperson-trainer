@@ -9,7 +9,9 @@ import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
   name: "Егор Алексеевич",
-  difficulty: PatientDifficulty.hard,
+  // Одно препятствие: денег немного, без рассрочки не закрыть,
+  // а рассрочку он считает ловушкой. Жена — ложный путь, решает сам.
+  difficulty: PatientDifficulty.mid,
   personality: {
     // Личность переписана 28.08 по методичке против карикатурности
     // (NOTES «Как писать персонажей»): «никому не доверяешь» и «смотришь
