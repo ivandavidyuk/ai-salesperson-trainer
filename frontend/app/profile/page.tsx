@@ -19,8 +19,8 @@ interface Profile {
   email: string;
   firstName: string;
   lastName: string;
-  // Роль решает, показывать ли карточку клиники: отрасль и прайс —
-  // данные организации, менеджеру их менять нечего
+  // Роль решает, можно ли править карточку клиники: отрасль и прайс —
+  // данные организации, менеджер их только читает
   role: "manager" | "head";
   jobTitle: string | null;
   clinic: string | null;
@@ -36,6 +36,9 @@ interface ServiceRow {
 interface DiagnosisRow {
   name: string;
   complaint: string;
+  /** Сколько пациентов с этим диагнозом. Приходит с сервера, в форме
+      не редактируется; у новой, ещё не сохранённой строки нет */
+  patients?: number;
 }
 
 interface Organization {
@@ -110,11 +113,18 @@ export default function ProfilePage() {
             <AvatarCard profile={profile} onChange={setProfile} />
 
             <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto pr-1.5">
-              {profile.role === "head" && (
+              {/* Менеджеру — та же карточка, что у руководителя, на том же
+                  месте, но без правки: услуги и цены ему нужны в разговоре.
+                  До 03.09 он их не видел вовсе и на пресете чужой клиники
+                  называл цены из головы — два сорванных разговора на живом
+                  тесте только из-за этого */}
+              {profile.role === "head" ? (
                 <>
                   <ClinicForm />
                   <HoursCard />
                 </>
+              ) : (
+                <ClinicForm readOnly />
               )}
               <PersonalForm profile={profile} onChange={setProfile} />
               {profile.role === "head" && <ResetStatsCard />}
@@ -583,7 +593,7 @@ function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
 // Карточка клиники: отрасль и услуги. По ним собирается слой «случай»
 // у пациентов, поэтому от качества этих данных зависит, во что играет
 // тренажёр — карточка стоит первой в колонке.
-function ClinicForm() {
+function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState<Organization | null>(null);
   const [name, setName] = useState("");
@@ -760,6 +770,16 @@ function ClinicForm() {
   const done = saved && saved.casesTotal > 0 && saved.casesReady >= saved.casesTotal;
   const partial = saved && saved.casesTotal > 0 && saved.casesReady < saved.casesTotal;
   const demo = Boolean(saved?.isDemo);
+  // Пустые строки списков и кнопки правки — только тому, кто правит
+  const editable = !readOnly;
+  // Диагнозы, которым не достался ни один пациент. Судим по самим случаям,
+  // а не по casesTotal: у клиники, посаженной на пресет копированием,
+  // счётчик сборки ноль, а пациенты есть. До первой сборки нулём у всех
+  // сказать нечего — тогда пометки нет ни у кого
+  const случаиЕсть = diagnoses.some((d) => (d.patients ?? 0) > 0);
+  const безПациентов = случаиЕсть
+    ? diagnoses.filter((d) => d.patients === 0).length
+    : 0;
 
   return (
     <>
@@ -803,47 +823,69 @@ function ClinicForm() {
             <div>
               <div className="text-[15.5px] font-semibold text-ink">Клиника и услуги</div>
               <p className="mt-1 max-w-[520px] text-[13px] leading-normal text-ink-muted">
-                По этому описанию тренажёр собирает пациентов: с чем они приходят,
-                что спрашивают и о чём торгуются.
+                {editable
+                  ? "По этому описанию тренажёр собирает пациентов: с чем они приходят, что спрашивают и о чём торгуются."
+                  : "Услуги, цены и диагнозы клиники — то, с чем приходят пациенты и что вы им предлагаете. Задаёт руководитель."}
               </p>
             </div>
-            <span className="shrink-0 whitespace-nowrap rounded-full bg-brand-soft px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[.06em] text-brand-hover">
-              Только руководитель
-            </span>
+            {editable && (
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-brand-soft px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[.06em] text-brand-hover">
+                Только руководитель
+              </span>
+            )}
           </div>
 
           {/* Город узкой колонкой: в него влезает «Нижний Новгород», а тянуть
               его в половину строки незачем — размер диктует содержимое */}
-          <div className="mt-[18px] grid grid-cols-[1fr_232px] items-start gap-x-4 gap-y-3.5">
-            <div>
-              <FieldLabel>Название клиники</FieldLabel>
-              <TextInput
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Как называется клиника"
-              />
+          {editable ? (
+            <div className="mt-[18px] grid grid-cols-[1fr_232px] items-start gap-x-4 gap-y-3.5">
+              <div>
+                <FieldLabel>Название клиники</FieldLabel>
+                <TextInput
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Как называется клиника"
+                />
+              </div>
+              <div>
+                <FieldLabel>Город</FieldLabel>
+                <TextInput
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Например: Казань"
+                />
+              </div>
+              <div className="col-span-2">
+                <FieldLabel>Специализация клиники</FieldLabel>
+                <TextInput
+                  value={industry}
+                  onChange={(e) => setIndustry(e.target.value)}
+                  placeholder="Например: стоматология — терапия и имплантация"
+                />
+                <p className="mt-1.5 text-[11.5px] leading-snug text-ink-muted">
+                  Укажите точную отрасль вашей компании. От этого зависит качество
+                  генерации карточек пациентов
+                </p>
+              </div>
             </div>
-            <div>
-              <FieldLabel>Город</FieldLabel>
-              <TextInput
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="Например: Казань"
-              />
+          ) : (
+            /* Те же три поля, но текстом: поле ввода без права ввода
+               читается как поломка, а не как правило */
+            <div className="mt-[18px] grid grid-cols-[1fr_232px] items-start gap-x-4 gap-y-3.5">
+              <div>
+                <FieldLabel>Название клиники</FieldLabel>
+                <div className="text-[14.5px] text-ink">{name || "—"}</div>
+              </div>
+              <div>
+                <FieldLabel>Город</FieldLabel>
+                <div className="text-[14.5px] text-ink">{city || "—"}</div>
+              </div>
+              <div className="col-span-2">
+                <FieldLabel>Специализация клиники</FieldLabel>
+                <div className="text-[14.5px] text-ink">{industry || "—"}</div>
+              </div>
             </div>
-            <div className="col-span-2">
-              <FieldLabel>Специализация клиники</FieldLabel>
-              <TextInput
-                value={industry}
-                onChange={(e) => setIndustry(e.target.value)}
-                placeholder="Например: стоматология — терапия и имплантация"
-              />
-              <p className="mt-1.5 text-[11.5px] leading-snug text-ink-muted">
-                Укажите точную отрасль вашей компании. От этого зависит качество
-                генерации карточек пациентов
-              </p>
-            </div>
-          </div>
+          )}
 
           <div className="mt-5">
             <FieldLabel>Услуги</FieldLabel>
@@ -872,20 +914,23 @@ function ClinicForm() {
                     Пока ни одной услуги
                   </div>
                   <div className="mt-0.5 text-[12.5px] leading-snug text-ink-muted">
-                    Добавьте услуги, которые оказывает ваша клиника. Это напрямую
-                    влияет на карточки пациентов
+                    {editable
+                      ? "Добавьте услуги, которые оказывает ваша клиника. Это напрямую влияет на карточки пациентов"
+                      : "Руководитель ещё не заполнил прайс клиники"}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setServices([{ name: "", price: "", description: "" }]);
-                    setModalOpen(true);
-                  }}
-                  className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
-                >
-                  Добавить первую услугу
-                </button>
+                {editable && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setServices([{ name: "", price: "", description: "" }]);
+                      setModalOpen(true);
+                    }}
+                    className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
+                  >
+                    Добавить первую услугу
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -900,6 +945,16 @@ function ClinicForm() {
                 <div className="min-w-0 flex-1">
                   <div className="text-[14.5px] font-semibold text-ink">
                     {pluralDiagnoses(diagnoses.length)}
+                    {/* Диагноз без пациентов — молчаливый брак прайса: его
+                        нечем лечить, и генератор такие пары отбраковывает.
+                        Руководителю об этом говорим здесь, менеджеру не за чем */}
+                    {editable && безПациентов > 0 && (
+                      <span className="ml-2 text-[12.5px] font-medium text-warn">
+                        {безПациентов === 1
+                          ? "1 без пациентов"
+                          : `${безПациентов} без пациентов`}
+                      </span>
+                    )}
                   </div>
                   <div className="mt-0.5 truncate text-[12.5px] text-ink-muted">
                     {diagnoses.map((d) => d.name || "Без названия").join(" · ")}
@@ -920,20 +975,23 @@ function ClinicForm() {
                     Пока ни одного диагноза
                   </div>
                   <div className="mt-0.5 text-[12.5px] leading-snug text-ink-muted">
-                    Диагноз и жалоба, с которой с ним приходят. Без этого диагнозы
-                    придумывает модель — и придумывает одинаковые
+                    {editable
+                      ? "Диагноз и жалоба, с которой с ним приходят. Без этого диагнозы придумывает модель — и придумывает одинаковые"
+                      : "Руководитель ещё не заполнил диагнозы клиники"}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDiagnoses([{ name: "", complaint: "" }]);
-                    setDiagsOpen(true);
-                  }}
-                  className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
-                >
-                  Добавить первый диагноз
-                </button>
+                {editable && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiagnoses([{ name: "", complaint: "" }]);
+                      setDiagsOpen(true);
+                    }}
+                    className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
+                  >
+                    Добавить первый диагноз
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -944,7 +1002,15 @@ function ClinicForm() {
               пересборка случаев — сотня вызовов модели, и запускать её
               нажатием из демо нельзя. Кнопку не гасим, а убираем вовсе:
               серая кнопка выглядит поломкой, а не правилом */}
-          {demo ? (
+          {!editable ? (
+            <div className="mt-5 border-t border-line-soft pt-[18px]">
+              <p className="max-w-[560px] text-[12.5px] leading-normal text-ink-muted">
+                Услуги, цены и диагнозы задаёт руководитель. Здесь их можно
+                посмотреть перед разговором — цены лучше называть по прайсу,
+                а не по памяти.
+              </p>
+            </div>
+          ) : demo ? (
             <div className="mt-5 border-t border-line-soft pt-[18px]">
               <p className="max-w-[560px] text-[12.5px] leading-normal text-ink-muted">
                 Клиника и пациенты в демо уже настроены под вашу специализацию —
@@ -978,7 +1044,7 @@ function ClinicForm() {
               добавленная услуга не делает ни один случай неверным, значит
               выборочная пересборка её не заметит, и пациенты под новую
               услугу не появятся сами никогда */}
-          {!demo && saved && !progress && (
+          {editable && !demo && saved && !progress && (
             <p className="mt-3 text-[12px] leading-normal text-ink-muted">
               Добавили услугу или диагноз и хотите, чтобы пациенты приходили
               и с ними?{" "}
@@ -1013,7 +1079,7 @@ function ClinicForm() {
           services={services}
           onChange={setServices}
           onClose={() => setModalOpen(false)}
-          readOnly={demo}
+          readOnly={demo || !editable}
         />
       )}
       {diagsOpen && (
@@ -1021,7 +1087,8 @@ function ClinicForm() {
           diagnoses={diagnoses}
           onChange={setDiagnoses}
           onClose={() => setDiagsOpen(false)}
-          readOnly={demo}
+          readOnly={demo || !editable}
+          showCoverage={editable && случаиЕсть}
         />
       )}
       {progress && <RebuildModal progress={progress} industry={industry} onGiveUp={stopWaiting} />}
@@ -1081,8 +1148,9 @@ function ServicesModal({
           <div className="min-w-0 flex-1">
             <div className="text-[18px] font-semibold text-ink">Услуги клиники</div>
             <p className="mt-1 text-[13px] leading-normal text-ink-muted">
-              Добавьте услуги, которые оказывает ваша клиника. Это напрямую влияет
-              на карточки пациентов
+              {readOnly
+                ? "Что клиника предлагает и сколько это стоит — так и называйте в разговоре."
+                : "Добавьте услуги, которые оказывает ваша клиника. Это напрямую влияет на карточки пациентов"}
             </p>
           </div>
           <button
@@ -1185,7 +1253,9 @@ function ServicesModal({
             </div>
           ) : (
             <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-ink-muted">
-              Изменения попадут в тренажёр после «Сохранить» в профиле.
+              {readOnly
+                ? "Цены — как в прайсе клиники. Называйте их по списку, а не по памяти."
+                : "Изменения попадут в тренажёр после «Сохранить» в профиле."}
             </p>
           )}
           <Button
@@ -1209,12 +1279,15 @@ function DiagnosesModal({
   onChange,
   onClose,
   readOnly = false,
+  showCoverage = false,
 }: {
   diagnoses: DiagnosisRow[];
   onChange: (rows: DiagnosisRow[]) => void;
   onClose: () => void;
-  /** Демо: список показываем, но правки бессмысленны — сохранить их некуда */
+  /** Демо и менеджер: список показываем, правки бессмысленны */
   readOnly?: boolean;
+  /** Руководителю после сборки: подсветить диагнозы без единого пациента */
+  showCoverage?: boolean;
 }) {
   const [removed, setRemoved] = useState<{ row: DiagnosisRow; at: number } | null>(null);
 
@@ -1253,34 +1326,48 @@ function DiagnosesModal({
           {diagnoses.map((row, index) => (
             <div
               key={index}
-              className="group flex shrink-0 items-start gap-2.5 rounded-xl border border-line-soft p-3 transition-colors hover:border-line-strong"
+              className="group shrink-0 rounded-xl border border-line-soft p-3 transition-colors hover:border-line-strong"
             >
-              <input
-                value={row.name}
-                onChange={(e) => update(index, { name: e.target.value })}
-                      readOnly={readOnly}
-                placeholder="Например: хронический пульпит"
-                className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[14px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
-              />
-              <input
-                value={row.complaint}
-                onChange={(e) => update(index, { complaint: e.target.value })}
-                      readOnly={readOnly}
-                placeholder="Как это звучит от пациента"
-                className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[13.5px] text-ink-body outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
-              />
-              {!readOnly && (
-                <button
-                  type="button"
-                  title="Удалить диагноз"
-                  onClick={() => {
-                    setRemoved({ row, at: index });
-                    onChange(diagnoses.filter((_, i) => i !== index));
-                  }}
-                  className="h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
-                >
-                  ✕
-                </button>
+              <div className="flex items-start gap-2.5">
+                <input
+                  value={row.name}
+                  onChange={(e) => update(index, { name: e.target.value })}
+                  readOnly={readOnly}
+                  placeholder="Например: хронический пульпит"
+                  className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[14px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                />
+                <input
+                  value={row.complaint}
+                  onChange={(e) => update(index, { complaint: e.target.value })}
+                  readOnly={readOnly}
+                  placeholder="Как это звучит от пациента"
+                  className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[13.5px] text-ink-body outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                />
+                {!readOnly && (
+                  <button
+                    type="button"
+                    title="Удалить диагноз"
+                    onClick={() => {
+                      setRemoved({ row, at: index });
+                      onChange(diagnoses.filter((_, i) => i !== index));
+                    }}
+                    className="h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              {/* Пациентов с диагнозом ноль — это не «мало», это «его нечем
+                  лечить»: генератор отбраковывает пары без услуги молча,
+                  и до этой строки руководитель узнавал об этом только
+                  пересчитав пациентов руками. Новая, ещё не сохранённая
+                  строка (patients нет) сюда не попадает */}
+              {showCoverage && row.patients === 0 && (
+                <p className="mt-2 text-[12px] leading-snug text-warn">
+                  Ни одного пациента с этим диагнозом: либо в прайсе нет услуги,
+                  которая его лечит, либо после добавления пациентов ещё не
+                  пересобирали.
+                </p>
               )}
             </div>
           ))}

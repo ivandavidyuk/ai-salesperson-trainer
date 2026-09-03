@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { requireHead } from "@/lib/access";
+import { getUserWithRole, requireHead } from "@/lib/access";
 import {
   rebuildCases,
   сборкаЖива,
@@ -90,24 +90,43 @@ async function organizationForForm(id: string) {
   });
   if (!organization) return null;
 
-  return { ...organization, casesRunning: сборкаЖива(organization) };
+  // Сколько пациентов досталось каждому диагнозу. Диагноз без единого
+  // пациента — обычно тот, который в прайсе нечем лечить: генератор такие
+  // пары честно отбраковывает (clinical_picture.match_services), но молча.
+  // Руководитель заводил диагноз и вправе увидеть, что он не работает
+  const поДиагнозам = await prisma.patientCase.groupBy({
+    by: ["diagnosisName"],
+    where: { organizationId: id },
+    _count: { _all: true },
+  });
+  const пациентов = new Map(поДиагнозам.map((г) => [г.diagnosisName, г._count._all]));
+
+  return {
+    ...organization,
+    diagnoses: organization.diagnoses.map((д) => ({
+      ...д,
+      patients: пациентов.get(д.name) ?? 0,
+    })),
+    casesRunning: сборкаЖива(organization),
+  };
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const head = await requireHead(request);
-    if (!head) {
-      return NextResponse.json(
-        { error: "Доступно только руководителю" },
-        { status: 403 }
-      );
+    // Читать прайс и диагнозы может любой сотрудник клиники: менеджеру они
+    // нужны в разговоре — на пресете чужой клиники он иначе называет цены
+    // из головы и срывает сделки. Менять по-прежнему может только
+    // руководитель, см. PUT
+    const user = await getUserWithRole(request);
+    if (!user) {
+      return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
     }
-    if (!head.organizationId) {
-      // Руководитель без клиники — состояние возможное (пустая база,
+    if (!user.organizationId) {
+      // Сотрудник без клиники — состояние возможное (пустая база,
       // пользователь заведён до организаций). Отдаём null, форма покажет пустую
       return NextResponse.json(null);
     }
-    return NextResponse.json(await organizationForForm(head.organizationId));
+    return NextResponse.json(await organizationForForm(user.organizationId));
   } catch (error) {
     console.error("Ошибка в GET /api/organization:", error);
     return NextResponse.json(
