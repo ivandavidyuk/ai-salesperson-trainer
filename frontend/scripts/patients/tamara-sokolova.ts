@@ -10,7 +10,9 @@ import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
   name: "Тамара Михайловна",
-  difficulty: PatientDifficulty.hard,
+  // Одно препятствие: сцена с мужем по шагам. Эталон «самой обычной»
+  // из двадцати одного — сложнее середины быть не может.
+  difficulty: PatientDifficulty.mid,
   // Голос подобран 24.08 под возраст и манеру персонажа: Marina
   voice: "ymDCYd8puC7gYjxIamPt",
   personality: {
