@@ -35,7 +35,8 @@ export async function GET(
     }
 
     const rows = await prisma.session.findMany({
-      where: { userId: manager.id, status: "completed" },
+      // Без реплик — не разговор, см. `завершённые` в lib/statsWindow.ts
+      where: { userId: manager.id, status: "completed", messages: { some: {} } },
       orderBy: { startedAt: "desc" },
       select: {
         id: true,

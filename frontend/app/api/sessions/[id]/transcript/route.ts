@@ -33,6 +33,9 @@ export async function GET(
         durationSec: true,
         diagnosticsResult: true,
         diagnosticsShownAt: true,
+        // Кнопке «Ещё разговор»: повторить того же пациента и тот же тип
+        patientId: true,
+        trainingTypeId: true,
         patient: { select: { name: true } },
         review: {
           select: {
@@ -82,6 +85,8 @@ export async function GET(
         durationSec: session.durationSec,
         topic: session.topic,
         patientName: session.patient?.name ?? null,
+        patientId: session.patientId,
+        trainingTypeId: session.trainingTypeId,
         // Документ диагностики отдаём только показанный: середина
         // расшифровки на него ссылается, и без него читателю не сойдётся
         // контекст. Сгенерированный, но не показанный — не существовал

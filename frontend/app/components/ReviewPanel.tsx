@@ -24,6 +24,12 @@ interface ReviewPanelProps {
    * «Разбора нет» сразу после звонка, уходит со страницы и не возвращается.
    */
   pending?: boolean;
+  /**
+   * Почему разбора нет, когда это известно заранее. «no-messages» — в разговоре
+   * ни одной реплики (микрофон не поднялся, сессию закрыли сразу): оценщик
+   * такое не разбирает, и говорить «оценка не появилась» было бы неправдой
+   */
+  emptyReason?: "no-messages";
 }
 
 // Кольцо общей оценки. Дуга рисуется через stroke-dasharray, поэтому
@@ -187,7 +193,11 @@ function PendingReview() {
   );
 }
 
-export default function ReviewPanel({ review, pending = false }: ReviewPanelProps) {
+export default function ReviewPanel({
+  review,
+  pending = false,
+  emptyReason,
+}: ReviewPanelProps) {
   return (
     <div className="flex-1 overflow-y-auto bg-surface-card px-7 py-8">
       <div className="mb-4 text-base font-semibold text-ink">Разбор разговора</div>
@@ -212,10 +222,13 @@ export default function ReviewPanel({ review, pending = false }: ReviewPanelProp
               <path d="M9 12h6M9 16h4" />
             </svg>
           </span>
-          <div className="mt-3 text-[15px] font-semibold text-ink">Разбора нет</div>
+          <div className="mt-3 text-[15px] font-semibold text-ink">
+            {emptyReason === "no-messages" ? "Разбирать нечего" : "Разбора нет"}
+          </div>
           <p className="mt-1.5 text-pretty text-center text-[13px] leading-normal text-ink-subtle">
-            Оценка по этому разговору не появилась. Расшифровка на месте —
-            её можно прочитать целиком.
+            {emptyReason === "no-messages"
+              ? "В этом разговоре не прозвучало ни одной реплики — обычно так бывает, когда не поднялся микрофон. В статистику он не идёт."
+              : "Оценка по этому разговору не появилась. Расшифровка на месте — её можно прочитать целиком."}
           </p>
         </div>
       ) : (
