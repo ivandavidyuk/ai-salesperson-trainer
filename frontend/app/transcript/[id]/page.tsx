@@ -11,12 +11,14 @@ import Alert from "@/app/components/Alert";
 import Button from "@/app/components/Button";
 import ReviewPanel from "@/app/components/ReviewPanel";
 import TranscriptMessage from "@/app/components/TranscriptMessage";
+import CaseServiceBlock from "@/app/components/CaseServiceBlock";
 import PatientAvatar from "@/app/components/PatientAvatar";
 import BackLink from "@/app/components/BackLink";
 import Logo from "@/app/components/Logo";
 import Loader from "@/app/components/Loader";
 import { formatConversationDate, formatDuration } from "@/lib/format";
 import { messageOffsetSec, type TranscriptData } from "@/lib/transcript";
+import type { CaseService } from "@/lib/caseService";
 
 // Сколько ждать разбор после конца разговора. Оценщик укладывается
 // в 3–4 секунды, но у него три попытки с паузами при отказе провайдера,
@@ -34,6 +36,36 @@ function reviewExpected(data: TranscriptData | null): boolean {
   // «Оценщик читает расшифровку» здесь были бы обещанием впустую
   if (data.messages.length === 0) return false;
   return Date.now() - new Date(data.session.endedAt).getTime() < REVIEW_WAIT_MS;
+}
+
+/**
+ * Плашка «менеджеру показан результат диагностики» внутри диалога — там,
+ * где документ открыли. Услуга над документом одной тихой строкой: разговор
+ * уже прошёл, здесь она контекст, а не подсказка, — но без неё по разбору
+ * не понять, что вообще было на столе.
+ */
+function DiagnosticsShownBlock({
+  text,
+  service,
+  className = "",
+}: {
+  text: string;
+  service: CaseService | null;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`mx-auto max-w-[520px] rounded-xl border border-line bg-surface px-[18px] py-4 ${className}`}
+    >
+      <div className="mb-2 text-[12.5px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
+        Менеджеру показан результат диагностики
+      </div>
+      <CaseServiceBlock service={service} variant="line" />
+      <div className="whitespace-pre-line border-t border-line pt-3 font-mono text-[14px] leading-relaxed text-ink-label">
+        {text}
+      </div>
+    </div>
+  );
 }
 
 export default function TranscriptPage() {
@@ -218,14 +250,11 @@ export default function TranscriptPage() {
               return (
                 <div key={index}>
                   {показДо && (
-                    <div className="mx-auto mb-5 max-w-[520px] rounded-xl border border-line bg-surface px-[18px] py-4">
-                      <div className="mb-1.5 text-[12.5px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
-                        Менеджеру показан результат диагностики
-                      </div>
-                      <div className="whitespace-pre-line font-mono text-[14px] leading-relaxed text-ink-label">
-                        {data.session.diagnosticsResult}
-                      </div>
-                    </div>
+                    <DiagnosticsShownBlock
+                      text={data.session.diagnosticsResult ?? ""}
+                      service={data.session.diagnosticsService}
+                      className="mb-5"
+                    />
                   )}
                   <TranscriptMessage
                     isManager={isManager}
@@ -246,14 +275,10 @@ export default function TranscriptPage() {
               (data.messages.length === 0 ||
                 data.messages[data.messages.length - 1].createdAt <
                   data.session.diagnosticsShownAt) && (
-                <div className="mx-auto max-w-[520px] rounded-xl border border-line bg-surface px-[18px] py-4">
-                  <div className="mb-1.5 text-[12.5px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
-                    Менеджеру показан результат диагностики
-                  </div>
-                  <div className="whitespace-pre-line font-mono text-[14px] leading-relaxed text-ink-label">
-                    {data.session.diagnosticsResult}
-                  </div>
-                </div>
+                <DiagnosticsShownBlock
+                  text={data.session.diagnosticsResult ?? ""}
+                  service={data.session.diagnosticsService}
+                />
               )}
           </div>
 

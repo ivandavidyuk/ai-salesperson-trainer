@@ -1352,8 +1352,17 @@ async def session_ws(ws: WebSocket, session_id: str):
                 else:
                     manager.diagnostics_text = документ
                     await store.mark_diagnostics_shown(session_id)
+                    # Услуга едет отдельным полем, а не строкой документа:
+                    # документ — находки врача и прайса не знает, услуга —
+                    # вывод для менеджера. None — «не подобрана»
+                    услуга = await store.get_case_service(session_id)
                     await safe_send(
-                        ws, {"type": "diagnostics_result", "text": документ}
+                        ws,
+                        {
+                            "type": "diagnostics_result",
+                            "text": документ,
+                            "service": услуга,
+                        },
                     )
                     logger.info(
                         "Сессия %s: результат диагностики показан менеджеру",

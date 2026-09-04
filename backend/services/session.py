@@ -22,7 +22,7 @@ import asyncpg
 import redis.asyncio as aioredis
 
 from core.config import get_settings
-from services import llm
+from services import diagnostics, llm
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +400,27 @@ class SessionStore:
             session_id,
         )
         return (row["result"] or None) if row else None
+
+    async def get_case_service(self, session_id: str) -> Optional[dict]:
+        """Услуга, подобранная под диагноз пациента сессии, с ценой из прайса.
+
+        Ищется по имени: `PatientCase.serviceName` — это название дословно
+        из прайса той же организации, так его пишут и сид пресетов, и
+        генератор. Строки нет — услуга не подобрана (см. `service_payload`).
+        """
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            'SELECT sv."name" AS name, sv."price" AS price '
+            'FROM "Session" s '
+            'JOIN "User" u ON u."id" = s."userId" '
+            'JOIN "PatientCase" pc ON pc."patientId" = s."patientId" '
+            '  AND pc."organizationId" = u."organizationId" '
+            'JOIN "Service" sv ON sv."organizationId" = u."organizationId" '
+            '  AND sv."name" = pc."serviceName" '
+            'WHERE s."id" = $1',
+            session_id,
+        )
+        return diagnostics.service_payload(row)
 
     async def mark_diagnostics_shown(self, session_id: str) -> None:
         """Отмечает момент показа. Только первый показ: по этому времени
