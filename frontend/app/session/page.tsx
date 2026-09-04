@@ -630,7 +630,13 @@ function SessionScreen() {
         )}
       </header>
 
-      <div className="flex flex-1 flex-col items-center justify-center px-10 py-10">
+      {/* min-h-0 — чтобы колонка ужималась в высоту экрана, а не вылезала
+          из main: иначе с открытой карточкой диагностики кнопки уезжали
+          под низ, и страница начинала скроллить. Ужимается только документ
+          внутри карточки; если экран ниже ~760 px и не помещаются даже
+          аватар с кнопками — прокручивается сама колонка (overflow-y-auto),
+          а «safe center» не даёт ей обрезать верх при переполнении */}
+      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-10 py-10 [justify-content:safe_center]">
         {/* --- До старта --- */}
         {screenState === "idle" && (
           <>
@@ -845,17 +851,28 @@ function SessionScreen() {
                 её между репликами, не теряя аватар и таймер. Появившись,
                 остаётся до конца разговора */}
             {diagnostics && (
-              <div className="mt-6 w-full max-w-[440px] rounded-xl border border-line bg-surface-card px-[18px] py-4 text-left shadow-card">
-                <div className="mb-2.5 text-[12.5px] font-medium uppercase tracking-[.1em] text-ink-subtle">
+              // Карточка держит размер содержимого; в высоту экрана она
+              // вписывается тем, что документ внутри ограничен остатком
+              // экрана и прокручивается сам (см. его класс ниже)
+              <div className="mt-6 flex w-full max-w-[440px] flex-col rounded-xl border border-line bg-surface-card px-[18px] py-4 text-left shadow-card">
+                <div className="mb-2.5 shrink-0 text-[12.5px] font-medium uppercase tracking-[.1em] text-ink-subtle">
                   Результат диагностики
                 </div>
                 {/* Услуга — над документом и своим блоком: документ читают
                     не весь, а услугу менеджер должен увидеть обязательно */}
-                <CaseServiceBlock service={diagnosticsService} variant="card" />
-                <div className="mb-2 mt-4 text-[12.5px] font-medium uppercase tracking-[.1em] text-ink-subtle">
+                <div className="shrink-0">
+                  <CaseServiceBlock service={diagnosticsService} variant="card" />
+                </div>
+                <div className="mb-2 mt-4 shrink-0 text-[12.5px] font-medium uppercase tracking-[.1em] text-ink-subtle">
                   Документ врача
                 </div>
-                <div className="whitespace-pre-line font-mono text-[14px] leading-relaxed text-ink-label">
+                {/* Высота документа — остаток экрана: 750 px занимают шапка,
+                    аватар, имя, плашка, обвязка карточки и кнопки (замерено).
+                    Через flex этого не сделать: карточке с min-h-0 ничто
+                    не мешает ужаться ниже содержимого, и текст вылезает под
+                    кнопки. Нижний предел 120 px — шесть строк читаемы всегда,
+                    дальше прокручивается колонка */}
+                <div className="max-h-[calc(100vh-750px)] min-h-[120px] overflow-y-auto whitespace-pre-line font-mono text-[13.5px] leading-snug text-ink-label">
                   {diagnostics}
                 </div>
               </div>
