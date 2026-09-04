@@ -355,6 +355,14 @@ model SessionReview {
   // попытку. Нужен нам для проверки объективности и РОПу
   judgeNotes      String?
 
+  // Разбор по пунктам: пять этапов по пять действий, у каждого отметка
+  // 0/1/2 и индекс реплики менеджера, по которой она поставлена. Снимок —
+  // названия и подсказки лежат внутри, правка списка старые разборы
+  // не меняет. Null у разборов до чек-листа и у упражнений без этапа сделки
+  // (профилактика, перехват) — панель показывает их по-старому.
+  // Форма: [{stage, measured, items: [{n, name, full, mark, msg}]}]
+  checklist       Json?
+
   createdAt       DateTime @default(now())
 
   session         Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)

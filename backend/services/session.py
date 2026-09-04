@@ -512,9 +512,9 @@ class SessionStore:
             '"id", "sessionId", "overallScore", "contactScore", '
             '"iceBreakerScore", "needsScore", "objectionsScore", '
             '"closingScore", "outcome", "strength", "growthPoint", '
-            '"judgeNotes", "drillPassed", "createdAt") '
+            '"judgeNotes", "drillPassed", "checklist", "createdAt") '
             'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::"DealOutcome", '
-            "$10, $11, $12, $13, NOW()) "
+            "$10, $11, $12, $13, $14::jsonb, NOW()) "
             'ON CONFLICT ("sessionId") DO UPDATE SET '
             '"overallScore" = EXCLUDED."overallScore", '
             '"contactScore" = EXCLUDED."contactScore", '
@@ -526,7 +526,8 @@ class SessionStore:
             '"strength" = EXCLUDED."strength", '
             '"growthPoint" = EXCLUDED."growthPoint", '
             '"judgeNotes" = EXCLUDED."judgeNotes", '
-            '"drillPassed" = EXCLUDED."drillPassed"',
+            '"drillPassed" = EXCLUDED."drillPassed", '
+            '"checklist" = EXCLUDED."checklist"',
             str(uuid.uuid4()),
             session_id,
             review["overall"],
@@ -540,6 +541,11 @@ class SessionStore:
             review["growthPoint"],
             review["judgeNotes"],
             review.get("drillPassed"),
+            # Разбор по пунктам — снимком, чтобы правка списка не меняла
+            # старые разборы. None у упражнений без этапа сделки
+            json.dumps(review["checklist"], ensure_ascii=False)
+            if review.get("checklist") is not None
+            else None,
         )
 
     # --- Оценка разговора ------------------------------------------------
