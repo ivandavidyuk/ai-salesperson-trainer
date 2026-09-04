@@ -1120,6 +1120,7 @@ async def finalize_review(session_id: str) -> None:
                 "growthPoint": review.growth_point,
                 "judgeNotes": review.judge_notes,
                 "drillPassed": review.drill_passed,
+                "checklist": review.checklist,
             },
         )
         if context["scores_deal"]:

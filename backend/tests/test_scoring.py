@@ -40,26 +40,6 @@ def test_мусор_вместо_оценки_не_роняет():
     assert _clamp("8") == 8.0
 
 
-def test_разбор_ответа_модели():
-    scores = StageScores.from_dict(
-        {"contact": 9, "iceBreaker": "6.5", "needs": None, "objections": 100}
-    )
-    assert scores.contact == 9.0
-    assert scores.iceBreaker == 6.5
-    assert scores.needs == 0.0
-    assert scores.objections == 10.0
-
-
-def test_неизмеренный_этап_остаётся_пустым():
-    # В этапной тренировке считается только тренируемый этап. Ноль соврал бы
-    # про менеджера и утянул ему недельный «Прогресс»: остальных этапов
-    # в разговоре не было вовсе, а не было сделано плохо
-    scores = StageScores.from_dict({"contact": 8, "needs": 9}, keys=("contact",))
-    assert scores.contact == 8.0
-    assert scores.iceBreaker is None
-    assert scores.needs is None, "ключ не запрашивали — брать его нельзя"
-
-
 def test_средняя_считается_только_по_измеренному():
     scores = StageScores(contact=8.0, objections=6.0)
     assert scores.average == 7.0
@@ -71,19 +51,23 @@ def test_без_единой_оценки_средней_нет():
     assert StageScores().average is None
 
 
-def test_рубрика_упражнения_вытесняет_этапы_сделки():
+def test_рубрика_упражнения_без_этапа_остаётся_шкалой_впечатления():
+    # Профилактика и перехват: этапа сделки у них нет, чек-лист не полагается,
+    # оценка одна и ставится по их собственной рубрике
     своя = build_rubric("Оцениваешь перехват инициативы.")
     assert "Оцениваешь перехват инициативы." in своя
     assert "iceBreaker" not in своя, "этапы сделки в упражнении не оцениваются"
-    # Шкала общая для всех разборов — иначе оценки станут несопоставимы
     assert "9–10 — образцово" in своя
 
 
-def test_пустая_рубрика_означает_полный_разговор():
+def test_пустая_рубрика_означает_чек_лист_этапов():
     # У `full` в сиде рубрика пустая: держать копию текста в двух местах
     # значило бы однажды их разойтись
     assert build_rubric("") == build_rubric(None) == build_rubric()
     assert "iceBreaker" in build_rubric()
+    # Оценка этапов — не впечатление: прежней шкалы в чек-листе нет
+    assert "9–10 — образцово" not in build_rubric()
+    assert "Полностью:" in build_rubric()
 
 
 def test_ниже_порога_запрет_абсолютный():

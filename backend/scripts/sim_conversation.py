@@ -48,7 +48,7 @@ import asyncpg
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.config import get_settings  # noqa: E402
-from services import llm, scoring  # noqa: E402
+from services import checklist, llm, scoring  # noqa: E402
 
 
 def load_lines(path: str) -> list[str]:
@@ -306,6 +306,22 @@ async def main() -> None:
     print(f"\nсильная сторона: {review.strength}")
     print(f"точка роста:     {review.growth_point}")
     print(f"\nразбор для нас:  {review.judge_notes}")
+
+    # Отметки по пунктам с репликами — единственный способ понять, ЗА ЧТО
+    # поставлена оценка: сумма без них не проверяется. Печатается реплика,
+    # на которую сослалась модель; отметка без реплики уже сброшена в ноль
+    # при разборе, здесь её не видно
+    for stage in review.checklist or []:
+        заголовок = checklist.STAGE_TITLES[stage["stage"]]
+        if not stage["measured"]:
+            print(f"\n{заголовок}: не измерен")
+            continue
+        сумма = sum(item["mark"] for item in stage["items"])
+        print(f"\n{заголовок}: {сумма} / 10")
+        for item in stage["items"]:
+            print(f"  [{item['mark']}] {item['n']:>2}. {item['name']} — {checklist.MARK_WORDS[item['mark']]}")
+            if item["msg"] is not None:
+                print(f"        «{history[item['msg']]['text'][:160]}»")
 
 
 if __name__ == "__main__":
