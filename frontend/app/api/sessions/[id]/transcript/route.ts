@@ -53,6 +53,9 @@ export async function GET(
             drillPassed: true,
             strength: true,
             growthPoint: true,
+            // Разбор по пунктам с индексами реплик — то, по чему панель
+            // отвечает «чего не хватило». Цитаты берутся из messages ниже
+            checklist: true,
             // judgeNotes не отдаём: это разбор по обязательным условиям,
             // то есть готовый ответ для следующей попытки
           },
