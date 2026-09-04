@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getUserWithRole } from "@/lib/access";
+import type { CaseService } from "@/lib/caseService";
 
 export const runtime = "nodejs";
 // Роут читает cookie запроса — рендерится только динамически
@@ -37,6 +38,9 @@ export async function GET(
         patientId: true,
         trainingTypeId: true,
         patient: { select: { name: true } },
+        // Организация того, кто вёл разговор, — по ней ищется случай
+        // пациента и его услуга; у читателя-руководителя она та же
+        user: { select: { organizationId: true } },
         review: {
           select: {
             overallScore: true,
@@ -78,6 +82,13 @@ export async function GET(
       select: { firstName: true, lastName: true },
     });
 
+    // Услуга к документу: имя из случая, цена — из прайса той же организации
+    // по этому имени. Нет имени или его больше нет в прайсе — «не подобрана».
+    // Ищем только когда документ показан: без него блока нет
+    const diagnosticsService = session.diagnosticsShownAt
+      ? await caseService(session.patientId, session.user.organizationId)
+      : null;
+
     return NextResponse.json({
       session: {
         startedAt: session.startedAt.toISOString(),
@@ -94,6 +105,7 @@ export async function GET(
           ? session.diagnosticsResult
           : null,
         diagnosticsShownAt: session.diagnosticsShownAt?.toISOString() ?? null,
+        diagnosticsService,
       },
       manager: {
         firstName: manager?.firstName ?? "",
@@ -113,4 +125,27 @@ export async function GET(
       { status: 500 }
     );
   }
+}
+
+/**
+ * Услуга случая с ценой из прайса. null — «не подобрана»: у случая нет
+ * услуги вовсе (диагноз без лечащей услуги) либо её уже удалили из прайса.
+ * Для менеджера это одно состояние: продать то, чего нет в прайсе, нельзя,
+ * а имя без цены читалось бы как подсказка.
+ */
+async function caseService(
+  patientId: string | null,
+  organizationId: string | null
+): Promise<CaseService | null> {
+  if (!patientId || !organizationId) return null;
+  const patientCase = await prisma.patientCase.findUnique({
+    where: { patientId_organizationId: { patientId, organizationId } },
+    select: { serviceName: true },
+  });
+  if (!patientCase?.serviceName) return null;
+  const service = await prisma.service.findFirst({
+    where: { organizationId, name: patientCase.serviceName },
+    select: { name: true, price: true },
+  });
+  return service ? { name: service.name, price: service.price } : null;
 }

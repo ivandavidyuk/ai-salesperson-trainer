@@ -1,6 +1,7 @@
 // Типы ответа GET /api/sessions/[id]/transcript — общие для страницы
 // расшифровки и её компонентов.
 
+import type { CaseService } from "@/lib/caseService";
 import type { DealOutcome } from "@/lib/score";
 
 export interface TranscriptMessage {
@@ -48,6 +49,9 @@ export interface TranscriptData {
         не показывали (или разговор был до этой фичи), плашки нет */
     diagnosticsResult: string | null;
     diagnosticsShownAt: string | null;
+    /** Услуга, подобранная под диагноз, — рядом с документом. null —
+        не подобрана; отдаётся только вместе с показанным документом */
+    diagnosticsService: CaseService | null;
   };
   manager: { firstName: string; lastName: string };
   messages: TranscriptMessage[];

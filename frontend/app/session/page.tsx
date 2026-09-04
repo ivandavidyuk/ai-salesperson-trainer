@@ -14,9 +14,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import AudioDevicePicker from "@/app/components/AudioDevicePicker";
 import BackLink from "@/app/components/BackLink";
 import CallAvatar from "@/app/components/CallAvatar";
+import CaseServiceBlock from "@/app/components/CaseServiceBlock";
 import Logo from "@/app/components/Logo";
 import SpeakerPill from "@/app/components/SpeakerPill";
 import Timer from "@/app/components/Timer";
+import type { CaseService } from "@/lib/caseService";
 import { AudioPlayer, MicRecorder } from "@/lib/voiceClient";
 import {
   listDevices,
@@ -101,6 +103,8 @@ function SessionScreen() {
   const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  // Услуга к документу: приходит тем же событием. null — «не подобрана»
+  const [diagnosticsService, setDiagnosticsService] = useState<CaseService | null>(null);
   // Результат диагностики: null — не показан, строка — документ на экране.
   // waiting — кнопка нажата, ждём ответа сервера (или повтор при pending)
   const [diagnostics, setDiagnostics] = useState<string | null>(null);
@@ -455,6 +459,11 @@ function SessionScreen() {
             case "diagnostics_result":
               // Документ готов: карточка остаётся до конца разговора
               setDiagnostics(String(msg.text || ""));
+              setDiagnosticsService(
+                msg.service && typeof msg.service.name === "string"
+                  ? { name: msg.service.name, price: String(msg.service.price ?? "") }
+                  : null
+              );
               setDiagnosticsWaiting(false);
               break;
             case "diagnostics_pending":
@@ -765,7 +774,9 @@ function SessionScreen() {
           <>
             <CallAvatar
               name={patient?.name ?? null}
-              size="lg"
+              // Пока документ на экране, аватар сжимается: менеджер уже
+              // не смотрит на портрет, он читает — карточке нужно место
+              size={diagnostics ? "md" : "lg"}
               state={
                 screenState === "paused"
                   ? "paused"
@@ -834,9 +845,15 @@ function SessionScreen() {
                 её между репликами, не теряя аватар и таймер. Появившись,
                 остаётся до конца разговора */}
             {diagnostics && (
-              <div className="mt-6 w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-4">
-                <div className="mb-1.5 text-[12.5px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
+              <div className="mt-6 w-full max-w-[440px] rounded-xl border border-line bg-surface-card px-[18px] py-4 text-left shadow-card">
+                <div className="mb-2.5 text-[12.5px] font-medium uppercase tracking-[.1em] text-ink-subtle">
                   Результат диагностики
+                </div>
+                {/* Услуга — над документом и своим блоком: документ читают
+                    не весь, а услугу менеджер должен увидеть обязательно */}
+                <CaseServiceBlock service={diagnosticsService} variant="card" />
+                <div className="mb-2 mt-4 text-[12.5px] font-medium uppercase tracking-[.1em] text-ink-subtle">
+                  Документ врача
                 </div>
                 <div className="whitespace-pre-line font-mono text-[14px] leading-relaxed text-ink-label">
                   {diagnostics}

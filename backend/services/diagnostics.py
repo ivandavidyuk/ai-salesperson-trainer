@@ -37,7 +37,7 @@
 import logging
 import random
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Optional
 
 from core.config import get_settings
@@ -402,3 +402,22 @@ async def generate_result(
         _SHAPE_ATTEMPTS,
     )
     return None
+
+
+def service_payload(row: Optional[Mapping[str, object]]) -> Optional[dict]:
+    """Услуга к документу в том виде, в каком её ждёт клиент.
+
+    Строка запроса — имя и цена из прайса организации, найденные по
+    `PatientCase.serviceName`. Нет строки — «услуга не подобрана», и это
+    одно состояние для двух причин: у случая нет услуги вовсе (диагноз без
+    лечащей услуги в прайсе) либо услуга из случая уже удалена из прайса.
+    Продать то, чего нет в прайсе, нельзя, а имя без цены читалось бы как
+    подсказка. Пустое имя — тоже «не подобрана»: такой строке в прайсе
+    взяться неоткуда, кроме опечатки.
+    """
+    if row is None:
+        return None
+    name = str(row.get("name") or "").strip()
+    if not name:
+        return None
+    return {"name": name, "price": str(row.get("price") or "").strip()}
