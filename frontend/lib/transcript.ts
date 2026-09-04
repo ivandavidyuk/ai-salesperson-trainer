@@ -10,6 +10,30 @@ export interface TranscriptMessage {
   createdAt: string;
 }
 
+/** Отметка по пункту чек-листа: не выполнено · частично · выполнено */
+export type ChecklistMark = 0 | 1 | 2;
+
+export interface ReviewChecklistItem {
+  /** Сквозной номер 1–25: пункт всегда зовётся одним номером */
+  n: number;
+  name: string;
+  /** Что значит «выполнено» — подсказка «Полностью: …» у 0 и 1 */
+  full: string;
+  mark: ChecklistMark;
+  /** Индекс реплики менеджера в messages, по которой поставлена отметка.
+      null у «не выполнено» — цитировать нечего */
+  msg: number | null;
+}
+
+export interface ReviewChecklistStage {
+  /** contact · iceBreaker · needs · objections · closing */
+  stage: string;
+  /** false — этапа в разговоре не было (пациент не возражал):
+      ни числа, ни полоски, в общую не входит */
+  measured: boolean;
+  items: ReviewChecklistItem[];
+}
+
 export interface TranscriptReview {
   /** Есть всегда: у этапной тренировки это оценка самого упражнения */
   overallScore: number;
@@ -29,6 +53,9 @@ export interface TranscriptReview {
   drillPassed: boolean | null;
   strength: string;
   growthPoint: string;
+  /** Разбор по пунктам. null у разборов до чек-листа и у упражнений без
+      этапа сделки — тогда панель показывает оценки по-старому */
+  checklist: ReviewChecklistStage[] | null;
   // judgeNotes сюда намеренно не попадает: разбор оценщика по условиям —
   // это готовый чек-лист для следующей попытки, менеджеру его не отдаём
 }

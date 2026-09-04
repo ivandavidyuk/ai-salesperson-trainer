@@ -4,7 +4,7 @@
 // Открывается сразу после звонка и из списка разговоров на главной.
 // Своя топ-панель вместо бокового меню — как на экране звонка.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import Alert from "@/app/components/Alert";
@@ -25,6 +25,9 @@ import type { CaseService } from "@/lib/caseService";
 // поэтому запас щедрый. Дальше ждать нечего: значит разбор не состоялся.
 const REVIEW_WAIT_MS = 2 * 60 * 1000;
 const POLL_INTERVAL_MS = 3000;
+// Сколько держать подсветку реплики после «показать в диалоге»: достаточно,
+// чтобы глаз нашёл её после прокрутки, и мало, чтобы не выглядеть выделением
+const HIGHLIGHT_MS = 1800;
 
 /** Ждём ли ещё разбор: разговор закончился недавно, а разбора нет. */
 function reviewExpected(data: TranscriptData | null): boolean {
@@ -79,6 +82,21 @@ export default function TranscriptPage() {
   // Перерисовка по таймеру: без неё окно ожидания истекает молча, и лоадер
   // крутился бы вечно, пока пользователь не тронет страницу
   const [, setTick] = useState(0);
+  // Реплика, к которой панель разбора попросила прокрутить: подсвечена
+  // ненадолго, повторный клик по другой цитате переносит подсветку
+  const [highlighted, setHighlighted] = useState<number | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const showMessage = useCallback((index: number) => {
+    document
+      .getElementById(`msg-${index}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlighted(index);
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => setHighlighted(null), HIGHLIGHT_MS);
+  }, []);
+  useEffect(() => () => {
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -248,7 +266,9 @@ export default function TranscriptPage() {
                 (index === 0 ||
                   data.messages[index - 1].createdAt < data.session.diagnosticsShownAt);
               return (
-                <div key={index}>
+                // id — якорь для «показать в диалоге» из панели разбора:
+                // индекс тот же, что в чек-листе (msg)
+                <div key={index} id={`msg-${index}`}>
                   {показДо && (
                     <DiagnosticsShownBlock
                       text={data.session.diagnosticsResult ?? ""}
@@ -264,6 +284,7 @@ export default function TranscriptPage() {
                       data.session.startedAt,
                       message.createdAt
                     )}
+                    highlighted={highlighted === index}
                   />
                 </div>
               );
@@ -286,6 +307,9 @@ export default function TranscriptPage() {
             review={data.review}
             pending={pendingReview}
             emptyReason={noMessages ? "no-messages" : undefined}
+            messages={data.messages}
+            startedAt={data.session.startedAt}
+            onShowMessage={showMessage}
           />
         </div>
       )}

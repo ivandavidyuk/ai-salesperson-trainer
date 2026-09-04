@@ -13,6 +13,9 @@ interface TranscriptBubbleProps {
   speakerName: string | null;
   /** Секунды от начала разговора */
   offsetSec: number;
+  /** Подсвечена по «показать в диалоге» из разбора — ненадолго, чтобы
+      глаз нашёл реплику после прокрутки */
+  highlighted?: boolean;
 }
 
 export default function TranscriptMessage({
@@ -20,12 +23,13 @@ export default function TranscriptMessage({
   text,
   speakerName,
   offsetSec,
+  highlighted = false,
 }: TranscriptBubbleProps) {
   return (
     <div
-      className={`mb-[18px] flex items-end gap-3 ${
+      className={`-mx-2 mb-[18px] flex items-end gap-3 rounded-2xl px-2 py-1 transition-colors duration-500 ${
         isManager ? "flex-row-reverse" : ""
-      }`}
+      } ${highlighted ? "bg-brand-soft" : "bg-transparent"}`}
     >
       {/* Портрет только у клиента: у менеджера здесь его собственные инициалы,
           а своё фото он видит в профиле */}
