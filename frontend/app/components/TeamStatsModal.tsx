@@ -20,6 +20,8 @@ interface TeamStatsModalProps {
   manager: TeamMemberStats;
   /** Место в отделе — от него зависят цвет шапки и плашка */
   place: number;
+  /** Подписи выбранного периода: цифры в окне считаются за него же */
+  подписи: { key: string; count: string };
   onClose: () => void;
 }
 
@@ -49,6 +51,7 @@ function Delta({ delta }: { delta: number | null }) {
 export default function TeamStatsModal({
   manager,
   place,
+  подписи,
   onClose,
 }: TeamStatsModalProps) {
   const [sessions, setSessions] = useState<HomeConversation[] | null>(null);
@@ -80,13 +83,16 @@ export default function TeamStatsModal({
   }, [onClose]);
 
   const avgClass =
-    manager.weekScore === null
+    manager.periodScore === null
       ? "text-ink-subtle"
-      : SCORE_TEXT_CLASS[scoreTone(manager.weekScore)];
+      : SCORE_TEXT_CLASS[scoreTone(manager.periodScore)];
 
   // Знаменатель — разговоры, где сделка могла случиться: этапные тренировки
-  // в процент закрытых не входят. Неделя, как и всё остальное на витрине
-  const dealsRate = formatDealsRate(manager.weekPaidDeals, manager.weekDealTotal);
+  // в процент закрытых не входят. Период — тот же, что выбран на витрине
+  const dealsRate = formatDealsRate(
+    manager.periodPaidDeals,
+    manager.periodDealTotal
+  );
 
   return (
     <div
@@ -129,9 +135,9 @@ export default function TeamStatsModal({
 
           <div className="shrink-0 text-center">
             <div className={`font-mono text-[27px] font-medium leading-none ${avgClass}`}>
-              {manager.weekScore ?? "—"}
+              {manager.periodScore ?? "—"}
             </div>
-            <div className="mt-1 text-[12.5px] text-ink-subtle">ср. за неделю</div>
+            <div className="mt-1 text-[12.5px] text-ink-subtle">ср. оценка</div>
           </div>
 
           <button
@@ -148,10 +154,13 @@ export default function TeamStatsModal({
         <div className="min-h-0 flex-1 overflow-y-auto px-[26px] pb-7 pt-6">
           <div className="mb-6 flex gap-3">
             <Tile value={String(manager.total)} label="разговоров всего" />
-            <Tile value={String(manager.week)} label="за неделю" />
+            {/* За всё время эта плитка повторила бы соседнюю — тогда её нет */}
+            {подписи.key !== "all" && (
+              <Tile value={String(manager.periodCount)} label={подписи.count} />
+            )}
             <Tile
               value={manager.bestScore === null ? "—" : String(manager.bestScore)}
-              label="лучшая за неделю"
+              label="лучшая за период"
             />
             <Tile
               value={dealsRate.label}
@@ -192,7 +201,7 @@ export default function TeamStatsModal({
             <div className="flex min-w-[250px] flex-1 flex-col gap-4">
               {/* Тот же случай, что в «Прогрессе» на главной: выводы взяты
                   из одного последнего разбора, а рядом стоят показатели
-                  за неделю и за всё время. Без подписи руководитель читает
+                  за период и за всё время. Без подписи руководитель читает
                   их как характеристику менеджера вообще */}
               {(manager.strength || manager.growthPoint) && (
                 <div className="font-mono text-[12px] uppercase tracking-[.12em] text-ink-placeholder">

@@ -4,7 +4,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireHead } from "@/lib/access";
-import { getTeamStats } from "@/lib/team";
+import { getTeamStats, type StatsPeriod } from "@/lib/team";
+
+/** Период приходит с витрины. Незнакомое значение — неделя, как по умолчанию */
+const ПЕРИОДЫ: StatsPeriod[] = ["week", "month", "all"];
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,8 +22,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const запрошен = request.nextUrl.searchParams.get("period");
+    const period = ПЕРИОДЫ.find((p) => p === запрошен) ?? "week";
+
     // Считаем по клинике руководителя: чужой отдел ему не показываем
-    return NextResponse.json(await getTeamStats(head.organizationId));
+    return NextResponse.json(await getTeamStats(head.organizationId, period));
   } catch (error) {
     console.error("Ошибка в /api/team/stats:", error);
     return NextResponse.json(

@@ -7,8 +7,31 @@
 import { prisma } from "@/lib/db";
 import { завершённые } from "@/lib/statsWindow";
 import { DealOutcome, UserRole } from "@prisma/client";
-import { WEEK_DAYS, averageScores, round1, startOfWeek } from "@/lib/home";
+import { WEEK_DAYS, averageScores, round1 } from "@/lib/home";
 import { STAGE_METRICS } from "@/lib/score";
+
+/**
+ * За какой отрезок считается витрина отдела.
+ *
+ * Руководителю нужна форма сейчас, поэтому по умолчанию неделя. Но отдел,
+ * где на неделе тренировался один человек, витрину не наполнит — а посмотреть
+ * на отдел всё равно нужно. Отсюда переключатель: период выбирается, и всё
+ * на странице считается по нему.
+ */
+export type StatsPeriod = "week" | "month" | "all";
+
+/** Длина периода в сутках. У «всего времени» нижней границы нет вовсе */
+const PERIOD_DAYS: Record<StatsPeriod, number | null> = {
+  week: WEEK_DAYS,
+  month: 30,
+  all: null,
+};
+
+function днейНазад(from: Date, days: number): Date {
+  const result = new Date(from);
+  result.setDate(result.getDate() - days);
+  return result;
+}
 
 export interface TeamStageMetric {
   key: string;
@@ -32,8 +55,8 @@ export interface TeamMemberStats {
   statsResetAt: string | null;
   /** Завершённых разговоров за всё время */
   total: number;
-  /** Из них на этой неделе */
-  week: number;
+  /** Из них за выбранный период */
+  periodCount: number;
   /**
    * Средняя оценка за всё время; null — разборов нет.
    *
@@ -42,11 +65,14 @@ export interface TeamMemberStats {
    * именно руководитель сейчас сотрёт, а стирается как раз всё время
    */
   avgScore: number | null;
-  /** Средняя за последние 7 суток; null — разговоров за неделю не было */
-  weekScore: number | null;
-  /** Прирост средней за эту неделю к прошлой; null — не с чем сравнивать */
-  weekDelta: number | null;
-  /** Лучшая оценка за неделю; null — разборов за неделю нет */
+  /** Средняя за выбранный период; null — разговоров в нём не было */
+  periodScore: number | null;
+  /**
+   * Прирост средней к предыдущему такому же отрезку; null — не с чем
+   * сравнивать. У «всего времени» предыдущего отрезка нет по определению
+   */
+  periodDelta: number | null;
+  /** Лучшая оценка за период; null — разборов в нём нет */
   bestScore: number | null;
   /** Разговоров с исходом `paid` за всё время. Знаменатель — dealTotal */
   paidDeals: number;
@@ -56,9 +82,9 @@ export interface TeamMemberStats {
    * и в проценте закрытых сделок им не место.
    */
   dealTotal: number;
-  /** Из них за последнюю неделю — по ним считается награда «Закрыватель» */
-  weekPaidDeals: number;
-  weekDealTotal: number;
+  /** Из них за период — по ним считается награда «Закрыватель» */
+  periodPaidDeals: number;
+  periodDealTotal: number;
   /** Разговоров по дням за последние 7 суток, от старого к сегодняшнему */
   activity: number[];
   stages: TeamStageMetric[];
@@ -76,7 +102,8 @@ export interface TeamMemberStats {
  * клинике не привязанные.
  */
 export async function getTeamStats(
-  organizationId: string | null
+  organizationId: string | null,
+  period: StatsPeriod = "week"
 ): Promise<TeamMemberStats[]> {
   const managers = await prisma.user.findMany({
     where: { role: UserRole.manager, organizationId },
@@ -92,9 +119,12 @@ export async function getTeamStats(
   });
 
   const now = new Date();
-  const weekStart = startOfWeek(now);
-  const prevWeekStart = new Date(weekStart);
-  prevWeekStart.setDate(prevWeekStart.getDate() - WEEK_DAYS);
+  // Окно периода и такой же по длине отрезок перед ним — для стрелок прироста.
+  // У «всего времени» нижней границы нет, а сравнивать не с чем
+  const дней = PERIOD_DAYS[period];
+  const periodStart = дней === null ? new Date(0) : днейНазад(now, дней);
+  const prevStart = дней === null ? null : днейНазад(now, дней * 2);
+  const вПериод = дней === null ? {} : { startedAt: { gte: periodStart } };
 
   // Спарклайн активности: семь суток, заканчивая сегодняшними.
   // Границей берём полночь, иначе «день» съезжал бы по времени запроса.
@@ -119,7 +149,7 @@ export async function getTeamStats(
 
       const [
         total,
-        week,
+        periodCount,
         scoreAgg,
         currentWeekAvg,
         prevWeekAvg,
@@ -131,9 +161,7 @@ export async function getTeamStats(
         weekDealTotal,
       ] = await Promise.all([
           prisma.session.count({ where: completed }),
-          prisma.session.count({
-            where: { ...completed, startedAt: { gte: weekStart } },
-          }),
+          prisma.session.count({ where: { ...completed, ...вПериод } }),
           // Средняя за всё время нужна только карточке обнуления в профиле.
           // Лучшая оценка здесь больше не берётся: на витрине она недельная
           // и приходит из того же агрегата, что и недельная средняя
@@ -141,13 +169,10 @@ export async function getTeamStats(
             where: { session: completed },
             _avg: { overallScore: true },
           }),
-          averageScores(manager.id, weekStart, now, manager.statsResetAt),
-          averageScores(
-            manager.id,
-            prevWeekStart,
-            weekStart,
-            manager.statsResetAt
-          ),
+          averageScores(manager.id, periodStart, now, manager.statsResetAt),
+          prevStart
+            ? averageScores(manager.id, prevStart, periodStart, manager.statsResetAt)
+            : Promise.resolve(null),
           // Сильная сторона и точка роста — из последнего разбора
           prisma.sessionReview.findFirst({
             where: { session: completed },
@@ -167,17 +192,15 @@ export async function getTeamStats(
             where: { session: withDeal, outcome: DealOutcome.paid },
           }),
           prisma.session.count({ where: withDeal }),
-          // Те же сделки, но за неделю: награда «Закрыватель» считается
-          // по неделе, как и всё остальное на витрине
+          // Те же сделки, но за период: награда «Закрыватель» считается
+          // по нему, как и всё остальное на витрине
           prisma.sessionReview.count({
             where: {
-              session: { ...withDeal, startedAt: { gte: weekStart } },
+              session: { ...withDeal, ...вПериод },
               outcome: DealOutcome.paid,
             },
           }),
-          prisma.session.count({
-            where: { ...withDeal, startedAt: { gte: weekStart } },
-          }),
+          prisma.session.count({ where: { ...withDeal, ...вПериод } }),
         ]);
 
       const activity = new Array<number>(ACTIVITY_DAYS).fill(0);
@@ -190,12 +213,14 @@ export async function getTeamStats(
         if (index >= 0 && index < ACTIVITY_DAYS) activity[index] += 1;
       }
 
-      const thisWeekOverall = round1(currentWeekAvg.avg.overallScore ?? null);
-      const prevWeekOverall = round1(prevWeekAvg.avg.overallScore ?? null);
+      const periodOverall = round1(currentWeekAvg.avg.overallScore ?? null);
+      const prevOverall = prevWeekAvg
+        ? round1(prevWeekAvg.avg.overallScore ?? null)
+        : null;
 
       const stages: TeamStageMetric[] = STAGE_METRICS.map(({ key, label }) => {
         const value = round1(currentWeekAvg.avg[key] ?? null);
-        const previous = round1(prevWeekAvg.avg[key] ?? null);
+        const previous = prevWeekAvg ? round1(prevWeekAvg.avg[key] ?? null) : null;
         return {
           key,
           label,
@@ -213,18 +238,18 @@ export async function getTeamStats(
         statsResetAt: manager.statsResetAt?.toISOString() ?? null,
         avatarUpdatedAt: manager.avatarUpdatedAt?.toISOString() ?? null,
         total,
-        week,
+        periodCount,
         avgScore: round1(scoreAgg._avg.overallScore),
-        weekScore: thisWeekOverall,
-        weekDelta:
-          thisWeekOverall !== null && prevWeekOverall !== null
-            ? round1(thisWeekOverall - prevWeekOverall)
+        periodScore: periodOverall,
+        periodDelta:
+          periodOverall !== null && prevOverall !== null
+            ? round1(periodOverall - prevOverall)
             : null,
         bestScore: round1(currentWeekAvg.best),
         paidDeals: paidCount,
         dealTotal,
-        weekPaidDeals: weekPaidCount,
-        weekDealTotal,
+        periodPaidDeals: weekPaidCount,
+        periodDealTotal: weekDealTotal,
         activity,
         stages,
         strength: lastReview?.strength ?? null,

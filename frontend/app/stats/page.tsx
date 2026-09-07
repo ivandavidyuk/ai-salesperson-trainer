@@ -15,12 +15,53 @@ import { initials, plural } from "@/lib/format";
 import { PLACE_BANNER, PLACE_PILL, placeLabel } from "@/lib/podium";
 import {
   DEALS_RATE_MIN_CONVERSATIONS,
-  PODIUM_MIN_WEEK,
+  PODIUM_MIN_CONVERSATIONS,
   SCORE_TEXT_CLASS,
   formatDealsRate,
   scoreTone,
 } from "@/lib/score";
-import type { TeamMemberStats } from "@/lib/team";
+import type { StatsPeriod, TeamMemberStats } from "@/lib/team";
+
+/**
+ * Как называется каждый период на экране.
+ *
+ * Витрина считается за выбранный отрезок целиком — от пьедестала до процента
+ * сделок, — поэтому подписи собраны в одном месте: разъедься они, страница
+ * говорила бы про неделю в шапке и про месяц в плитке.
+ */
+const PERIODS: {
+  key: StatsPeriod;
+  tab: string;
+  header: string;
+  score: string;
+  count: string;
+  deals: string;
+}[] = [
+  {
+    key: "week",
+    tab: "Неделя",
+    header: "всё за последние 7 дней, динамика — неделя к неделе",
+    score: "средняя оценка за неделю",
+    count: "за неделю",
+    deals: "по разговорам отдела за неделю",
+  },
+  {
+    key: "month",
+    tab: "Месяц",
+    header: "всё за последние 30 дней, динамика — месяц к месяцу",
+    score: "средняя оценка за месяц",
+    count: "за месяц",
+    deals: "по разговорам отдела за месяц",
+  },
+  {
+    key: "all",
+    tab: "Всё время",
+    header: "всё за всё время",
+    score: "средняя оценка за всё время",
+    count: "разговоров",
+    deals: "по всем разговорам отдела",
+  },
+];
 
 /** Подписи дней под спарклайном: последний столбик — сегодня. */
 const WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
@@ -99,10 +140,12 @@ function MiniStat({ value, label }: { value: number | string; label: string }) {
 function PodiumCard({
   manager,
   place,
+  подписи,
   onOpen,
 }: {
   manager: TeamMemberStats;
   place: number;
+  подписи: (typeof PERIODS)[number];
   onOpen: () => void;
 }) {
   return (
@@ -131,26 +174,30 @@ function PodiumCard({
 
           <div className="mt-4 flex items-baseline justify-center gap-[5px]">
             <span
-              className={`font-mono text-[35px] font-medium leading-none ${scoreClass(manager.weekScore)}`}
+              className={`font-mono text-[35px] font-medium leading-none ${scoreClass(manager.periodScore)}`}
             >
-              {manager.weekScore ?? "—"}
+              {manager.periodScore ?? "—"}
             </span>
             <span className="font-mono text-[16.5px] text-ink-placeholder">/ 10</span>
           </div>
           <div className="mt-[5px] text-center text-[13px] uppercase tracking-[.04em] text-ink-subtle">
-            средняя оценка за неделю
+            {подписи.score}
           </div>
 
           <div className="mt-[18px] flex gap-2.5">
             <MiniStat value={manager.total} label="разговоров" />
-            <MiniStat value={manager.week} label="за неделю" />
+            {/* За всё время эта плитка повторила бы соседнюю — тогда её нет */}
+            {подписи.key !== "all" && (
+              <MiniStat value={manager.periodCount} label={подписи.count} />
+            )}
             {/* Процент намеренно без цвета: средняя оценка про технику,
                 процент про результат. Подкрасить его «в плохо» — и подиум
                 превращается в табло позора, хотя 20% для холодного трафика
                 может быть нормой */}
             <MiniStat
               value={
-                formatDealsRate(manager.weekPaidDeals, manager.weekDealTotal).label
+                formatDealsRate(manager.periodPaidDeals, manager.periodDealTotal)
+                  .label
               }
               label="закрыто"
             />
@@ -192,10 +239,12 @@ function PodiumCard({
 function OtherRow({
   manager,
   place,
+  подписи,
   onOpen,
 }: {
   manager: TeamMemberStats;
   place: number;
+  подписи: (typeof PERIODS)[number];
   onOpen: () => void;
 }) {
   return (
@@ -211,24 +260,30 @@ function OtherRow({
       </div>
 
       <div className="w-24 text-center">
-        <div className={`font-mono text-[20.5px] ${scoreClass(manager.weekScore)}`}>
-          {manager.weekScore ?? "—"}
+        <div className={`font-mono text-[20.5px] ${scoreClass(manager.periodScore)}`}>
+          {manager.periodScore ?? "—"}
         </div>
         <div className="mt-0.5 text-[12.5px] text-ink-subtle">
-          {manager.week === 0 ? "нет разговоров" : "ср. за неделю"}
+          {manager.periodCount === 0 ? "нет разговоров" : "средняя"}
         </div>
       </div>
       <div className="w-[84px] text-center">
         <div className="font-mono text-[20.5px] text-ink">{manager.total}</div>
         <div className="mt-0.5 text-[12.5px] text-ink-subtle">разговоров</div>
       </div>
-      <div className="w-[84px] text-center">
-        <div className="font-mono text-[20.5px] text-ink">{manager.week}</div>
-        <div className="mt-0.5 text-[12.5px] text-ink-subtle">за неделю</div>
-      </div>
+      {подписи.key !== "all" && (
+        <div className="w-[84px] text-center">
+          <div className="font-mono text-[20.5px] text-ink">
+            {manager.periodCount}
+          </div>
+          <div className="mt-0.5 text-[12.5px] text-ink-subtle">
+            {подписи.count}
+          </div>
+        </div>
+      )}
       <div className="w-[84px] text-center">
         <div className="font-mono text-[20.5px] text-ink">
-          {formatDealsRate(manager.weekPaidDeals, manager.weekDealTotal).label}
+          {formatDealsRate(manager.periodPaidDeals, manager.periodDealTotal).label}
         </div>
         <div className="mt-0.5 text-[12.5px] text-ink-subtle">закрыто</div>
       </div>
@@ -256,12 +311,17 @@ export default function StatsPage() {
   const [error, setError] = useState("");
   const [forbidden, setForbidden] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  // Неделя по умолчанию: руководителю нужна форма сейчас. Месяц и всё время —
+  // для отдела, где на неделе тренировался один человек: витрину он не
+  // наполнит, а посмотреть на людей всё равно надо
+  const [period, setPeriod] = useState<StatsPeriod>("week");
+  const подписи = PERIODS.find((p) => p.key === period) ?? PERIODS[0];
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/team/stats");
+        const res = await fetch(`/api/team/stats?period=${period}`);
         if (res.status === 403) {
           if (!cancelled) setForbidden(true);
           return;
@@ -276,13 +336,15 @@ export default function StatsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // Прежние цифры остаются на экране, пока считаются новые: страница
+    // не должна мигать пустотой на переключении периода
+  }, [period]);
 
   /**
    * Порядок менеджеров. Считается на клиенте: сервер отдаёт числа, а «кто
    * достоин места» — правило витрины, и жить оно должно там же, где витрина.
    *
-   * Ключ — средняя ЗА НЕДЕЛЮ, и только у тех, кто набрал порог разговоров.
+   * Ключ — средняя ЗА ВЫБРАННЫЙ ПЕРИОД, и только у тех, кто набрал порог.
    * Раньше сортировали по средней за всё время, и на проде все три места
    * заняли менеджеры с нулём разговоров за неделю, а единственный
    * работавший — двадцать три разговора и рост с 5,9 до 6,9 — оказался
@@ -295,32 +357,35 @@ export default function StatsPage() {
   const ranked = useMemo(() => {
     if (!team) return [];
     const наПьедестал = (m: TeamMemberStats) =>
-      m.weekScore !== null && m.week >= PODIUM_MIN_WEEK;
+      m.periodScore !== null && m.periodCount >= PODIUM_MIN_CONVERSATIONS;
     return [...team].sort((a, b) => {
       const aReady = наПьедестал(a);
       const bReady = наПьедестал(b);
       if (aReady !== bReady) return aReady ? -1 : 1;
       if (aReady && bReady) {
-        const diff = (b.weekScore ?? 0) - (a.weekScore ?? 0);
+        const diff = (b.periodScore ?? 0) - (a.periodScore ?? 0);
         if (diff !== 0) return diff;
       }
-      if (b.week !== a.week) return b.week - a.week;
+      if (b.periodCount !== a.periodCount) return b.periodCount - a.periodCount;
       return a.name.localeCompare(b.name, "ru");
     });
   }, [team]);
 
   /** Кто вообще может занять место: порог недели — условие пьедестала */
   const наПьедестале = useMemo(
-    () => ranked.filter((m) => m.weekScore !== null && m.week >= PODIUM_MIN_WEEK),
+    () =>
+      ranked.filter(
+        (m) => m.periodScore !== null && m.periodCount >= PODIUM_MIN_CONVERSATIONS
+      ),
     [ranked]
   );
 
-  // Средняя отдела — по недельным средним тех, у кого они есть. Раньше здесь
+  // Средняя отдела — по средним за период у тех, у кого они есть. Раньше здесь
   // складывались средние за всё время, а подпись говорила «за неделю»
   const teamAvg = useMemo(() => {
-    const scored = ranked.filter((m) => m.weekScore !== null);
+    const scored = ranked.filter((m) => m.periodScore !== null);
     if (scored.length === 0) return null;
-    const sum = scored.reduce((acc, m) => acc + (m.weekScore ?? 0), 0);
+    const sum = scored.reduce((acc, m) => acc + (m.periodScore ?? 0), 0);
     return Math.round((sum / scored.length) * 10) / 10;
   }, [ranked]);
 
@@ -328,8 +393,8 @@ export default function StatsPage() {
   // процентов: иначе менеджер с тремя разговорами весил бы столько же,
   // сколько менеджер с тридцатью
   const teamDeals = useMemo(() => {
-    const paid = ranked.reduce((acc, m) => acc + m.weekPaidDeals, 0);
-    const total = ranked.reduce((acc, m) => acc + m.weekDealTotal, 0);
+    const paid = ranked.reduce((acc, m) => acc + m.periodPaidDeals, 0);
+    const total = ranked.reduce((acc, m) => acc + m.periodDealTotal, 0);
     return formatDealsRate(paid, total);
   }, [ranked]);
 
@@ -346,14 +411,14 @@ export default function StatsPage() {
         return top === null || current > top ? manager : best;
       }, null);
 
-    const grinder = leader((m) => m.week);
-    const improver = leader((m) => m.weekDelta);
+    const grinder = leader((m) => m.periodCount);
+    const improver = leader((m) => m.periodDelta);
     // «Закрыватель» — только среди тех, у кого разговоров достаточно:
     // один закрытый из одного даёт 100% и забрал бы награду ни за что.
     // Считается по неделе, как и всё остальное на витрине
     const closer = leader((m) =>
-      m.weekDealTotal >= DEALS_RATE_MIN_CONVERSATIONS
-        ? m.weekPaidDeals / m.weekDealTotal
+      m.periodDealTotal >= DEALS_RATE_MIN_CONVERSATIONS
+        ? m.periodPaidDeals / m.periodDealTotal
         : null
     );
 
@@ -363,7 +428,7 @@ export default function StatsPage() {
         manager: grinder,
         label: "Трудяга",
         tone: "bg-brand-soft text-brand-hover",
-        metric: `${grinder.week} ${plural(grinder.week, "тренировка", "тренировки", "тренировок")} за неделю`,
+        metric: `${grinder.periodCount} ${plural(grinder.periodCount, "тренировка", "тренировки", "тренировок")} ${подписи.count}`,
       });
     }
     if (improver) {
@@ -371,7 +436,7 @@ export default function StatsPage() {
         manager: improver,
         label: "Работает над собой",
         tone: "bg-good-surface text-good",
-        metric: `+${improver.weekDelta} к средней за неделю`,
+        metric: `+${improver.periodDelta} к средней`,
       });
     }
     if (closer) {
@@ -379,11 +444,11 @@ export default function StatsPage() {
         manager: closer,
         label: "Закрыватель",
         tone: "bg-surface-accent text-brand-score",
-        metric: `${formatDealsRate(closer.weekPaidDeals, closer.weekDealTotal).label} закрытых сделок за неделю`,
+        metric: `${formatDealsRate(closer.periodPaidDeals, closer.periodDealTotal).label} закрытых сделок`,
       });
     }
     return list;
-  }, [ranked]);
+  }, [ranked, подписи]);
 
   // Подиум собирается, только если есть кого поставить на все три ступени:
   // пьедестал из одного человека выглядел бы насмешкой, а не витриной
@@ -425,16 +490,30 @@ export default function StatsPage() {
                 </h1>
                 <p className="mt-1 text-sm text-ink-muted">
                   {team
-                    ? `${team.length} ${plural(team.length, "менеджер", "менеджера", "менеджеров")} · всё за последние 7 дней, динамика — неделя к неделе`
+                    ? `${team.length} ${plural(team.length, "менеджер", "менеджера", "менеджеров")} · ${подписи.header}`
                     : "Загружаем показатели"}
                 </p>
               </div>
-              {team && (
-                <div className="flex shrink-0 items-center gap-2 font-mono text-xs text-ink-subtle">
-                  <span className="inline-block h-[7px] w-[7px] rounded-full bg-brand" />
-                  Обновлено сегодня
-                </div>
-              )}
+              {/* Переключатель периода. Неделя показывает форму сейчас, но
+                  отдел, где на неделе тренировался один человек, витрину
+                  не наполнит — и посмотреть на людей всё равно нужно */}
+              <div className="flex shrink-0 items-center gap-1 rounded-[11px] border border-line bg-surface-card p-1">
+                {PERIODS.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setPeriod(item.key)}
+                    aria-pressed={item.key === period}
+                    className={`rounded-[8px] px-3.5 py-1.5 text-[14px] font-semibold transition-colors ${
+                      item.key === period
+                        ? "bg-brand text-white"
+                        : "text-ink-muted hover:bg-surface-bubble"
+                    }`}
+                  >
+                    {item.tab}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {!team && !error && (
@@ -473,8 +552,8 @@ export default function StatsPage() {
                     </div>
                     <div className="mt-[7px] whitespace-nowrap text-xs text-ink-subtle">
                       {team.length}{" "}
-                      {plural(team.length, "менеджер", "менеджера", "менеджеров")} ·
-                      за неделю
+                      {plural(team.length, "менеджер", "менеджера", "менеджеров")} ·{" "}
+                      {подписи.count}
                     </div>
                   </div>
 
@@ -488,7 +567,7 @@ export default function StatsPage() {
                       {teamDeals.label}
                     </div>
                     <div className="mt-[7px] whitespace-nowrap text-xs text-ink-subtle">
-                      {teamDeals.hint ?? "по разговорам отдела за неделю"}
+                      {teamDeals.hint ?? подписи.deals}
                     </div>
                   </div>
 
@@ -538,6 +617,7 @@ export default function StatsPage() {
                         key={manager.id}
                         manager={manager}
                         place={placeOf(manager)}
+                        подписи={подписи}
                         onOpen={() => setOpenId(manager.id)}
                       />
                     ))}
@@ -546,13 +626,18 @@ export default function StatsPage() {
 
                 {/* Пьедестала нет — говорим почему. Пустое место на его
                     месте читалось бы как поломка, а причина простая:
-                    за неделю тренировалось меньше трёх человек */}
+                    за выбранный период тренировалось меньше трёх человек */}
                 {!hasPodium && (
                   <p className="mx-auto mb-5 max-w-[1140px] text-center text-[14px] leading-normal text-ink-subtle">
-                    Пьедестал считается по неделе. Он появится, когда{" "}
-                    {PODIUM_MIN_WEEK}{" "}
-                    {plural(PODIUM_MIN_WEEK, "разговор", "разговора", "разговоров")}{" "}
-                    за последние 7 дней наберут хотя бы трое.
+                    Пьедестал появится, когда {PODIUM_MIN_CONVERSATIONS}{" "}
+                    {plural(
+                      PODIUM_MIN_CONVERSATIONS,
+                      "разговор",
+                      "разговора",
+                      "разговоров"
+                    )}{" "}
+                    за выбранный период наберут хотя бы трое. Посмотрите другой
+                    период — переключатель в шапке.
                   </p>
                 )}
 
@@ -572,6 +657,7 @@ export default function StatsPage() {
                           key={manager.id}
                           manager={manager}
                           place={placeOf(manager)}
+                          подписи={подписи}
                           onOpen={() => setOpenId(manager.id)}
                         />
                       ))}
@@ -588,6 +674,7 @@ export default function StatsPage() {
         <TeamStatsModal
           manager={openManager}
           place={placeOf(openManager)}
+          подписи={подписи}
           onClose={() => setOpenId(null)}
         />
       )}
