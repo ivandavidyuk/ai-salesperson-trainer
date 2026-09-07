@@ -15,6 +15,7 @@ import AudioDevicePicker from "@/app/components/AudioDevicePicker";
 import BackLink from "@/app/components/BackLink";
 import CallAvatar from "@/app/components/CallAvatar";
 import CaseServiceBlock from "@/app/components/CaseServiceBlock";
+import DiagnosticsDocument from "@/app/components/DiagnosticsDocument";
 import Logo from "@/app/components/Logo";
 import SpeakerPill from "@/app/components/SpeakerPill";
 import Timer from "@/app/components/Timer";
@@ -872,9 +873,10 @@ function SessionScreen() {
                     не мешает ужаться ниже содержимого, и текст вылезает под
                     кнопки. Нижний предел 120 px — шесть строк читаемы всегда,
                     дальше прокручивается колонка */}
-                <div className="max-h-[calc(100vh-750px)] min-h-[120px] overflow-y-auto whitespace-pre-line font-mono text-[13.5px] leading-snug text-ink-label">
-                  {diagnostics}
-                </div>
+                <DiagnosticsDocument
+                  text={diagnostics}
+                  className="max-h-[calc(100vh-750px)] min-h-[120px] overflow-y-auto font-mono text-[13.5px] leading-snug text-ink-label"
+                />
               </div>
             )}
 
