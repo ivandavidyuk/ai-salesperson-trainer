@@ -12,6 +12,7 @@ import Button from "@/app/components/Button";
 import ReviewPanel from "@/app/components/ReviewPanel";
 import TranscriptMessage from "@/app/components/TranscriptMessage";
 import CaseServiceBlock from "@/app/components/CaseServiceBlock";
+import DiagnosticsDocument from "@/app/components/DiagnosticsDocument";
 import PatientAvatar from "@/app/components/PatientAvatar";
 import BackLink from "@/app/components/BackLink";
 import Logo from "@/app/components/Logo";
@@ -64,9 +65,10 @@ function DiagnosticsShownBlock({
         Менеджеру показан результат диагностики
       </div>
       <CaseServiceBlock service={service} variant="line" />
-      <div className="whitespace-pre-line border-t border-line pt-3 font-mono text-[14px] leading-relaxed text-ink-label">
-        {text}
-      </div>
+      <DiagnosticsDocument
+        text={text}
+        className="border-t border-line pt-3 font-mono text-[14px] leading-relaxed text-ink-label"
+      />
     </div>
   );
 }
