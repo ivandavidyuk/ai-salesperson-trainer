@@ -152,9 +152,26 @@ async function pickDaily(kind: DailyContentKind, day: number): Promise<string | 
 // Средние оценки по этапам за интервал. null, если разборов в нём нет.
 // Средние оценки по этапам за период. Экспортируется: тем же считается
 // статистика отдела у руководителя.
-export async function averageScores(userId: string, from: Date, to: Date) {
+export async function averageScores(
+  userId: string,
+  from: Date,
+  to: Date,
+  statsResetAt: Date | null = null
+) {
+  // Нижняя граница окна — та, что позже: начало периода или отметка обнуления.
+  // Без этого сразу после обнуления недельная средняя считалась бы
+  // по разговорам, которые руководитель только что убрал. Пока по ней рисовали
+  // одну стрелку прироста, это было незаметно; теперь на ней стоит пьедестал.
+  // Само обнуление в `завершённые` не передаём: оно ставит своё условие
+  // на startedAt, и два таких условия в одном объекте затёрли бы друг друга
+  const начало = statsResetAt && statsResetAt > from ? statsResetAt : from;
   const result = await prisma.sessionReview.aggregate({
-    where: { session: { userId, startedAt: { gte: from, lt: to } } },
+    where: {
+      session: {
+        ...завершённые(userId, null),
+        startedAt: { gte: начало, lt: to },
+      },
+    },
     _avg: {
       contactScore: true,
       iceBreakerScore: true,
@@ -168,8 +185,11 @@ export async function averageScores(userId: string, from: Date, to: Date) {
       // за неделю. «Прогресс» на главной это поле просто не читает.
       overallScore: true,
     },
+    // Лучшая оценка за то же окно — витрине отдела, где всё считается
+    // за неделю. Отдельным запросом её брать незачем: агрегат уже здесь
+    _max: { overallScore: true },
   });
-  return result._avg;
+  return { avg: result._avg, best: result._max.overallScore };
 }
 
 export async function getHomeData(userId: string): Promise<HomeData | null> {
@@ -229,8 +249,8 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
       _avg: { overallScore: true },
     }),
     listConversations(userId, НЕДАВНИХ_РАЗГОВОРОВ),
-    averageScores(userId, weekStart, now),
-    averageScores(userId, prevWeekStart, weekStart),
+    averageScores(userId, weekStart, now, user.statsResetAt),
+    averageScores(userId, prevWeekStart, weekStart, user.statsResetAt),
     prisma.sessionReview.findFirst({
       where: { session: { userId } },
       orderBy: { createdAt: "desc" },
@@ -251,8 +271,8 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
   ]);
 
   const metrics: ProgressMetric[] = PROGRESS_METRICS.map(({ key, label }) => {
-    const current = round1(currentWeekAvg[key] ?? null);
-    const previous = round1(prevWeekAvg[key] ?? null);
+    const current = round1(currentWeekAvg.avg[key] ?? null);
+    const previous = round1(prevWeekAvg.avg[key] ?? null);
     return {
       key,
       label,

@@ -8,26 +8,20 @@
 // а не раскрытая карточка плюс отдельное окно со списком.
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import Loader from "@/app/components/Loader";
-import ScoreBadge from "@/app/components/ScoreBadge";
-import { formatConversationDate, formatDuration, initials } from "@/lib/format";
+import ConversationRow from "@/app/components/ConversationRow";
+import { initials } from "@/lib/format";
 import { SCORE_TEXT_CLASS, formatDealsRate, scoreTone } from "@/lib/score";
+import type { HomeConversation } from "@/lib/home";
 import type { TeamMemberStats } from "@/lib/team";
 import { PLACE_BANNER, PLACE_PILL, placeLabel } from "@/lib/podium";
-
-interface HistorySession {
-  id: string;
-  topic: string | null;
-  startedAt: string;
-  durationSec: number | null;
-  score: number | null;
-}
 
 interface TeamStatsModalProps {
   manager: TeamMemberStats;
   /** Место в отделе — от него зависят цвет шапки и плашка */
   place: number;
+  /** Подписи выбранного периода: цифры в окне считаются за него же */
+  подписи: { key: string; count: string };
   onClose: () => void;
 }
 
@@ -57,9 +51,10 @@ function Delta({ delta }: { delta: number | null }) {
 export default function TeamStatsModal({
   manager,
   place,
+  подписи,
   onClose,
 }: TeamStatsModalProps) {
-  const [sessions, setSessions] = useState<HistorySession[] | null>(null);
+  const [sessions, setSessions] = useState<HomeConversation[] | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -68,7 +63,7 @@ export default function TeamStatsModal({
       try {
         const res = await fetch(`/api/team/${manager.id}/sessions`);
         if (!res.ok) throw new Error("request failed");
-        const data = (await res.json()) as { sessions: HistorySession[] };
+        const data = (await res.json()) as { sessions: HomeConversation[] };
         if (!cancelled) setSessions(data.sessions);
       } catch {
         if (!cancelled) setError("Не удалось загрузить разговоры");
@@ -88,13 +83,16 @@ export default function TeamStatsModal({
   }, [onClose]);
 
   const avgClass =
-    manager.avgScore === null
+    manager.periodScore === null
       ? "text-ink-subtle"
-      : SCORE_TEXT_CLASS[scoreTone(manager.avgScore)];
+      : SCORE_TEXT_CLASS[scoreTone(manager.periodScore)];
 
   // Знаменатель — разговоры, где сделка могла случиться: этапные тренировки
-  // в процент закрытых не входят
-  const dealsRate = formatDealsRate(manager.paidDeals, manager.dealTotal);
+  // в процент закрытых не входят. Период — тот же, что выбран на витрине
+  const dealsRate = formatDealsRate(
+    manager.periodPaidDeals,
+    manager.periodDealTotal
+  );
 
   return (
     <div
@@ -137,7 +135,7 @@ export default function TeamStatsModal({
 
           <div className="shrink-0 text-center">
             <div className={`font-mono text-[27px] font-medium leading-none ${avgClass}`}>
-              {manager.avgScore ?? "—"}
+              {manager.periodScore ?? "—"}
             </div>
             <div className="mt-1 text-[12.5px] text-ink-subtle">ср. оценка</div>
           </div>
@@ -156,10 +154,13 @@ export default function TeamStatsModal({
         <div className="min-h-0 flex-1 overflow-y-auto px-[26px] pb-7 pt-6">
           <div className="mb-6 flex gap-3">
             <Tile value={String(manager.total)} label="разговоров всего" />
-            <Tile value={String(manager.week)} label="за неделю" />
+            {/* За всё время эта плитка повторила бы соседнюю — тогда её нет */}
+            {подписи.key !== "all" && (
+              <Tile value={String(manager.periodCount)} label={подписи.count} />
+            )}
             <Tile
               value={manager.bestScore === null ? "—" : String(manager.bestScore)}
-              label="лучшая оценка"
+              label="лучшая за период"
             />
             <Tile
               value={dealsRate.label}
@@ -200,7 +201,7 @@ export default function TeamStatsModal({
             <div className="flex min-w-[250px] flex-1 flex-col gap-4">
               {/* Тот же случай, что в «Прогрессе» на главной: выводы взяты
                   из одного последнего разбора, а рядом стоят показатели
-                  за неделю и за всё время. Без подписи руководитель читает
+                  за период и за всё время. Без подписи руководитель читает
                   их как характеристику менеджера вообще */}
               {(manager.strength || manager.growthPoint) && (
                 <div className="font-mono text-[12px] uppercase tracking-[.12em] text-ink-placeholder">
@@ -258,40 +259,13 @@ export default function TeamStatsModal({
             </p>
           )}
 
+          {/* Та же строка, что менеджер видит у себя на главной: имя
+              пациента, оценка, длительность. Раньше здесь рисовалась своя,
+              и в ней стояла тема разговора — а её приложение не заполняет,
+              поэтому у руководителя весь список читался как «Разговор» */}
           <div className="flex flex-col">
-            {sessions?.map((session) => (
-              <Link
-                key={session.id}
-                href={`/transcript/${session.id}`}
-                className="flex items-center gap-3.5 rounded-[10px] px-3.5 py-3 transition-colors hover:bg-surface-bubble"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-ink">
-                    {session.topic || "Разговор"}
-                  </div>
-                  <div className="mt-px text-xs text-ink-subtle">
-                    {formatConversationDate(session.startedAt)}
-                  </div>
-                </div>
-                <span className="shrink-0 font-mono text-[14px] text-ink-muted">
-                  {formatDuration(session.durationSec)}
-                </span>
-                <ScoreBadge score={session.score} />
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="shrink-0 text-ink-icon"
-                  aria-hidden="true"
-                >
-                  <path d="M9 6l6 6-6 6" />
-                </svg>
-              </Link>
+            {sessions?.map((conversation) => (
+              <ConversationRow key={conversation.id} conversation={conversation} />
             ))}
           </div>
         </div>
