@@ -453,12 +453,11 @@ function ConversationChecklist({
   onShow?: (index: number) => void;
 }) {
   const measured = stages.filter((stage) => stage.measured);
-  const firstGap = stages.findIndex(
-    (stage) => stage.measured && stage.items.some((item) => item.mark < 2)
-  );
-  const [open, setOpen] = useState<number | null>(
-    firstGap >= 0 ? firstGap : stages.findIndex((stage) => stage.measured)
-  );
+  // Все этапы закрыты. Сначала панель сама раскрывала первый этап с зазором,
+  // но тогда разбор начинается с разбора: менеджер видит оценки и тут же
+  // список своих промахов, о котором не просил. Пункты — ответ на вопрос
+  // «где именно», и задать его он должен сам
+  const [open, setOpen] = useState<number | null>(null);
 
   const done = measured.reduce(
     (sum, stage) => sum + stage.items.filter((item) => item.mark === 2).length,
