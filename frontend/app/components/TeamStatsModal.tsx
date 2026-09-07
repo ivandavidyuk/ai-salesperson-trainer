@@ -8,21 +8,13 @@
 // а не раскрытая карточка плюс отдельное окно со списком.
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import Loader from "@/app/components/Loader";
-import ScoreBadge from "@/app/components/ScoreBadge";
-import { formatConversationDate, formatDuration, initials } from "@/lib/format";
+import ConversationRow from "@/app/components/ConversationRow";
+import { initials } from "@/lib/format";
 import { SCORE_TEXT_CLASS, formatDealsRate, scoreTone } from "@/lib/score";
+import type { HomeConversation } from "@/lib/home";
 import type { TeamMemberStats } from "@/lib/team";
 import { PLACE_BANNER, PLACE_PILL, placeLabel } from "@/lib/podium";
-
-interface HistorySession {
-  id: string;
-  topic: string | null;
-  startedAt: string;
-  durationSec: number | null;
-  score: number | null;
-}
 
 interface TeamStatsModalProps {
   manager: TeamMemberStats;
@@ -59,7 +51,7 @@ export default function TeamStatsModal({
   place,
   onClose,
 }: TeamStatsModalProps) {
-  const [sessions, setSessions] = useState<HistorySession[] | null>(null);
+  const [sessions, setSessions] = useState<HomeConversation[] | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -68,7 +60,7 @@ export default function TeamStatsModal({
       try {
         const res = await fetch(`/api/team/${manager.id}/sessions`);
         if (!res.ok) throw new Error("request failed");
-        const data = (await res.json()) as { sessions: HistorySession[] };
+        const data = (await res.json()) as { sessions: HomeConversation[] };
         if (!cancelled) setSessions(data.sessions);
       } catch {
         if (!cancelled) setError("Не удалось загрузить разговоры");
@@ -88,13 +80,13 @@ export default function TeamStatsModal({
   }, [onClose]);
 
   const avgClass =
-    manager.avgScore === null
+    manager.weekScore === null
       ? "text-ink-subtle"
-      : SCORE_TEXT_CLASS[scoreTone(manager.avgScore)];
+      : SCORE_TEXT_CLASS[scoreTone(manager.weekScore)];
 
   // Знаменатель — разговоры, где сделка могла случиться: этапные тренировки
-  // в процент закрытых не входят
-  const dealsRate = formatDealsRate(manager.paidDeals, manager.dealTotal);
+  // в процент закрытых не входят. Неделя, как и всё остальное на витрине
+  const dealsRate = formatDealsRate(manager.weekPaidDeals, manager.weekDealTotal);
 
   return (
     <div
@@ -137,9 +129,9 @@ export default function TeamStatsModal({
 
           <div className="shrink-0 text-center">
             <div className={`font-mono text-[27px] font-medium leading-none ${avgClass}`}>
-              {manager.avgScore ?? "—"}
+              {manager.weekScore ?? "—"}
             </div>
-            <div className="mt-1 text-[12.5px] text-ink-subtle">ср. оценка</div>
+            <div className="mt-1 text-[12.5px] text-ink-subtle">ср. за неделю</div>
           </div>
 
           <button
@@ -159,7 +151,7 @@ export default function TeamStatsModal({
             <Tile value={String(manager.week)} label="за неделю" />
             <Tile
               value={manager.bestScore === null ? "—" : String(manager.bestScore)}
-              label="лучшая оценка"
+              label="лучшая за неделю"
             />
             <Tile
               value={dealsRate.label}
@@ -258,40 +250,13 @@ export default function TeamStatsModal({
             </p>
           )}
 
+          {/* Та же строка, что менеджер видит у себя на главной: имя
+              пациента, оценка, длительность. Раньше здесь рисовалась своя,
+              и в ней стояла тема разговора — а её приложение не заполняет,
+              поэтому у руководителя весь список читался как «Разговор» */}
           <div className="flex flex-col">
-            {sessions?.map((session) => (
-              <Link
-                key={session.id}
-                href={`/transcript/${session.id}`}
-                className="flex items-center gap-3.5 rounded-[10px] px-3.5 py-3 transition-colors hover:bg-surface-bubble"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-ink">
-                    {session.topic || "Разговор"}
-                  </div>
-                  <div className="mt-px text-xs text-ink-subtle">
-                    {formatConversationDate(session.startedAt)}
-                  </div>
-                </div>
-                <span className="shrink-0 font-mono text-[14px] text-ink-muted">
-                  {formatDuration(session.durationSec)}
-                </span>
-                <ScoreBadge score={session.score} />
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="shrink-0 text-ink-icon"
-                  aria-hidden="true"
-                >
-                  <path d="M9 6l6 6-6 6" />
-                </svg>
-              </Link>
+            {sessions?.map((conversation) => (
+              <ConversationRow key={conversation.id} conversation={conversation} />
             ))}
           </div>
         </div>

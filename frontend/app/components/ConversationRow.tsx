@@ -11,7 +11,12 @@ import { formatConversationDate, formatDuration } from "@/lib/format";
 
 interface ConversationRowProps {
   conversation: HomeConversation;
-  onToggleFavorite: (id: string, isFavorite: boolean) => void;
+  /**
+   * Не передан — звезды нет. Так строка выглядит у руководителя: избранное
+   * это личная пометка менеджера, ставить её за него нечего, а чужая звезда
+   * ничего руководителю не говорит.
+   */
+  onToggleFavorite?: (id: string, isFavorite: boolean) => void;
 }
 
 export default function ConversationRow({
@@ -24,6 +29,7 @@ export default function ConversationRow({
 
   return (
     <div className="flex items-center gap-3 border-b border-line-soft px-5 py-[11px] last:border-b-0">
+      {onToggleFavorite && (
       <button
         type="button"
         onClick={() => onToggleFavorite(conversation.id, !conversation.isFavorite)}
@@ -44,6 +50,7 @@ export default function ConversationRow({
           <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
         </svg>
       </button>
+      )}
 
       <PatientAvatar
         name={conversation.patientName}

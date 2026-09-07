@@ -19,12 +19,6 @@ export interface TeamStageMetric {
   delta: number | null;
 }
 
-export interface TeamRecentConversation {
-  id: string;
-  topic: string | null;
-  score: number | null;
-}
-
 export interface TeamMemberStats {
   id: string;
   name: string;
@@ -40,13 +34,21 @@ export interface TeamMemberStats {
   total: number;
   /** Из них на этой неделе */
   week: number;
-  /** Средняя оценка за всё время; null — разборов нет */
+  /**
+   * Средняя оценка за всё время; null — разборов нет.
+   *
+   * Витрина отдела её больше не показывает — там всё считается за неделю.
+   * Осталась ради карточки обнуления в профиле: там вопрос другой — что
+   * именно руководитель сейчас сотрёт, а стирается как раз всё время
+   */
   avgScore: number | null;
+  /** Средняя за последние 7 суток; null — разговоров за неделю не было */
+  weekScore: number | null;
   /** Прирост средней за эту неделю к прошлой; null — не с чем сравнивать */
   weekDelta: number | null;
-  /** Лучшая оценка за всё время; null — разборов нет */
+  /** Лучшая оценка за неделю; null — разборов за неделю нет */
   bestScore: number | null;
-  /** Разговоров с исходом `paid`. Знаменатель — dealTotal, а не total */
+  /** Разговоров с исходом `paid` за всё время. Знаменатель — dealTotal */
   paidDeals: number;
   /**
    * Сколько было разговоров, в которых сделка могла случиться. Меньше total
@@ -54,12 +56,14 @@ export interface TeamMemberStats {
    * и в проценте закрытых сделок им не место.
    */
   dealTotal: number;
+  /** Из них за последнюю неделю — по ним считается награда «Закрыватель» */
+  weekPaidDeals: number;
+  weekDealTotal: number;
   /** Разговоров по дням за последние 7 суток, от старого к сегодняшнему */
   activity: number[];
   stages: TeamStageMetric[];
   strength: string | null;
   growthPoint: string | null;
-  recent: TeamRecentConversation[];
 }
 
 /**
@@ -119,33 +123,31 @@ export async function getTeamStats(
         scoreAgg,
         currentWeekAvg,
         prevWeekAvg,
-        recentRows,
         lastReview,
         activityRows,
         paidCount,
         dealTotal,
+        weekPaidCount,
+        weekDealTotal,
       ] = await Promise.all([
           prisma.session.count({ where: completed }),
           prisma.session.count({
             where: { ...completed, startedAt: { gte: weekStart } },
           }),
+          // Средняя за всё время нужна только карточке обнуления в профиле.
+          // Лучшая оценка здесь больше не берётся: на витрине она недельная
+          // и приходит из того же агрегата, что и недельная средняя
           prisma.sessionReview.aggregate({
             where: { session: completed },
             _avg: { overallScore: true },
-            _max: { overallScore: true },
           }),
-          averageScores(manager.id, weekStart, now),
-          averageScores(manager.id, prevWeekStart, weekStart),
-          prisma.session.findMany({
-            where: completed,
-            orderBy: { startedAt: "desc" },
-            take: 3,
-            select: {
-              id: true,
-              topic: true,
-              review: { select: { overallScore: true } },
-            },
-          }),
+          averageScores(manager.id, weekStart, now, manager.statsResetAt),
+          averageScores(
+            manager.id,
+            prevWeekStart,
+            weekStart,
+            manager.statsResetAt
+          ),
           // Сильная сторона и точка роста — из последнего разбора
           prisma.sessionReview.findFirst({
             where: { session: completed },
@@ -165,6 +167,17 @@ export async function getTeamStats(
             where: { session: withDeal, outcome: DealOutcome.paid },
           }),
           prisma.session.count({ where: withDeal }),
+          // Те же сделки, но за неделю: награда «Закрыватель» считается
+          // по неделе, как и всё остальное на витрине
+          prisma.sessionReview.count({
+            where: {
+              session: { ...withDeal, startedAt: { gte: weekStart } },
+              outcome: DealOutcome.paid,
+            },
+          }),
+          prisma.session.count({
+            where: { ...withDeal, startedAt: { gte: weekStart } },
+          }),
         ]);
 
       const activity = new Array<number>(ACTIVITY_DAYS).fill(0);
@@ -177,12 +190,12 @@ export async function getTeamStats(
         if (index >= 0 && index < ACTIVITY_DAYS) activity[index] += 1;
       }
 
-      const thisWeekOverall = round1(currentWeekAvg.overallScore ?? null);
-      const prevWeekOverall = round1(prevWeekAvg.overallScore ?? null);
+      const thisWeekOverall = round1(currentWeekAvg.avg.overallScore ?? null);
+      const prevWeekOverall = round1(prevWeekAvg.avg.overallScore ?? null);
 
       const stages: TeamStageMetric[] = STAGE_METRICS.map(({ key, label }) => {
-        const value = round1(currentWeekAvg[key] ?? null);
-        const previous = round1(prevWeekAvg[key] ?? null);
+        const value = round1(currentWeekAvg.avg[key] ?? null);
+        const previous = round1(prevWeekAvg.avg[key] ?? null);
         return {
           key,
           label,
@@ -202,22 +215,20 @@ export async function getTeamStats(
         total,
         week,
         avgScore: round1(scoreAgg._avg.overallScore),
+        weekScore: thisWeekOverall,
         weekDelta:
           thisWeekOverall !== null && prevWeekOverall !== null
             ? round1(thisWeekOverall - prevWeekOverall)
             : null,
-        bestScore: round1(scoreAgg._max.overallScore),
+        bestScore: round1(currentWeekAvg.best),
         paidDeals: paidCount,
         dealTotal,
+        weekPaidDeals: weekPaidCount,
+        weekDealTotal,
         activity,
         stages,
         strength: lastReview?.strength ?? null,
         growthPoint: lastReview?.growthPoint ?? null,
-        recent: recentRows.map((row) => ({
-          id: row.id,
-          topic: row.topic,
-          score: round1(row.review?.overallScore ?? null),
-        })),
       };
     })
   );

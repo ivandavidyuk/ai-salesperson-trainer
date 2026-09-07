@@ -15,6 +15,7 @@ import { initials, plural } from "@/lib/format";
 import { PLACE_BANNER, PLACE_PILL, placeLabel } from "@/lib/podium";
 import {
   DEALS_RATE_MIN_CONVERSATIONS,
+  PODIUM_MIN_WEEK,
   SCORE_TEXT_CLASS,
   formatDealsRate,
   scoreTone,
@@ -130,14 +131,14 @@ function PodiumCard({
 
           <div className="mt-4 flex items-baseline justify-center gap-[5px]">
             <span
-              className={`font-mono text-[35px] font-medium leading-none ${scoreClass(manager.avgScore)}`}
+              className={`font-mono text-[35px] font-medium leading-none ${scoreClass(manager.weekScore)}`}
             >
-              {manager.avgScore ?? "—"}
+              {manager.weekScore ?? "—"}
             </span>
             <span className="font-mono text-[16.5px] text-ink-placeholder">/ 10</span>
           </div>
           <div className="mt-[5px] text-center text-[13px] uppercase tracking-[.04em] text-ink-subtle">
-            средняя оценка по тренировкам
+            средняя оценка за неделю
           </div>
 
           <div className="mt-[18px] flex gap-2.5">
@@ -148,7 +149,9 @@ function PodiumCard({
                 превращается в табло позора, хотя 20% для холодного трафика
                 может быть нормой */}
             <MiniStat
-              value={formatDealsRate(manager.paidDeals, manager.dealTotal).label}
+              value={
+                formatDealsRate(manager.weekPaidDeals, manager.weekDealTotal).label
+              }
               label="закрыто"
             />
           </div>
@@ -208,10 +211,12 @@ function OtherRow({
       </div>
 
       <div className="w-24 text-center">
-        <div className={`font-mono text-[20.5px] ${scoreClass(manager.avgScore)}`}>
-          {manager.avgScore ?? "—"}
+        <div className={`font-mono text-[20.5px] ${scoreClass(manager.weekScore)}`}>
+          {manager.weekScore ?? "—"}
         </div>
-        <div className="mt-0.5 text-[12.5px] text-ink-subtle">ср. по трен.</div>
+        <div className="mt-0.5 text-[12.5px] text-ink-subtle">
+          {manager.week === 0 ? "нет разговоров" : "ср. за неделю"}
+        </div>
       </div>
       <div className="w-[84px] text-center">
         <div className="font-mono text-[20.5px] text-ink">{manager.total}</div>
@@ -223,7 +228,7 @@ function OtherRow({
       </div>
       <div className="w-[84px] text-center">
         <div className="font-mono text-[20.5px] text-ink">
-          {formatDealsRate(manager.paidDeals, manager.dealTotal).label}
+          {formatDealsRate(manager.weekPaidDeals, manager.weekDealTotal).label}
         </div>
         <div className="mt-0.5 text-[12.5px] text-ink-subtle">закрыто</div>
       </div>
@@ -273,23 +278,49 @@ export default function StatsPage() {
     };
   }, []);
 
-  // Места считаются на клиенте: сервер отдаёт всё нужное, а порядок —
-  // производная от средней оценки. Менеджеры без разборов уходят в конец:
-  // сравнивать их не с чем, и в подиуме им не место.
+  /**
+   * Порядок менеджеров. Считается на клиенте: сервер отдаёт числа, а «кто
+   * достоин места» — правило витрины, и жить оно должно там же, где витрина.
+   *
+   * Ключ — средняя ЗА НЕДЕЛЮ, и только у тех, кто набрал порог разговоров.
+   * Раньше сортировали по средней за всё время, и на проде все три места
+   * заняли менеджеры с нулём разговоров за неделю, а единственный
+   * работавший — двадцать три разговора и рост с 5,9 до 6,9 — оказался
+   * четвёртым.
+   *
+   * Ниже порога сравнивать нечем, поэтому там порядок по числу разговоров
+   * за неделю: кто хоть тренировался, выше тех, кто не открывал тренажёр.
+   * Последний ключ — имя, чтобы порядок не зависел от стабильности сортировки.
+   */
   const ranked = useMemo(() => {
     if (!team) return [];
+    const наПьедестал = (m: TeamMemberStats) =>
+      m.weekScore !== null && m.week >= PODIUM_MIN_WEEK;
     return [...team].sort((a, b) => {
-      if (a.avgScore === null && b.avgScore === null) return 0;
-      if (a.avgScore === null) return 1;
-      if (b.avgScore === null) return -1;
-      return b.avgScore - a.avgScore;
+      const aReady = наПьедестал(a);
+      const bReady = наПьедестал(b);
+      if (aReady !== bReady) return aReady ? -1 : 1;
+      if (aReady && bReady) {
+        const diff = (b.weekScore ?? 0) - (a.weekScore ?? 0);
+        if (diff !== 0) return diff;
+      }
+      if (b.week !== a.week) return b.week - a.week;
+      return a.name.localeCompare(b.name, "ru");
     });
   }, [team]);
 
+  /** Кто вообще может занять место: порог недели — условие пьедестала */
+  const наПьедестале = useMemo(
+    () => ranked.filter((m) => m.weekScore !== null && m.week >= PODIUM_MIN_WEEK),
+    [ranked]
+  );
+
+  // Средняя отдела — по недельным средним тех, у кого они есть. Раньше здесь
+  // складывались средние за всё время, а подпись говорила «за неделю»
   const teamAvg = useMemo(() => {
-    const scored = ranked.filter((m) => m.avgScore !== null);
+    const scored = ranked.filter((m) => m.weekScore !== null);
     if (scored.length === 0) return null;
-    const sum = scored.reduce((acc, m) => acc + (m.avgScore ?? 0), 0);
+    const sum = scored.reduce((acc, m) => acc + (m.weekScore ?? 0), 0);
     return Math.round((sum / scored.length) * 10) / 10;
   }, [ranked]);
 
@@ -297,8 +328,8 @@ export default function StatsPage() {
   // процентов: иначе менеджер с тремя разговорами весил бы столько же,
   // сколько менеджер с тридцатью
   const teamDeals = useMemo(() => {
-    const paid = ranked.reduce((acc, m) => acc + m.paidDeals, 0);
-    const total = ranked.reduce((acc, m) => acc + m.dealTotal, 0);
+    const paid = ranked.reduce((acc, m) => acc + m.weekPaidDeals, 0);
+    const total = ranked.reduce((acc, m) => acc + m.weekDealTotal, 0);
     return formatDealsRate(paid, total);
   }, [ranked]);
 
@@ -317,11 +348,13 @@ export default function StatsPage() {
 
     const grinder = leader((m) => m.week);
     const improver = leader((m) => m.weekDelta);
-    const marathoner = leader((m) => m.total);
     // «Закрыватель» — только среди тех, у кого разговоров достаточно:
-    // один закрытый из одного даёт 100% и забрал бы награду ни за что
+    // один закрытый из одного даёт 100% и забрал бы награду ни за что.
+    // Считается по неделе, как и всё остальное на витрине
     const closer = leader((m) =>
-      m.dealTotal >= DEALS_RATE_MIN_CONVERSATIONS ? m.paidDeals / m.dealTotal : null
+      m.weekDealTotal >= DEALS_RATE_MIN_CONVERSATIONS
+        ? m.weekPaidDeals / m.weekDealTotal
+        : null
     );
 
     const list: Award[] = [];
@@ -341,28 +374,20 @@ export default function StatsPage() {
         metric: `+${improver.weekDelta} к средней за неделю`,
       });
     }
-    if (marathoner) {
-      list.push({
-        manager: marathoner,
-        label: "Марафонец",
-        tone: "bg-surface-bubble text-ink-muted",
-        metric: `${marathoner.total} ${plural(marathoner.total, "разговор", "разговора", "разговоров")} всего`,
-      });
-    }
     if (closer) {
       list.push({
         manager: closer,
         label: "Закрыватель",
         tone: "bg-surface-accent text-brand-score",
-        metric: `${formatDealsRate(closer.paidDeals, closer.dealTotal).label} закрытых сделок`,
+        metric: `${formatDealsRate(closer.weekPaidDeals, closer.weekDealTotal).label} закрытых сделок за неделю`,
       });
     }
     return list;
   }, [ranked]);
 
   // Подиум собирается, только если есть кого поставить на все три ступени:
-  // пьедестал из одного человека выглядел бы насмешкой, а не витриной.
-  const hasPodium = ranked.filter((m) => m.avgScore !== null).length >= 3;
+  // пьедестал из одного человека выглядел бы насмешкой, а не витриной
+  const hasPodium = наПьедестале.length >= 3;
   const podium = hasPodium ? [ranked[1], ranked[0], ranked[2]] : [];
   const others = hasPodium ? ranked.slice(3) : ranked;
   const placeOf = (manager: TeamMemberStats) =>
@@ -400,7 +425,7 @@ export default function StatsPage() {
                 </h1>
                 <p className="mt-1 text-sm text-ink-muted">
                   {team
-                    ? `${team.length} ${plural(team.length, "менеджер", "менеджера", "менеджеров")} · оценки за всё время, динамика — неделя к неделе`
+                    ? `${team.length} ${plural(team.length, "менеджер", "менеджера", "менеджеров")} · всё за последние 7 дней, динамика — неделя к неделе`
                     : "Загружаем показатели"}
                 </p>
               </div>
@@ -463,7 +488,7 @@ export default function StatsPage() {
                       {teamDeals.label}
                     </div>
                     <div className="mt-[7px] whitespace-nowrap text-xs text-ink-subtle">
-                      {teamDeals.hint ?? "по всем разговорам отдела"}
+                      {teamDeals.hint ?? "по разговорам отдела за неделю"}
                     </div>
                   </div>
 
@@ -517,6 +542,18 @@ export default function StatsPage() {
                       />
                     ))}
                   </div>
+                )}
+
+                {/* Пьедестала нет — говорим почему. Пустое место на его
+                    месте читалось бы как поломка, а причина простая:
+                    за неделю тренировалось меньше трёх человек */}
+                {!hasPodium && (
+                  <p className="mx-auto mb-5 max-w-[1140px] text-center text-[14px] leading-normal text-ink-subtle">
+                    Пьедестал считается по неделе. Он появится, когда{" "}
+                    {PODIUM_MIN_WEEK}{" "}
+                    {plural(PODIUM_MIN_WEEK, "разговор", "разговора", "разговоров")}{" "}
+                    за последние 7 дней наберут хотя бы трое.
+                  </p>
                 )}
 
                 {others.length > 0 && (
