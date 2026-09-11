@@ -19,6 +19,34 @@ import { formatDuration, greeting } from "@/lib/format";
 import { formatDealsRate } from "@/lib/score";
 
 /**
+ * Показывали ли уже окно «Демо-доступ завершён» в этом браузере.
+ *
+ * Ключ привязан к моменту исчерпания: у другого демо-аккаунта он свой,
+ * и чужая отметка чужое окно не спрячет. Хранилище может быть недоступно
+ * (приватное окно, запрет на данные сайтов) — тогда окно покажется снова,
+ * и это лучше, чем упавшая главная.
+ */
+const ключПоказа = (исчерпано: string | null) =>
+  `demo-over-seen:${исчерпано ?? "—"}`;
+
+function показано(ключ: string): boolean {
+  try {
+    return localStorage.getItem(ключ) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function запомнитьПоказ(ключ: string | null): void {
+  if (!ключ) return;
+  try {
+    localStorage.setItem(ключ, "1");
+  } catch {
+    // Не записалось — покажем ещё раз, ничего страшного
+  }
+}
+
+/**
  * Сколько строк помещается в блок «Прошлые разговоры» без прокрутки.
  *
  * Считать нельзя, можно только померить: блок тянется на всю высоту колонки,
@@ -128,10 +156,17 @@ export default function HomePage() {
   const [setupOpen, setSetupOpen] = useState(false);
   // Локальные переключения избранного, чтобы не перезапрашивать всю страницу
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
-  // Демо-доступ исчерпан — говорим об этом на главной, не дожидаясь, пока
-  // человек нажмёт «Начать тренировку». Окно закрывается: разборы за ним
-  // остаются, и ради них доступ и живёт ещё неделю
+  // Демо-доступ исчерпан — говорим об этом на главной один раз, не дожидаясь,
+  // пока человек нажмёт «Начать тренировку». Окно закрывается: разборы за ним
+  // остаются, и ради них доступ и живёт ещё неделю.
+  //
+  // Именно один раз. Сказав «Понятно», человек идёт читать разборы, и каждое
+  // возвращение на главную встречало его тем же окном — а он его уже прочитал
+  // и ничего нового не делал. Дальше окно показывается только по действию:
+  // нажал «Начать тренировку» — мастер настройки покажет его сам.
   const [demoOver, setDemoOver] = useState(false);
+  // Ключ отметки «окно уже видели» — приходит вместе со статусом демо
+  const [demoSeenKey, setDemoSeenKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -159,9 +194,12 @@ export default function HomePage() {
         const res = await fetch("/api/organization/hours");
         if (!res.ok) return;
         const payload = (await res.json()) as {
-          demo?: { expired?: boolean } | null;
+          demo?: { expired?: boolean; expiresAt?: string | null } | null;
         } | null;
-        if (!cancelled && payload?.demo?.expired) setDemoOver(true);
+        if (cancelled || !payload?.demo?.expired) return;
+        const ключ = ключПоказа(payload.demo.expiresAt ?? null);
+        setDemoSeenKey(ключ);
+        if (!показано(ключ)) setDemoOver(true);
       } catch {
         // Молча: остаток часов — не повод ломать главную
       }
@@ -361,7 +399,14 @@ export default function HomePage() {
 
       {setupOpen && <TrainingSetupModal onClose={() => setSetupOpen(false)} />}
 
-      {demoOver && <DemoExpiredModal onClose={() => setDemoOver(false)} />}
+      {demoOver && (
+        <DemoExpiredModal
+          onClose={() => {
+            запомнитьПоказ(demoSeenKey);
+            setDemoOver(false);
+          }}
+        />
+      )}
     </AppShell>
   );
 }
