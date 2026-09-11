@@ -16,7 +16,37 @@ export interface WizardTrainingType {
   group: TrainingGroup;
   /** false — карточка видна, но выбрать нельзя */
   isActive: boolean;
+  /** true — тип закрыт демо-доступом: виден, но откроется на полном */
+  demoLocked?: boolean;
 }
+
+/**
+ * Почему карточку нельзя выбрать. Причины две, и путать их нельзя:
+ * «скоро» — промпта ещё нет, продукт не готов; «демо» — всё готово,
+ * но доступ урезан, и это приглашение к полному, а не извинение.
+ */
+export type Замок = "скоро" | "демо" | null;
+
+export function замок(item: {
+  isActive: boolean;
+  demoLocked?: boolean;
+}): Замок {
+  if (!item.isActive) return "скоро";
+  if (item.demoLocked) return "демо";
+  return null;
+}
+
+/** Подпись вместо «Начать» на кнопке закрытой карточки */
+export const ЗАМОК_КНОПКА: Record<"скоро" | "демо", string> = {
+  скоро: "Скоро",
+  демо: "В полном доступе",
+};
+
+/** Бейдж в углу закрытой карточки */
+export const ЗАМОК_БЕЙДЖ: Record<"скоро" | "демо", string> = {
+  скоро: "скоро",
+  демо: "в полном доступе",
+};
 
 // Заголовки групп в мастере
 export const GROUP_LABELS: Record<TrainingGroup, string> = {
@@ -98,6 +128,8 @@ export interface WizardPatient {
   difficulty: DifficultyKey;
   /** false — промпта для этого пациента ещё нет, выбрать нельзя */
   isActive: boolean;
+  /** true — клиент закрыт демо-доступом: виден, но откроется на полном */
+  demoLocked?: boolean;
   // Разбор пациента приходит только руководителю — у менеджера этих
   // полей в ответе нет вовсе
   character?: string | null;

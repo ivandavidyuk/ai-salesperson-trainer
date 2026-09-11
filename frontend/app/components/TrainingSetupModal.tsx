@@ -23,6 +23,8 @@ import {
   DIFFICULTY,
   GROUP_LABELS,
   GROUP_SHORT,
+  ЗАМОК_БЕЙДЖ,
+  замок,
   type Assignment,
   type DifficultyKey,
   type ManagerOption,
@@ -98,10 +100,10 @@ function Radio({ selected, disabled }: { selected: boolean; disabled: boolean })
   );
 }
 
-function SoonBadge() {
+function SoonBadge({ причина }: { причина: "скоро" | "демо" }) {
   return (
     <span className="ml-auto shrink-0 rounded-full bg-surface px-2 py-0.5 text-[12px] font-semibold text-ink-subtle">
-      скоро
+      {ЗАМОК_БЕЙДЖ[причина]}
     </span>
   );
 }
@@ -371,13 +373,13 @@ export default function TrainingSetupModal({
   // Заранее выбранное не трогает — это выбрали осознанно.
   function handleRandom() {
     if (!presetType) {
-      const availableTypes = (types ?? []).filter((type) => type.isActive);
+      const availableTypes = (types ?? []).filter((type) => !замок(type));
       if (availableTypes.length === 0) return;
       setTypeId(availableTypes[Math.floor(Math.random() * availableTypes.length)].id);
     }
 
     if (!presetPatient) {
-      const available = (patients ?? []).filter((patient) => patient.isActive);
+      const available = (patients ?? []).filter((patient) => !замок(patient));
       if (available.length === 0) return;
       setPatientId(available[Math.floor(Math.random() * available.length)].id);
     }
@@ -389,7 +391,8 @@ export default function TrainingSetupModal({
 
   function renderTypeCard(type: WizardTrainingType) {
     const selected = typeId === type.id;
-    const disabled = !type.isActive;
+    const закрыт = замок(type);
+    const disabled = закрыт !== null;
     return (
       <button
         key={type.id}
@@ -407,7 +410,7 @@ export default function TrainingSetupModal({
             {type.description}
           </span>
         </span>
-        {disabled && <SoonBadge />}
+        {закрыт && <SoonBadge причина={закрыт} />}
       </button>
     );
   }
@@ -709,7 +712,8 @@ export default function TrainingSetupModal({
               <div className="flex flex-col gap-2">
                 {visiblePatients.map((patient) => {
                   const selected = patientId === patient.id;
-                  const disabled = !patient.isActive;
+                  const закрыт = замок(patient);
+                  const disabled = закрыт !== null;
                   return (
                     <div
                       key={patient.id}
@@ -765,7 +769,7 @@ export default function TrainingSetupModal({
                       </button>
 
                       <span className="ml-auto flex shrink-0 items-center gap-2">
-                        {disabled && <SoonBadge />}
+                        {закрыт && <SoonBadge причина={закрыт} />}
                         <DifficultyPill difficulty={patient.difficulty} />
                       </span>
                     </div>

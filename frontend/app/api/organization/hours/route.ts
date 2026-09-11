@@ -39,7 +39,9 @@ export async function GET(request: NextRequest) {
       exhausted: счёт.exhausted,
       demo: демо
         ? {
+            kind: демо.режим === "разговоры" ? "talks" : "day",
             expiresAt: демо.expiresAt?.toISOString() ?? null,
+            left: демо.осталось,
             expired: демо.разговорыЗакрыты,
           }
         : null,

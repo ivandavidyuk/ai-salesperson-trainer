@@ -10,6 +10,7 @@ import { prisma } from "@/lib/db";
 import { getAuthUser, signToken } from "@/lib/auth";
 import { расходЧасовПользователя } from "@/lib/hours";
 import { демоСтатус, засечьПервыйРазговор } from "@/lib/demoAccess";
+import { ВЫБОР_ЗАКРЫТ, ДЕМО_КЛИЕНТЫ, ДЕМО_ТИП } from "@/lib/demoScope";
 import { backendUrl } from "@/lib/cases";
 
 export const runtime = "nodejs";
@@ -82,6 +83,11 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      // В демо на разговоры открыт только полный: в списках остальные
+      // погашены, но запрос с их id прийти может мимо интерфейса
+      if (демо?.режим === "разговоры" && type.id !== ДЕМО_ТИП) {
+        return NextResponse.json({ error: ВЫБОР_ЗАКРЫТ }, { status: 403 });
+      }
       trainingTypeId = type.id;
       scoresDeal = type.scoresDeal;
     }
@@ -92,7 +98,7 @@ export async function POST(request: NextRequest) {
     if (body.patientId) {
       const chosen = await prisma.patient.findUnique({
         where: { id: body.patientId },
-        select: { id: true, isActive: true },
+        select: { id: true, name: true, isActive: true },
       });
       if (!chosen || !chosen.isActive) {
         return NextResponse.json(
@@ -100,12 +106,22 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      if (демо?.режим === "разговоры" && !ДЕМО_КЛИЕНТЫ.includes(chosen.name)) {
+        return NextResponse.json({ error: ВЫБОР_ЗАКРЫТ }, { status: 403 });
+      }
       patientId = chosen.id;
     } else {
       // Пациент не выбран — берём первого активного; без этой привязки
-      // разговоры в истории остались бы без имени и темы.
+      // разговоры в истории остались бы без имени и темы. В демо выбираем
+      // из открытой тройки, иначе прямой заход на /session привёл бы
+      // к закрытому клиенту
       const fallback = await prisma.patient.findFirst({
-        where: { isActive: true },
+        where: {
+          isActive: true,
+          ...(демо?.режим === "разговоры"
+            ? { name: { in: ДЕМО_КЛИЕНТЫ } }
+            : {}),
+        },
         orderBy: { createdAt: "asc" },
         select: { id: true },
       });

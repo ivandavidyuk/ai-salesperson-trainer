@@ -10,6 +10,7 @@ import AllConversationsModal from "@/app/components/AllConversationsModal";
 import AppShell from "@/app/components/AppShell";
 import ConversationRow from "@/app/components/ConversationRow";
 import DailyCard from "@/app/components/DailyCard";
+import DemoExpiredModal from "@/app/components/DemoExpiredModal";
 import Loader from "@/app/components/Loader";
 import ProgressPanel from "@/app/components/ProgressPanel";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
@@ -127,6 +128,10 @@ export default function HomePage() {
   const [setupOpen, setSetupOpen] = useState(false);
   // Локальные переключения избранного, чтобы не перезапрашивать всю страницу
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
+  // Демо-доступ исчерпан — говорим об этом на главной, не дожидаясь, пока
+  // человек нажмёт «Начать тренировку». Окно закрывается: разборы за ним
+  // остаются, и ради них доступ и живёт ещё неделю
+  const [demoOver, setDemoOver] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +143,27 @@ export default function HomePage() {
         if (!cancelled) setData(payload);
       } catch {
         if (!cancelled) setError("Не удалось загрузить данные");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Статус демо приходит отдельным запросом: /api/home — про разговоры
+  // менеджера, а лимит живёт на организации
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/organization/hours");
+        if (!res.ok) return;
+        const payload = (await res.json()) as {
+          demo?: { expired?: boolean } | null;
+        } | null;
+        if (!cancelled && payload?.demo?.expired) setDemoOver(true);
+      } catch {
+        // Молча: остаток часов — не повод ломать главную
       }
     })();
     return () => {
@@ -334,6 +360,8 @@ export default function HomePage() {
       )}
 
       {setupOpen && <TrainingSetupModal onClose={() => setSetupOpen(false)} />}
+
+      {demoOver && <DemoExpiredModal onClose={() => setDemoOver(false)} />}
     </AppShell>
   );
 }

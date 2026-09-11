@@ -1,12 +1,15 @@
 // GET /api/patients
 // Список пациентов для мастера настройки тренировки.
 // Неактивных тоже отдаём: в мастере они видны с пометкой «скоро»,
-// но выбрать их нельзя.
+// но выбрать их нельзя. По той же причине список не режется в демо
+// на разговоры — закрытые там помечаются `demoLocked`.
 
 import { NextRequest, NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getUserWithRole } from "@/lib/access";
+import { демоНаРазговоры } from "@/lib/demoAccess";
+import { ДЕМО_КЛИЕНТЫ } from "@/lib/demoScope";
 import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
 
 export const runtime = "nodejs";
@@ -22,6 +25,9 @@ export async function GET(request: NextRequest) {
     // Разбор пациента — только руководителю. Это не косметика: подсказка
     // «как выиграть клиента» в руках менеджера обесценивает тренировку.
     const isHead = user.role === UserRole.head;
+
+    // Демо на разговоры: открыта тройка, остальные видны и погашены
+    const демо = await демоНаРазговоры(user.organizationId);
 
     const patients = await prisma.patient.findMany({
       // Доступные вперёд, дальше по порядку создания — как в сиде
@@ -43,7 +49,12 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(patients.map(сНаложеннымСлучаем));
+    return NextResponse.json(
+      patients.map((patient) => ({
+        ...сНаложеннымСлучаем(patient),
+        demoLocked: демо && !ДЕМО_КЛИЕНТЫ.includes(patient.name),
+      }))
+    );
   } catch (error) {
     console.error("Ошибка в /api/patients:", error);
     return NextResponse.json(
