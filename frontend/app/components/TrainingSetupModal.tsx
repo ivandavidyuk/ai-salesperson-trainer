@@ -58,6 +58,21 @@ interface TrainingSetupModalProps {
   createMode?: boolean;
   /** Задание создано — списку пора обновиться */
   onCreated?: () => void;
+  /**
+   * Режим выбора одного поля: мастер сжимается до указанного шага, в подвале
+   * вместо «Далее» стоит «Готово». Нужен окну правки задания — там человек
+   * пришёл поменять одну вещь, и гонять его через четыре шага незачем,
+   * а рисовать второй список карточек рядом с существующим тем более.
+   */
+  pickOnly?: "type" | "patient" | "assign";
+  /** Что выбрано сейчас — чтобы шаг открылся на текущем значении */
+  pickInitial?: { typeId?: string; patientId?: string; managerId?: string };
+  /** Выбор сделан. Окно закрывает вызывающий */
+  onPick?: (выбор: {
+    type: WizardTrainingType | null;
+    patient: WizardPatient | null;
+    manager: ManagerOption | null;
+  }) => void;
 }
 
 type StepKey = "assign" | "type" | "patient" | "review";
@@ -144,6 +159,9 @@ export default function TrainingSetupModal({
   presetType,
   createMode = false,
   onCreated,
+  pickOnly,
+  pickInitial,
+  onPick,
 }: TrainingSetupModalProps) {
   const router = useRouter();
 
@@ -161,7 +179,7 @@ export default function TrainingSetupModal({
   );
   const [demoOver, setDemoOver] = useState(false);
   useEffect(() => {
-    if (createMode) return;
+    if (createMode || pickOnly) return;
     let cancelled = false;
     (async () => {
       const res = await fetch("/api/organization/hours");
@@ -184,10 +202,12 @@ export default function TrainingSetupModal({
     return () => {
       cancelled = true;
     };
-  }, [createMode]);
+  }, [createMode, pickOnly]);
 
   // Набор шагов зависит от того, что уже выбрано за менеджера
-  const steps: StepKey[] = createMode
+  const steps: StepKey[] = pickOnly
+    ? [pickOnly]
+    : createMode
     ? ["assign", "type", "patient", "review"]
     : assignment
       ? ["review"]
@@ -199,10 +219,10 @@ export default function TrainingSetupModal({
 
   const [step, setStep] = useState(0);
   const [typeId, setTypeId] = useState<string | null>(
-    assignment?.trainingType.id ?? presetType?.id ?? null
+    pickInitial?.typeId ?? assignment?.trainingType.id ?? presetType?.id ?? null
   );
   const [patientId, setPatientId] = useState<string | null>(
-    assignment?.patient.id ?? presetPatient?.id ?? null
+    pickInitial?.patientId ?? assignment?.patient.id ?? presetPatient?.id ?? null
   );
 
   const currentStep = steps[step];
@@ -219,7 +239,9 @@ export default function TrainingSetupModal({
 
   // Поля шага «Кому» — только в режиме руководителя
   const [managers, setManagers] = useState<ManagerOption[] | null>(null);
-  const [managerId, setManagerId] = useState<string | null>(null);
+  const [managerId, setManagerId] = useState<string | null>(
+    pickInitial?.managerId ?? null
+  );
   const [title, setTitle] = useState("");
   const [comment, setComment] = useState("");
   const [dueAt, setDueAt] = useState("");
@@ -227,7 +249,7 @@ export default function TrainingSetupModal({
   const [createError, setCreateError] = useState("");
 
   useEffect(() => {
-    if (!createMode) return;
+    if (!createMode && pickOnly !== "assign") return;
     let cancelled = false;
     (async () => {
       try {
@@ -242,7 +264,7 @@ export default function TrainingSetupModal({
     return () => {
       cancelled = true;
     };
-  }, [createMode]);
+  }, [createMode, pickOnly]);
 
   // Типы и пациенты приходят из базы: там же лежат их промпты, которыми
   // backend собирает роль ИИ
@@ -321,7 +343,7 @@ export default function TrainingSetupModal({
       : currentStep === "patient"
         ? selectedPatient !== null
         : currentStep === "assign"
-          ? selectedManager !== null && title.trim() !== ""
+          ? selectedManager !== null && (pickOnly ? true : title.trim() !== "")
           : true;
 
   // Руководитель не запускает разговор, а создаёт задание
@@ -518,6 +540,10 @@ export default function TrainingSetupModal({
         <div className="flex min-h-0 flex-1 flex-col gap-[22px] overflow-y-auto px-6 py-[22px]">
           {currentStep === "assign" && (
             <>
+              {/* В режиме выбора эти поля не нужны: заголовок, срок,
+                  приоритет и комментарий правятся в самой форме правки,
+                  а сюда человек пришёл только за менеджером */}
+              {!pickOnly && (
               <div>
                 <GroupTitle>Задание</GroupTitle>
                 <Field
@@ -547,6 +573,7 @@ export default function TrainingSetupModal({
                   </label>
                 </div>
               </div>
+              )}
 
               <div>
                 <GroupTitle>Кому назначить</GroupTitle>
@@ -600,6 +627,7 @@ export default function TrainingSetupModal({
                 </div>
               </div>
 
+              {!pickOnly && (
               <div>
                 <GroupTitle>Комментарий</GroupTitle>
                 <textarea
@@ -609,6 +637,7 @@ export default function TrainingSetupModal({
                   className="min-h-[96px] w-full resize-y rounded-xl border-[length:1.5px] border-line bg-surface-card px-3.5 py-3 text-sm leading-normal text-ink outline-none transition-colors placeholder:text-ink-placeholder focus:border-brand"
                 />
               </div>
+              )}
             </>
           )}
 
@@ -1037,6 +1066,21 @@ export default function TrainingSetupModal({
                 }`}
               >
                 Далее ›
+              </button>
+            ) : pickOnly ? (
+              <button
+                type="button"
+                onClick={() =>
+                  onPick?.({
+                    type: selectedType,
+                    patient: selectedPatient,
+                    manager: selectedManager,
+                  })
+                }
+                disabled={!canNext}
+                className="inline-flex items-center gap-2 rounded-input bg-brand px-[26px] py-[13px] text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
+              >
+                Готово
               </button>
             ) : createMode ? (
               <button

@@ -79,6 +79,18 @@ export function formatDueDate(iso: string | null, now: Date = new Date()): strin
   return `до ${day}${year}`;
 }
 
+// Дата закрытия задания: «21 июля», у прошлого года — с годом.
+// Без «сегодня» и «вчера»: выполненное — это история, а в истории важен
+// день, а не близость к нему.
+export function formatDoneDate(iso: string | null, now: Date = new Date()): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  const day = `${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]}`;
+  return date.getFullYear() !== now.getFullYear()
+    ? `${day} ${date.getFullYear()}`
+    : day;
+}
+
 // Просрочено ли задание — срок раньше сегодняшнего дня
 export function isOverdue(iso: string | null, now: Date = new Date()): boolean {
   if (!iso) return false;
