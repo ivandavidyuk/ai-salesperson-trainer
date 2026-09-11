@@ -175,7 +175,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
     }
 
-    const итог = await разобратьЗадание(body, { всеОбязательны: true });
+    const итог = await разобратьЗадание(body, {
+      всеОбязательны: true,
+      организация: head.organizationId,
+    });
     if (!итог.ok) {
       return NextResponse.json({ error: итог.ошибка }, { status: 400 });
     }
