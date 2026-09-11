@@ -49,12 +49,22 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(
-      patients.map((patient) => ({
-        ...сНаложеннымСлучаем(patient),
-        demoLocked: демо && !ДЕМО_КЛИЕНТЫ.includes(patient.name),
-      }))
-    );
+    const строки = patients.map((patient) => ({
+      ...сНаложеннымСлучаем(patient),
+      demoLocked: демо && !ДЕМО_КЛИЕНТЫ.includes(patient.name),
+    }));
+
+    // Закрытые демо-доступом — вниз, к неготовым. Иначе открытая тройка
+    // разъезжается по списку из двадцати одного (Тамара первая, Станислав
+    // одиннадцатый, Джамшид тринадцатый), и в мастере видно только Тамару:
+    // человек листает девять погашенных карточек, прежде чем найдёт вторую
+    // доступную, — или решает, что клиент в демо один.
+    // Сортировка устойчивая, поэтому внутри групп порядок сида сохраняется.
+    if (демо) {
+      строки.sort((a, b) => Number(a.demoLocked) - Number(b.demoLocked));
+    }
+
+    return NextResponse.json(строки);
   } catch (error) {
     console.error("Ошибка в /api/patients:", error);
     return NextResponse.json(
