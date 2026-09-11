@@ -235,6 +235,22 @@ class SessionStore:
         if row is None:
             return None
 
+        # Задание закрывает разговор, а не кнопка. Штатное «Завершить» делает
+        # это в роуте Next, но оборвавшийся разговор туда не приходит — и
+        # задание висело активным навсегда, хотя менеджер его отработал.
+        #
+        # Условие `messages` — то же правило, что у статистики и демо-счётчика:
+        # брошенная на первой секунде сессия ничего не закрывает.
+        await self._pool.execute(
+            'UPDATE "Assignment" a SET '
+            '"status" = \'done\'::"AssignmentStatus", "completedAt" = NOW() '
+            'FROM "Session" s '
+            'WHERE s."id" = $1 AND a."id" = s."assignmentId" '
+            'AND a."userId" = s."userId" AND a."status" = \'active\' '
+            'AND EXISTS (SELECT 1 FROM "Message" m WHERE m."sessionId" = s."id")',
+            session_id,
+        )
+
         await self._redis.set(_status_key(session_id), STATUS_COMPLETED)
         return row["durationSec"]
 

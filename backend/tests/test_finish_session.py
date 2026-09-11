@@ -31,6 +31,9 @@ class ПоддельныйPool:
         self.запросы.append((sql, args))
         return self.ответ
 
+    async def execute(self, sql, *args):
+        self.запросы.append((sql, args))
+
 
 class ПоддельныйRedis:
     def __init__(self):
@@ -86,6 +89,30 @@ def test_длительность_считает_база_а_не_питон():
     sql, _ = store._pool.запросы[0]
     assert "NOW() - \"startedAt\"" in sql
     assert "GREATEST(0" in sql
+
+
+def test_задание_закрывается_вместе_с_оборванным_разговором():
+    # Задание закрывает разговор, а не кнопка. Штатное «Завершить» делает
+    # это в роуте Next, но оборвавшийся разговор туда не приходит —
+    # и задание висело активным навсегда, хотя менеджер его отработал.
+    store = _store({"durationSec": 60})
+    _run(store.finish_if_unfinished("s1"))
+
+    sql, args = store._pool.запросы[1]
+    assert '"Assignment"' in sql
+    assert "'done'" in sql
+    assert args == ("s1",)
+
+
+def test_задание_не_закрывается_пустым_разговором():
+    # То же правило, что у статистики и демо-счётчика: брошенная
+    # на первой секунде сессия не считается разговором.
+    store = _store({"durationSec": 2})
+    _run(store.finish_if_unfinished("s1"))
+
+    sql, _ = store._pool.запросы[1]
+    assert 'FROM "Message"' in sql
+    assert "a.\"status\" = 'active'" in sql
 
 
 def test_сессия_на_паузе_тоже_закрывается():

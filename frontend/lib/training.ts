@@ -112,10 +112,38 @@ export interface Assignment {
   /** Имя руководителя, выдавшего задание */
   author: string;
   /** Кому назначено — приходит только руководителю */
-  assignee: {
+  assignee: Назначенный | null;
+  /** Менеджер уже начинал по нему разговор — меняет текст в окне удаления */
+  started?: boolean;
+}
+
+/** Менеджер в плашке «Кому» */
+export interface Назначенный {
+  id: string;
+  name: string;
+  avatarUpdatedAt: string | null;
+}
+
+/**
+ * Выполненное задание — то, что отдаёт GET /api/assignments в поле `done`.
+ *
+ * Комментария здесь нет намеренно: комментарий отвечает на «зачем
+ * тренироваться», а когда тренировка прошла, на «как получилось» отвечает
+ * разбор. Поэтому вместо него — разговор, которым закрыли.
+ */
+export interface DoneAssignment {
+  id: string;
+  title: string;
+  /** ISO-дата закрытия */
+  completedAt: string | null;
+  patient: { id: string; name: string };
+  trainingType: { id: string; title: string };
+  assignee: Назначенный | null;
+  /** Разговор, которым закрыли. null — разговор удалён или ещё без разбора */
+  conversation: {
     id: string;
-    name: string;
-    avatarUpdatedAt: string | null;
+    durationSec: number | null;
+    score: number | null;
   } | null;
 }
 

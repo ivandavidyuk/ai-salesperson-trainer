@@ -1,17 +1,28 @@
-// GET  /api/assignments — список заданий для раздела «Задания».
-//   менеджеру — полученные им, руководителю — выданные им.
+// GET  /api/assignments — списки заданий для раздела «Задания»:
+//   активные и выполненные за последние 30 дней.
+//   Менеджеру — полученные им, руководителю — выданные им.
 // POST /api/assignments — создать задание (только руководитель).
 //
 // Приоритетные сверху, дальше по сроку: то, что горит, должно быть первым.
+// Выполненные — от свежих к старым: «что закрыли на этой неделе».
 
 import { NextRequest, NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getUserWithRole, requireHead } from "@/lib/access";
+import {
+  началоОкнаВыполненных,
+  разобратьЗадание,
+  type ПоляЗадания,
+} from "@/lib/assignments";
 import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** Короткое имя для плашки «Кому»: «Алексей М.» */
+const короткоеИмя = (firstName: string, lastName: string) =>
+  `${firstName} ${lastName[0] ?? ""}.`.trim();
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,12 +32,11 @@ export async function GET(request: NextRequest) {
     }
 
     const isHead = user.role === UserRole.head;
+    // Руководитель видит выданные им, менеджер — полученные
+    const чьи = isHead ? { createdById: user.id } : { userId: user.id };
 
-    const rows = await prisma.assignment.findMany({
-      // Руководитель видит выданные им, менеджер — полученные
-      where: isHead
-        ? { createdById: user.id, status: "active" }
-        : { userId: user.id, status: "active" },
+    const активные = await prisma.assignment.findMany({
+      where: { ...чьи, status: "active" },
       orderBy: [
         { isPriority: "desc" },
         // Задания без срока — в конце: nulls last не поддержан напрямую,
@@ -59,11 +69,43 @@ export async function GET(request: NextRequest) {
         trainingType: { select: { id: true, title: true, isActive: true } },
         createdBy: { select: { firstName: true, lastName: true } },
         user: { select: { id: true, firstName: true, lastName: true, avatarUpdatedAt: true } },
+        // Начатое задание удаляют с другим предупреждением: разговор
+        // у менеджера останется, а задание из списка пропадёт
+        _count: { select: { sessions: true } },
       },
     });
 
-    return NextResponse.json(
-      rows.map((row) => ({
+    const выполненные = await prisma.assignment.findMany({
+      where: {
+        ...чьи,
+        status: "done",
+        completedAt: { gte: началоОкнаВыполненных() },
+      },
+      orderBy: { completedAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        completedAt: true,
+        patient: { select: { id: true, name: true } },
+        trainingType: { select: { id: true, title: true } },
+        user: { select: { id: true, firstName: true, lastName: true, avatarUpdatedAt: true } },
+        // Разговор, которым закрыли: из выполненного задания ведём
+        // к расшифровке — это ответ на «и как он его выполнил»
+        sessions: {
+          where: { status: "completed" },
+          orderBy: { startedAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            durationSec: true,
+            review: { select: { overallScore: true } },
+          },
+        },
+      },
+    });
+
+    return NextResponse.json({
+      active: активные.map((row) => ({
         id: row.id,
         title: row.title,
         comment: row.comment,
@@ -72,16 +114,41 @@ export async function GET(request: NextRequest) {
         patient: сНаложеннымСлучаем(row.patient),
         trainingType: row.trainingType,
         author: `${row.createdBy.firstName} ${row.createdBy.lastName}`.trim(),
+        started: row._count.sessions > 0,
         // Кому назначено — нужно только на странице руководителя
         assignee: isHead
           ? {
               id: row.user.id,
-              name: `${row.user.firstName} ${row.user.lastName[0] ?? ""}.`.trim(),
+              name: короткоеИмя(row.user.firstName, row.user.lastName),
               avatarUpdatedAt: row.user.avatarUpdatedAt?.toISOString() ?? null,
             }
           : null,
-      }))
-    );
+      })),
+      done: выполненные.map((row) => {
+        const разговор = row.sessions[0] ?? null;
+        return {
+          id: row.id,
+          title: row.title,
+          completedAt: row.completedAt?.toISOString() ?? null,
+          patient: { id: row.patient.id, name: row.patient.name },
+          trainingType: row.trainingType,
+          assignee: isHead
+            ? {
+                id: row.user.id,
+                name: короткоеИмя(row.user.firstName, row.user.lastName),
+                avatarUpdatedAt: row.user.avatarUpdatedAt?.toISOString() ?? null,
+              }
+            : null,
+          conversation: разговор
+            ? {
+                id: разговор.id,
+                durationSec: разговор.durationSec,
+                score: разговор.review?.overallScore ?? null,
+              }
+            : null,
+        };
+      }),
+    });
   } catch (error) {
     console.error("Ошибка в GET /api/assignments:", error);
     return NextResponse.json(
@@ -89,16 +156,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-interface CreateBody {
-  userId?: string;
-  patientId?: string;
-  trainingTypeId?: string;
-  title?: string;
-  comment?: string;
-  dueAt?: string | null;
-  isPriority?: boolean;
 }
 
 export async function POST(request: NextRequest) {
@@ -111,84 +168,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let body: CreateBody;
+    let body: ПоляЗадания;
     try {
-      body = (await request.json()) as CreateBody;
+      body = (await request.json()) as ПоляЗадания;
     } catch {
       return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
     }
 
-    const title = body.title?.trim() ?? "";
-    const comment = body.comment?.trim() ?? "";
-    if (!title) {
-      return NextResponse.json(
-        { error: "Укажите название задания" },
-        { status: 400 }
-      );
+    const итог = await разобратьЗадание(body, { всеОбязательны: true });
+    if (!итог.ok) {
+      return NextResponse.json({ error: итог.ошибка }, { status: 400 });
     }
-
-    // Назначать можно только менеджеру: задание другому руководителю
-    // сломало бы смысл раздела
-    const target = body.userId
-      ? await prisma.user.findUnique({
-          where: { id: body.userId },
-          select: { id: true, role: true },
-        })
-      : null;
-    if (!target || target.role !== UserRole.manager) {
-      return NextResponse.json(
-        { error: "Выберите менеджера" },
-        { status: 400 }
-      );
-    }
-
-    const patient = body.patientId
-      ? await prisma.patient.findUnique({
-          where: { id: body.patientId },
-          select: { id: true, isActive: true },
-        })
-      : null;
-    if (!patient?.isActive) {
-      return NextResponse.json(
-        { error: "Этот пациент пока недоступен" },
-        { status: 400 }
-      );
-    }
-
-    const type = body.trainingTypeId
-      ? await prisma.trainingType.findUnique({
-          where: { id: body.trainingTypeId },
-          select: { id: true, isActive: true },
-        })
-      : null;
-    if (!type?.isActive) {
-      return NextResponse.json(
-        { error: "Этот тип тренировки пока недоступен" },
-        { status: 400 }
-      );
-    }
-
-    // Срок хранится концом дня: «до 24 июля» значит весь день 24-го
-    let dueAt: Date | null = null;
-    if (body.dueAt) {
-      const parsed = new Date(body.dueAt);
-      if (Number.isNaN(parsed.getTime())) {
-        return NextResponse.json({ error: "Некорректный срок" }, { status: 400 });
-      }
-      parsed.setHours(23, 59, 59, 0);
-      dueAt = parsed;
-    }
+    const { userId, patientId, trainingTypeId, title, comment, dueAt, isPriority } =
+      итог.поля;
 
     const created = await prisma.assignment.create({
       data: {
-        userId: target.id,
+        userId: userId!,
         createdById: head.id,
-        patientId: patient.id,
-        trainingTypeId: type.id,
-        title,
-        comment,
-        dueAt,
-        isPriority: Boolean(body.isPriority),
+        patientId: patientId!,
+        trainingTypeId: trainingTypeId!,
+        title: title!,
+        comment: comment ?? "",
+        dueAt: dueAt ?? null,
+        isPriority: Boolean(isPriority),
       },
       select: { id: true },
     });
