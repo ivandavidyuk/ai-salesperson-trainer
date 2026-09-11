@@ -77,6 +77,9 @@ export interface TranscriptData {
         null у старых сессий, начатых до мастера настройки */
     patientId: string | null;
     trainingTypeId: string | null;
+    /** Название упражнения — заголовок панели разбора. null у разговоров,
+        начатых до мастера настройки: типа у них нет */
+    trainingTypeTitle: string | null;
     /** Документ диагностики, показанный менеджеру по кнопке. null —
         не показывали (или разговор был до этой фичи), плашки нет */
     diagnosticsResult: string | null;
