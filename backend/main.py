@@ -1319,12 +1319,23 @@ async def session_ws(ws: WebSocket, session_id: str):
     # Клиенту говорим заранее: у него на экране написано «Слушаю вас», и без
     # предупреждения менеджер начал бы говорить ровно тогда, когда собирается
     # пациент, — и перебил бы его первым же словом.
-    if not await store.get_messages(session_id) and await store.opens_dialog(
-        session_id
-    ):
-        logger.info("Сессия %s: пациент начинает разговор сам", session_id)
-        await safe_send(ws, {"type": "patient_opens"})
-        manager.open_dialog()
+    # Мягкой скобкой, как TTS и STT выше: разговор без открывающего хода —
+    # это прежнее поведение, а разговор, не начавшийся из-за сбоя в Redis
+    # или Postgres, — потерянная тренировка. Причём у всех типов, а не
+    # только у этих двух
+    try:
+        if not await store.get_messages(session_id) and await store.opens_dialog(
+            session_id
+        ):
+            logger.info("Сессия %s: пациент начинает разговор сам", session_id)
+            await safe_send(ws, {"type": "patient_opens"})
+            manager.open_dialog()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Сессия %s: открывающий ход не состоялся (%s) — начинает менеджер",
+            session_id,
+            exc,
+        )
 
     # 6. Основной цикл приёма сообщений от клиента
     try:
