@@ -2,6 +2,16 @@
 
 // Строка списка разговоров: избранное, аватар пациента, тема, дата,
 // длительность, оценка и переход к расшифровке.
+//
+// Переход назван словом, а не значком. Значок «›» у края строки не находили:
+// человек со стороны смотрел прямо на него и спрашивал, как открыть
+// расшифровку. Слово «Расшифровка» называет, куда ведёт строка, и шесть
+// строк подряд читаются колонкой ссылок, а не шестью кнопками.
+//
+// Кликабельна строка целиком, но ссылка растянута псевдоэлементом, а не
+// обёрнута вокруг: внутри строки живёт кнопка «в избранное», а кнопку
+// в ссылку вкладывать нельзя. Поэтому звезда поднята над растяжкой
+// и нажимается сама по себе.
 
 import Link from "next/link";
 import type { HomeConversation } from "@/lib/home";
@@ -28,14 +38,14 @@ export default function ConversationRow({
     .join(" · ");
 
   return (
-    <div className="flex items-center gap-3 border-b border-line-soft px-5 py-[11px] last:border-b-0">
+    <div className="group relative flex items-center gap-3 border-b border-line-soft px-5 py-[11px] transition-colors last:border-b-0 hover:bg-surface">
       {onToggleFavorite && (
       <button
         type="button"
         onClick={() => onToggleFavorite(conversation.id, !conversation.isFavorite)}
         title={conversation.isFavorite ? "Убрать из избранного" : "В избранное"}
         aria-pressed={conversation.isFavorite}
-        className="inline-flex shrink-0 p-0.5 leading-none"
+        className="relative z-10 inline-flex shrink-0 p-0.5 leading-none"
       >
         <svg
           width="19"
@@ -76,15 +86,18 @@ export default function ConversationRow({
       <Link
         href={`/transcript/${conversation.id}`}
         title="Открыть расшифровку"
-        className="inline-flex shrink-0 items-center p-1 text-ink-icon transition-colors hover:text-brand-hover"
+        // after:inset-0 растягивает ссылку на всю строку: кликом считается
+        // любое место, а само слово остаётся якорем для глаза
+        className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap py-1 text-[12.5px] font-medium text-brand transition-colors after:absolute after:inset-0 group-hover:text-brand-hover group-hover:underline group-hover:[text-underline-offset:3px]"
       >
+        Расшифровка
         <svg
-          width="16"
-          height="16"
+          width="13"
+          height="13"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2.2"
+          strokeWidth="2.4"
           strokeLinecap="round"
           strokeLinejoin="round"
           aria-hidden="true"
