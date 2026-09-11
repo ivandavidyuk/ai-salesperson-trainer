@@ -288,6 +288,7 @@ async def main() -> None:
         done_when=тип["doneWhen"] if тип else None,
         scores_deal=считаем_сделку,
         stage_key=тип["stageKey"] if тип else None,
+        type_id=type_id,
     )
     if review is None:
         print("ИТОГОВЫЙ РАЗБОР НЕ ПОЛУЧЕН")
@@ -312,7 +313,7 @@ async def main() -> None:
     # на которую сослалась модель; отметка без реплики уже сброшена в ноль
     # при разборе, здесь её не видно
     for stage in review.checklist or []:
-        заголовок = checklist.STAGE_TITLES[stage["stage"]]
+        заголовок = checklist.TITLES[stage["stage"]]
         if not stage["measured"]:
             print(f"\n{заголовок}: не измерен")
             continue

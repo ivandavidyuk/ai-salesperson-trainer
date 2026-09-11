@@ -336,6 +336,7 @@ async def провести(
                     done_when=тип.критерий,
                     scores_deal=тип.считает_сделку,
                     stage_key=тип.ключ_этапа,
+                    type_id=тип.слаг,
                 )
                 if итог is not None:
                     разговор.разбор = {

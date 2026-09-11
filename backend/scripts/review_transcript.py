@@ -16,7 +16,7 @@
 на локальной машине до выкатки):
     python scripts/review_transcript.py --file <разговор.json> [...]
 Файл: {"name", "prompt", "history": [{"role", "text"}], и необязательные
-"rubric", "done_when", "stage_key", "scores_deal", "type_title"}.
+"rubric", "done_when", "stage_key", "type_id", "scores_deal", "type_title"}.
 
 Платно: один вызов итогового оценщика на разговор.
 """
@@ -57,7 +57,9 @@ async def контекст(pool: asyncpg.Pool, session_id: str) -> tuple[dict, l
         'COALESCE(pc."prompt", p."prompt") AS patient_prompt, '
         't."rubric" AS rubric, t."doneWhen" AS done_when, '
         't."stageKey" AS stage_key, COALESCE(t."scoresDeal", true) AS scores_deal, '
-        't."title" AS type_title '
+        # Слаг типа нужен упражнениям без этапа сделки: пункты разбора
+        # у профилактики и перехвата лежат при типе, а не при этапе
+        't."id" AS type_id, t."title" AS type_title '
         'FROM "Session" s '
         'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
         'LEFT JOIN "TrainingType" t ON t."id" = s."trainingTypeId" '
@@ -86,7 +88,7 @@ def печать(review: scoring.FinalReview, history: list[dict]) -> None:
         + (f" | зачтено: {review.drill_passed}" if review.drill_passed is not None else "")
     )
     for stage in review.checklist or []:
-        title = checklist.STAGE_TITLES[stage["stage"]]
+        title = checklist.TITLES[stage["stage"]]
         if not stage["measured"]:
             print(f"\n== {title}: не измерен")
             continue
@@ -125,6 +127,7 @@ async def разобрать(метка: str, ctx: dict, history: list[dict]) ->
         done_when=ctx.get("done_when"),
         scores_deal=bool(ctx.get("scores_deal", True)),
         stage_key=ctx.get("stage_key"),
+        type_id=ctx.get("type_id"),
     )
     if review is None:
         print("оценщик не вернул разбор")

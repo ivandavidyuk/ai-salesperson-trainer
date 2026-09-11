@@ -59,7 +59,7 @@ _PATIENT_PROMPT_SQL = (
     'SELECT COALESCE(pc."prompt", p."prompt") AS patient_prompt, '
     'p."name" AS patient_name, '
     '(pc."prompt" IS NOT NULL) AS case_generated, '
-    't."prompt" AS type_prompt, t."title" AS type_title, '
+    't."id" AS type_id, t."prompt" AS type_prompt, t."title" AS type_title, '
     # Рубрика, критерий и способ оценки — оценщику, а не роли: знай роль,
     # по каким признакам судят собеседника, она начала бы подыгрывать
     't."rubric" AS type_rubric, t."doneWhen" AS type_done_when, '
@@ -511,6 +511,7 @@ class SessionStore:
             "done_when": row["type_done_when"],
             "stage_key": row["type_stage_key"],
             "scores_deal": bool(row["type_scores_deal"]),
+            "type_id": row["type_id"],
             "type_title": row["type_title"],
         }
 

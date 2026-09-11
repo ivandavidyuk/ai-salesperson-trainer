@@ -26,11 +26,16 @@ export interface ReviewChecklistItem {
 }
 
 export interface ReviewChecklistStage {
-  /** contact · iceBreaker · needs · objections · closing */
+  /** Этап сделки — contact · iceBreaker · needs · objections · closing —
+      либо слаг упражнения, у которого этапа нет: prevention · intercept */
   stage: string;
   /** false — этапа в разговоре не было (пациент не возражал):
       ни числа, ни полоски, в общую не входит */
   measured: boolean;
+  /** Почему не измерен — показывается вместо пунктов. Есть только
+      у неизмеренного упражнения: без объяснения пустые пункты читаются
+      как обвинение менеджеру, который всё сделал правильно */
+  reason?: string;
   items: ReviewChecklistItem[];
 }
 

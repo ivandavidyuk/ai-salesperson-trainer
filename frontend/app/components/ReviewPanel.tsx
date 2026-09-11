@@ -534,6 +534,18 @@ function DrillChecklist({
   onShow?: (index: number) => void;
 }) {
   const done = stage.items.filter((item) => item.mark === 2).length;
+
+  // Упражнение не состоялось — мерить было нечего. Пять «не выполнено»
+  // здесь были бы обвинением человеку, который всё сделал правильно:
+  // в перехвате пациент мог не задать ни одного вопроса
+  if (!stage.measured) {
+    return (
+      <div className="mt-4 border-t border-line-soft pt-3.5 text-pretty text-[14px] leading-snug text-ink-muted">
+        {stage.reason ?? "Пунктов по этому упражнению не измеряли."}
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="mt-4 border-t border-line-soft pt-3.5 text-[14px] text-ink">
@@ -607,9 +619,14 @@ export default function ReviewPanel({
   // Подпись под кольцом говорит, из чего сложилась оценка. У полного
   // разговора без чек-листа этапов пять всегда; с чек-листом — сколько
   // измерено: возражений могло не быть
+  // «Один этап» здесь врал бы у профилактики и перехвата: этапа сделки
+  // под ними нет, а пять пунктов с 11.09 есть. Формулировка — из ответа
+  // дизайна на бриф про название упражнения
   const ringCaption = isDrill
     ? checklist
-      ? "один этап, из 10"
+      ? checklist[0]?.measured
+        ? "одно упражнение, из 10"
+        : "упражнение не состоялось"
       : "за упражнение, из 10"
     : checklist
       ? `среднее ${STAGE_COUNT_WORDS[measuredCount] ?? measuredCount} этапов, из 10`

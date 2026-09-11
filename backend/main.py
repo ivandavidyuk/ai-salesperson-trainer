@@ -1101,6 +1101,7 @@ async def finalize_review(session_id: str) -> None:
             done_when=context["done_when"],
             scores_deal=context["scores_deal"],
             stage_key=context["stage_key"],
+            type_id=context["type_id"],
         )
         if review is None:
             logger.warning("Сессия %s: оценщик не вернул разбор", session_id)
