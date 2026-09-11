@@ -363,3 +363,22 @@ def test_условие_несостоявшегося_упражнения_то
     # У профилактики всегда есть что снять заранее, поводов не мерить нет
     assert set(checklist.UNMEASURED_WHEN) == {"intercept"}
     assert "patientAsked" in build_rubric(stages=("intercept",))
+
+
+def test_ссылка_на_открывающую_реплику_пациента_не_засчитывается():
+    # С открывающим ходом история начинается с пациента. Действие менеджера
+    # не может доказываться репликой, прозвучавшей до него, — доказательства
+    # нет, и отметка честно сбрасывается в ноль
+    история = [
+        {"role": "assistant", "text": "А сколько это будет стоить целиком?"},
+        {"role": "user", "text": "Шестьдесят тысяч за глаз. А что вас тревожит?"},
+    ]
+    assert checklist.verify_evidence(0, история) is None
+    # Реплика менеджера после неё доказательством остаётся
+    assert checklist.verify_evidence(1, история) == 1
+
+    grounded, msgs, dropped = checklist.ground(
+        {"intercept": [2, 0, 0, 0, 0]}, {"intercept": [0, None, None, None, None]},
+        история, ("intercept",)
+    )
+    assert grounded["intercept"][0] == 0 and dropped == 1

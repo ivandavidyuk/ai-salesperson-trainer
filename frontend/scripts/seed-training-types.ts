@@ -44,6 +44,9 @@ interface TrainingTypeSeed {
   // упражнение нет, в базу идёт только общая оценка
   stageKey: "contact" | "iceBreaker" | "needs" | "objections" | null;
   scoresDeal: boolean;
+  // Заговаривает ли пациент первым. true там, где разговор ведёт он:
+  // отработка возражений и перехват инициативы
+  opensDialog: boolean;
   position: number;
 }
 
@@ -71,6 +74,8 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
     // Полный разговор заполняет все четыре колонки, а не одну
     stageKey: null,
     scoresDeal: true,
+    // Первым говорит менеджер: разговор начинается с приветствия
+    opensDialog: false,
     position: 1,
   },
   {
@@ -108,6 +113,8 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
 Повторное знакомство засчитывается по действию менеджера: он назвал себя и спросил, как обращаться к пациенту. Если пациент представился раньше сам, шаг всё равно пройден.`,
     stageKey: "contact",
     scoresDeal: false,
+    // Первым здоровается менеджер — это и есть упражнение
+    opensDialog: false,
     position: 2,
   },
   {
@@ -134,6 +141,8 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
       "совпадение вышло настоящим и разговор на нём продолжился.",
     stageKey: "iceBreaker",
     scoresDeal: false,
+    // Первым говорит менеджер: он и растапливает лёд
+    opensDialog: false,
     position: 3,
   },
   {
@@ -166,6 +175,8 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
 Названная цена проваливает этап независимо от всего остального.`,
     stageKey: "needs",
     scoresDeal: false,
+    // Первым говорит менеджер: он ведёт расспрос
+    opensDialog: false,
     position: 4,
   },
   {
@@ -200,6 +211,9 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
     // под ключом «prevention», и оценка складывается из них
     stageKey: null,
     scoresDeal: false,
+    // Первым говорит менеджер: он объясняет, что предлагает клиника,
+    // и снимает сомнения заранее — в этом всё упражнение
+    opensDialog: false,
     position: 5,
   },
   {
@@ -224,6 +238,10 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
     doneWhen: "Пять возражений подряд отработаны по существу.",
     stageKey: "objections",
     scoresDeal: false,
+    // Пациент начинает сам: «время сомнений уже пришло — начинай с них».
+    // Пока первым говорил менеджер, ему было нечего сказать — сомнений
+    // ещё не прозвучало, а отрабатывать полагалось именно их
+    opensDialog: true,
     position: 6,
   },
   {
@@ -276,6 +294,9 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
     // разбора свои, под ключом «intercept» в checklist.py
     stageKey: null,
     scoresDeal: false,
+    // Пациент начинает сам: инициатива его, вопросы задаёт он. Первый
+    // вопрос менеджера отдавал ему ход и выключал упражнение
+    opensDialog: true,
     position: 7,
   },
 ];

@@ -241,13 +241,18 @@ class SessionStore:
         #
         # Условие `messages` — то же правило, что у статистики и демо-счётчика:
         # брошенная на первой секунде сессия ничего не закрывает.
+        #
+        # Ищем именно реплику МЕНЕДЖЕРА. С открывающим ходом пациента в базе
+        # появляется сообщение до того, как человек сказал хоть слово, и без
+        # этого условия задание закрывалось бы разговором, которого не было.
         await self._pool.execute(
             'UPDATE "Assignment" a SET '
             '"status" = \'done\'::"AssignmentStatus", "completedAt" = NOW() '
             'FROM "Session" s '
             'WHERE s."id" = $1 AND a."id" = s."assignmentId" '
             'AND a."userId" = s."userId" AND a."status" = \'active\' '
-            'AND EXISTS (SELECT 1 FROM "Message" m WHERE m."sessionId" = s."id")',
+            'AND EXISTS (SELECT 1 FROM "Message" m WHERE m."sessionId" = s."id" '
+            '  AND m."role" = \'user\')',
             session_id,
         )
 
@@ -484,6 +489,26 @@ class SessionStore:
             session_id,
         )
         return bool(row["scores_deal"]) if row else True
+
+    async def opens_dialog(self, session_id: str) -> bool:
+        """Заговаривает ли пациент первым в этой сессии.
+
+        Отдельным коротким запросом, как и `get_scores_deal`, и по той же
+        причине: спрашивается один раз при подключении, а в кэше промпта
+        флагу не место.
+
+        У сессий без типа (начаты до мастера настройки) — нет: это были
+        полные разговоры, там первым здоровается менеджер.
+        """
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            'SELECT COALESCE(t."opensDialog", false) AS opens_dialog '
+            'FROM "Session" s '
+            'LEFT JOIN "TrainingType" t ON t."id" = s."trainingTypeId" '
+            'WHERE s."id" = $1',
+            session_id,
+        )
+        return bool(row["opens_dialog"]) if row else False
 
     async def get_review_context(self, session_id: str) -> Optional[dict]:
         """Всё, что нужно итоговому оценщику: промпт пациента и настройки типа.
