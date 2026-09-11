@@ -1,6 +1,7 @@
 // POST /api/sessions/start
 // Создаёт новую сессию со статусом active для текущего пользователя
-// и возвращает { sessionId, wsUrl } для подключения к WebSocket-серверу.
+// и возвращает { sessionId, wsUrl, opensDialog } для подключения
+// к WebSocket-серверу.
 //
 // Тело { patientId?, trainingType? } приходит из мастера настройки. Без тела
 // роут работает как раньше — прямой заход на /session должен оставаться живым.
@@ -72,10 +73,20 @@ export async function POST(request: NextRequest) {
     // Сделочный ли разговор. Без типа — полный разговор (сессии до мастера
     // настройки), как и backend считает через COALESCE(scoresDeal, true)
     let scoresDeal = true;
+    // Заговаривает ли пациент первым. Экран должен знать это ДО подключения:
+    // сокет открывается, поднимает распознавание и синтез, и только потом
+    // бэкенд успевает предупредить — полторы секунды, в которые экран просит
+    // говорить менеджера, хотя начинает пациент
+    let opensDialog = false;
     if (body.trainingType) {
       const type = await prisma.trainingType.findUnique({
         where: { id: body.trainingType },
-        select: { id: true, isActive: true, scoresDeal: true },
+        select: {
+          id: true,
+          isActive: true,
+          scoresDeal: true,
+          opensDialog: true,
+        },
       });
       if (!type || !type.isActive) {
         return NextResponse.json(
@@ -90,6 +101,7 @@ export async function POST(request: NextRequest) {
       }
       trainingTypeId = type.id;
       scoresDeal = type.scoresDeal;
+      opensDialog = type.opensDialog;
     }
 
     // Пациент, которого играет ИИ. Проверяем на сервере, что он активен:
@@ -206,6 +218,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       sessionId: session.id,
       wsUrl,
+      opensDialog,
     });
   } catch (error) {
     console.error("Ошибка в /api/sessions/start:", error);

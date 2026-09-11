@@ -331,6 +331,21 @@ function SessionScreen() {
     return () => clearInterval(id);
   }, [screenState]);
 
+  // Пациент вот-вот заговорит первым: держим на экране «говорит клиент»,
+  // пока не пошёл звук. Иначе менеджер видит «Слушаю вас» и начинает
+  // говорить ровно тогда, когда начинает пациент, — и перебивает его.
+  //
+  // Страховка по времени обязательна: если реплика так и не зазвучала
+  // (модель молчит, сеть отвалилась), экран не должен ждать её вечно.
+  const ждёмОткрывающуюРеплику = useCallback(() => {
+    patientOpensRef.current = true;
+    setAiSpeaking(true);
+    aiSpeakingRef.current = true;
+    setTimeout(() => {
+      patientOpensRef.current = false;
+    }, PATIENT_OPENS_TIMEOUT_MS);
+  }, []);
+
   // Полная очистка ресурсов разговора (микрофон, воспроизведение, сокет)
   const teardown = useCallback(() => {
     void recorderRef.current?.stop();
@@ -384,10 +399,21 @@ function SessionScreen() {
         setScreenState("idle");
         return;
       }
-      const { sessionId: id, wsUrl } = (await res.json()) as {
+      const {
+        sessionId: id,
+        wsUrl,
+        opensDialog,
+      } = (await res.json()) as {
         sessionId: string;
         wsUrl: string;
+        opensDialog?: boolean;
       };
+
+      // Пациент заговорит первым — экран обязан сказать это сразу по нажатию
+      // кнопки. Сокет открывается, поднимает распознавание и синтез, и только
+      // потом бэкенд успевает предупредить: те самые полторы секунды, в которые
+      // менеджер видел «Слушаю вас» и мог заговорить поверх пациента
+      if (opensDialog) ждёмОткрывающуюРеплику();
 
       // Одноразовый ws-токен (основной JWT в httpOnly cookie недоступен из JS)
       const tokenRes = await fetch("/api/auth/ws-token");
@@ -460,16 +486,10 @@ function SessionScreen() {
           const msg = JSON.parse(event.data as string);
           switch (msg.type) {
             case "patient_opens":
-              // Упражнение, где разговор ведёт пациент: он сейчас заговорит
-              patientOpensRef.current = true;
-              setAiSpeaking(true);
-              aiSpeakingRef.current = true;
-              // Страховка: если реплика так и не зазвучала (модель молчит,
-              // сеть отвалилась), экран не должен ждать её вечно — иначе
-              // менеджер будет молча смотреть на «говорит клиент»
-              setTimeout(() => {
-                patientOpensRef.current = false;
-              }, PATIENT_OPENS_TIMEOUT_MS);
+              // Подтверждение с сервера. Обычно экран уже ждёт открывающую
+              // реплику — флаг пришёл в ответе на «Начать разговор», — но
+              // при переподключении к живой сессии это единственный сигнал
+              ждёмОткрывающуюРеплику();
               break;
             case "audio_chunk":
               // Звук пошёл — дальше состояние считает плеер, как обычно
