@@ -45,6 +45,13 @@ export default function ProgressPanel({
   growthPoint,
 }: ProgressPanelProps) {
   const hasData = metrics.some((metric) => metric.value !== null);
+  // Колонку под дельту держим, только если дельта есть хоть у одного этапа.
+  // Иначе оценки висят в полусантиметре от правого края без всякой причины:
+  // выравнивать не с чем, а место всё равно занято. У новичка и у любого,
+  // кто неделю не тренировался, дельт нет ни одной — это обычное состояние.
+  const естьДельты = metrics.some(
+    (metric) => metric.delta !== null && metric.delta !== 0
+  );
 
   return (
     // `min-h-0` обязателен: без него панель не может стать ниже своего
@@ -116,11 +123,14 @@ export default function ProgressPanel({
                       >
                         {metric.value ?? "—"}
                       </span>
-                      {/* Ширина под плашку резервируется всегда: без неё
-                          строки без дельты сдвигали бы оценку вправо */}
-                      <span className="flex w-[50px] shrink-0 justify-end">
-                        <Delta delta={metric.delta} />
-                      </span>
+                      {/* Ширина резервируется на всю колонку сразу: иначе
+                          строки без дельты сдвигали бы свою оценку правее
+                          соседних, и числа перестали бы стоять столбиком */}
+                      {естьДельты && (
+                        <span className="flex w-[50px] shrink-0 justify-end">
+                          <Delta delta={metric.delta} />
+                        </span>
+                      )}
                     </div>
                     {/* «Не измеряли» и «ноль» обязаны различаться с одного
                         взгляда: полоса у обоих пустая, поэтому пустую дорожку
