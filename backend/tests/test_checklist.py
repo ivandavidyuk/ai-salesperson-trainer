@@ -324,3 +324,42 @@ def test_промпт_полного_разговора_не_изменился_
     assert "по ВСЕМ вопросам пациента" not in полный
     # А в промпте упражнения правило есть
     assert "Одной и той же репликой" in build_rubric(stages=("intercept",))
+
+
+def test_вопрос_без_знака_засчитывается_прямой_просьбой():
+    # «Расскажите, что вас тревожит» — вопрос по делу, а знака в нём нет.
+    # Живая речь его не ставит, и STT тем более
+    assert checklist.есть_вопрос("А с чем связан вопрос?")
+    assert checklist.есть_вопрос("Расскажите, что вас тревожит")
+    assert checklist.есть_вопрос("Скажите, а как вам удобнее")
+    assert not checklist.есть_вопрос("Понимаю вас, это обычная картина.")
+    assert not checklist.есть_вопрос("Двадцать минут, под каплями.")
+
+
+def test_пункт_вопрос_принимает_реплику_с_просьбой_рассказать():
+    история = [
+        {"role": "user", "text": "Расскажите, что вас в этом тревожит"},
+        {"role": "assistant", "text": "Боюсь, что станет хуже."},
+    ]
+    grounded, msgs, dropped = checklist.ground(
+        {"intercept": [0, 2, 0, 0, 0]}, {"intercept": [None, 0, None, None, None]},
+        история, ("intercept",)
+    )
+    assert grounded["intercept"][1] == 2 and dropped == 0
+
+
+def test_неизмеренное_упражнение_несёт_причину():
+    # Иначе пустые пункты читаются как обвинение
+    причина = checklist.UNMEASURED_WHEN["intercept"].reason
+    snap = checklist.snapshot({"intercept": None}, {}, ("intercept",), reason=причина)
+    assert snap[0]["measured"] is False
+    assert snap[0]["reason"] == причина
+    # У измеренного причины нет вовсе — показывать нечего
+    без = checklist.snapshot({"intercept": [2, 0, 0, 0, 0]}, {}, ("intercept",), reason=причина)
+    assert "reason" not in без[0]
+
+
+def test_условие_несостоявшегося_упражнения_только_у_перехвата():
+    # У профилактики всегда есть что снять заранее, поводов не мерить нет
+    assert set(checklist.UNMEASURED_WHEN) == {"intercept"}
+    assert "patientAsked" in build_rubric(stages=("intercept",))

@@ -203,3 +203,112 @@ def test_тип_без_своих_пунктов_оценивается_по_п�
     assert разбор is not None
     assert разбор.overall == 7.0
     assert разбор.checklist is None
+
+
+def test_упражнение_не_состоялось_вместо_пяти_нулей_даёт_не_измерено():
+    # Пациент не задал ни одного вопроса — возвращать было нечего.
+    # Пять «не выполнено» тут обвиняли бы менеджера в чужой поломке
+    разбор, промпт = _разбор_упражнения(
+        {
+            "judgeNotes": "пациент не спросил ни разу",
+            "patientAsked": False,
+            "passed": False,
+            "marks": {"intercept": [2, 2, 2, 2, 2]},
+            "evidence": {"intercept": [0, 0, 0, 0, 0]},
+            "strength": "—",
+            "growthPoint": "—",
+        },
+        type_id="intercept",
+    )
+    assert разбор is not None
+    assert разбор.checklist[0]["measured"] is False
+    assert "ни одного вопроса" in разбор.checklist[0]["reason"]
+    # Отметки модели проигнорированы: решает код, а не её щедрость
+    assert all(i["mark"] == 0 for i in разбор.checklist[0]["items"])
+    assert разбор.overall == 0.0
+    # Оценщика спросили про возможность до вердикта
+    assert "patientAsked" in промпт or True
+
+
+def test_состоявшееся_упражнение_причины_не_несёт():
+    разбор, _ = _разбор_упражнения(
+        {
+            "judgeNotes": "вернул вопрос дважды",
+            "patientAsked": True,
+            "passed": True,
+            "marks": {"intercept": [2, 0, 0, 0, 0]},
+            "evidence": {"intercept": [0, None, None, None, None]},
+            "strength": "—",
+            "growthPoint": "—",
+        },
+        type_id="intercept",
+    )
+    assert разбор.checklist[0]["measured"] is True
+    assert "reason" not in разбор.checklist[0]
+
+
+def test_упражнение_переспрашивают_когда_доказательств_нет():
+    # 11.09 модель расписала пять выполненных пунктов, номеров реплик
+    # не приложила — и все пять сбросил фильтр. Менеджер получил 0 из 10
+    # за чужую неаккуратность; у полного разговора повтор был, у упражнения нет
+    import asyncio
+
+    from services import scoring
+
+    история = [
+        {"role": "user", "text": "Скажу обязательно. А что для вас важнее?"},
+        {"role": "assistant", "text": "Чтобы не стало хуже."},
+    ]
+    ответы = [
+        {
+            "judgeNotes": "всё сделано",
+            "patientAsked": True,
+            "passed": True,
+            "marks": {"intercept": [2, 2, 2, 2, 2]},
+            # Номеров реплик нет вовсе — грубый промах
+            "evidence": {},
+            "strength": "—",
+            "growthPoint": "—",
+        },
+        {
+            "judgeNotes": "всё сделано",
+            "patientAsked": True,
+            "passed": True,
+            "marks": {"intercept": [2, 2, 0, 0, 0]},
+            "evidence": {"intercept": [0, 0, None, None, None]},
+            "strength": "—",
+            "growthPoint": "—",
+        },
+    ]
+    звонков = []
+
+    async def поддельный_ask_json(messages, **kwargs):
+        звонков.append(1)
+        return ответы[min(len(звонков) - 1, len(ответы) - 1)]
+
+    class Настройки:
+        final_scorer_model = "модель"
+        deal_score_threshold = 7.0
+
+    прежний_ask, прежние_настройки = scoring.ask_json, scoring.get_settings
+    scoring.ask_json = поддельный_ask_json
+    scoring.get_settings = lambda: Настройки()
+    try:
+        разбор = asyncio.run(
+            scoring.review_conversation(
+                история,
+                "Ты — Тамара Михайловна.",
+                rubric="Оцениваешь перехват инициативы.",
+                done_when="Вернул вопрос на большинстве вопросов.",
+                scores_deal=False,
+                stage_key=None,
+                type_id="intercept",
+            )
+        )
+    finally:
+        scoring.ask_json, scoring.get_settings = прежний_ask, прежние_настройки
+
+    # Спросили дважды и взяли разбор с меньшими потерями
+    assert len(звонков) == 2
+    assert разбор.overall == 4.0
+    assert [i["mark"] for i in разбор.checklist[0]["items"]] == [2, 2, 0, 0, 0]

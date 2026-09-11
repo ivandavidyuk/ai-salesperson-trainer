@@ -331,6 +331,35 @@ class _Grounded:
         return self.positive >= 3 and self.dropped * 3 >= self.positive
 
 
+def _ground_drill(
+    result: dict, history: list[dict], items_key: Optional[str]
+) -> _Grounded:
+    """То же самое для упражнения: сверка отметок с репликами-доказательствами.
+
+    У типа без своих пунктов сверять нечего — отметок нет вовсе, и разбор
+    идёт одной оценкой-впечатлением.
+    """
+    if not items_key:
+        return _Grounded(result, {}, {}, 0, 0)
+
+    # «Не состоялось» решает оценщик по расшифровке, но записывает это код:
+    # у него один ответ — отметок нет вовсе, а не пять нулей
+    условие = checklist.UNMEASURED_WHEN.get(items_key)
+    не_измерено = условие is not None and result.get(условие.field) is False
+    marks = checklist.marks_by_stage(
+        result.get("marks"),
+        (items_key,),
+        unmeasured=(items_key,) if не_измерено else (),
+    )
+    positive = sum(
+        1 for stage in marks.values() if stage is not None for mark in stage if mark > 0
+    )
+    marks, msgs, dropped = checklist.ground(
+        marks, result.get("evidence"), history, (items_key,)
+    )
+    return _Grounded(result, marks, msgs, dropped, positive)
+
+
 def _ground_final(result: dict, history: list[dict]) -> _Grounded:
     # «Не измерен» у возражений решает факт, а не отметки: пациент не возражал —
     # этапа не было, и ноль за него соврал бы. В общую такой этап не входит
@@ -541,9 +570,16 @@ async def _review_drill(
             "к ним — поле evidence (см. чек-лист выше). Оценку за упражнение "
             "посчитает программа по отметкам.",
         )
+        # Упражнение могло не состояться не по вине менеджера: в перехвате
+        # пациент просто не задал ни одного вопроса, и возвращать было нечего.
+        # Тогда мерить нечего, и пять «не выполнено» были бы обвинением
+        условие = checklist.UNMEASURED_WHEN.get(items_key)
+        возможность = f'"{условие.field}": true | false, ' if условие else ""
         answer_shape = (
             "Верни JSON строго в этом порядке полей: {"
-            '"judgeNotes": "строка", "passed": true | false, '
+            '"judgeNotes": "строка", '
+            f"{возможность}"
+            '"passed": true | false, '
             f"{checklist.marks_schema((items_key,))}, "
             '"strength": "строка", "growthPoint": "строка"}'
         )
@@ -557,53 +593,82 @@ async def _review_drill(
             '"strength": "строка", "growthPoint": "строка"}'
         )
 
-    result = await ask_json(
-        [
-            {
-                "role": "system",
-                "content": (
-                    f"{rubric_text}\n\n"
-                    f"{instructions.replace('{done_when}', done_when.strip())}"
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    "КОГО ИГРАЛ ПАЦИЕНТ — по этому тексту видно, что менеджер "
-                    "мог из него вытянуть. Оцениваешь всё равно менеджера:\n\n"
-                    f"{patient_prompt}\n\n"
-                    "РАСШИФРОВКА РАЗГОВОРА (число в скобках — номер реплики):\n\n"
-                    f"{checklist.format_numbered(history)}\n\n"
-                    # judgeNotes первым не для красоты: пока вердикт стоял
-                    # раньше разбора, модель успевала выставить passed до того,
-                    # как проверит критерий. В одном прогоне это видно прямо
-                    # в тексте — «...формально засчитан... Стоп. Перечитываем
-                    # критерий» — и дальше верное рассуждение при неверном
-                    # булевом поле
-                    f"{answer_shape}"
-                ),
-            },
-        ],
-        model=get_settings().final_scorer_model,
-        purpose="итог этапа",
-        attempts=_ATTEMPTS,
-    )
-    if result is None:
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                f"{rubric_text}\n\n"
+                f"{instructions.replace('{done_when}', done_when.strip())}"
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "КОГО ИГРАЛ ПАЦИЕНТ — по этому тексту видно, что менеджер "
+                "мог из него вытянуть. Оцениваешь всё равно менеджера:\n\n"
+                f"{patient_prompt}\n\n"
+                "РАСШИФРОВКА РАЗГОВОРА (число в скобках — номер реплики):\n\n"
+                f"{checklist.format_numbered(history)}\n\n"
+                # judgeNotes первым не для красоты: пока вердикт стоял
+                # раньше разбора, модель успевала выставить passed до того,
+                # как проверит критерий. В одном прогоне это видно прямо
+                # в тексте — «...формально засчитан... Стоп. Перечитываем
+                # критерий» — и дальше верное рассуждение при неверном
+                # булевом поле
+                f"{answer_shape}"
+            ),
+        },
+    ]
+
+    # Повтор при грубом промахе с доказательствами — тот же, что у полного
+    # разговора. Без него упражнение получало ноль из десяти за чужую
+    # неаккуратность: 11.09 модель расписала в judgeNotes пять выполненных
+    # пунктов, номеров реплик к ним не приложила, и все пять сбросил фильтр.
+    # Менеджер в том разговоре сделал всё, что от него требовалось
+    лучший: Optional[_Grounded] = None
+    for попытка in range(_GROUNDING_ATTEMPTS):
+        result = await ask_json(
+            messages,
+            model=get_settings().final_scorer_model,
+            purpose="итог этапа",
+            attempts=_ATTEMPTS,
+        )
+        if result is None:
+            break
+        собранное = _ground_drill(result, history, items_key)
+        if лучший is None or собранное.dropped < лучший.dropped:
+            лучший = собранное
+        if not собранное.gross or попытка + 1 == _GROUNDING_ATTEMPTS:
+            break
+        logger.warning(
+            "Оценщик упражнения: %d отметок из %d без подтверждённой реплики "
+            "— спрашиваем ещё раз",
+            собранное.dropped,
+            собранное.positive,
+        )
+    if лучший is None:
         return None
+    result = лучший.result
 
     snapshot = None
     if items_key:
-        marks = checklist.marks_by_stage(result.get("marks"), (items_key,))
-        marks, msgs, dropped = checklist.ground(
-            marks, result.get("evidence"), history, (items_key,)
-        )
+        marks, msgs, dropped = лучший.marks, лучший.msgs, лучший.dropped
         if dropped:
             logger.warning(
                 "Оценщик этапа: %d отметок без подтверждённой реплики сброшены в 0",
                 dropped,
             )
+        условие = checklist.UNMEASURED_WHEN.get(items_key)
+        не_измерено = marks.get(items_key) is None
         score = checklist.stage_score(marks[items_key]) or 0.0
-        snapshot = checklist.snapshot(marks, msgs, (items_key,))
+        snapshot = checklist.snapshot(
+            marks,
+            msgs,
+            (items_key,),
+            reason=условие.reason if (не_измерено and условие) else None,
+        )
+        if не_измерено and условие:
+            logger.info("Упражнение %s не состоялось: %s", items_key, условие.reason)
     else:
         score = _clamp(result.get("score"))
     passed = result.get("passed")
