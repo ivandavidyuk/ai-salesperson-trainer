@@ -357,6 +357,7 @@ async def review_conversation(
     done_when: Optional[str] = None,
     scores_deal: bool = True,
     stage_key: Optional[str] = None,
+    type_id: Optional[str] = None,
 ) -> Optional[FinalReview]:
     """Итоговый разбор после разговора.
 
@@ -372,13 +373,16 @@ async def review_conversation(
     `stage_key` говорит, в какую полосу этапов ложится оценка упражнения.
     У профилактики и перехвата его нет: этапа сделки под них не существует,
     и в базу идёт только общая оценка.
+
+    `type_id` — слаг типа тренировки. Нужен упражнениям без этапа: пункты
+    разбора у них лежат при типе, а не при этапе.
     """
     if not history:
         return None
 
     if not scores_deal:
         return await _review_drill(
-            history, patient_prompt, rubric, done_when, stage_key
+            history, patient_prompt, rubric, done_when, stage_key, type_id
         )
 
     # Порог подставляется в инструкции: без него оценщик не сможет отличить
@@ -495,6 +499,7 @@ async def _review_drill(
     rubric: Optional[str],
     done_when: Optional[str],
     stage_key: Optional[str],
+    type_id: Optional[str] = None,
 ) -> Optional[FinalReview]:
     """Разбор этапной тренировки: одна оценка и «отработан или нет».
 
@@ -514,27 +519,32 @@ async def _review_drill(
         logger.warning("Неизвестный stageKey %r — оценка пойдёт только в общую", stage_key)
         stage_key = None
 
-    # Упражнение на этап сделки оценивается чек-листом своего этапа: те же
-    # пять действий, что и в полном разговоре, — иначе полоса «Прогресса»
-    # складывалась бы из несопоставимых чисел. Своя рубрика упражнения идёт
-    # рядом как пояснение, что в нём важно. Вердикт «отработан или нет»
-    # по-прежнему отвечает критерию doneWhen, а не сумме отметок.
-    # Профилактика и перехват этапа не имеют — у них своя рубрика и одна
-    # оценка-впечатление, как и было
-    if stage_key:
-        rubric_text = build_rubric(stages=(stage_key,))
+    # По каким пунктам разбирать. У упражнения на этап сделки это чек-лист
+    # его этапа: те же пять действий, что и в полном разговоре, — иначе
+    # полоса «Прогресса» складывалась бы из несопоставимых чисел.
+    # У профилактики и перехвата этапа нет, и пункты лежат при типе
+    # тренировки; с 11.09 они есть, и оценка у этих двух тоже стала суммой
+    # отметок вместо цельного числа от модели.
+    #
+    # Своя рубрика упражнения идёт рядом как пояснение, что в нём важно.
+    # Вердикт «отработан или нет» по-прежнему отвечает критерию doneWhen,
+    # а не сумме отметок: строгий критерий и высокая оценка уживаются.
+    items_key = stage_key or (type_id if type_id in checklist.CHECKLIST else None)
+
+    if items_key:
+        rubric_text = build_rubric(stages=(items_key,))
         if rubric and rubric.strip():
             rubric_text += f"\n\nЧТО ВАЖНО В ЭТОМ УПРАЖНЕНИИ:\n{rubric.strip()}"
         instructions = _DRILL_INSTRUCTIONS.replace(
             "Поставь ОДНУ оценку за упражнение — поле score.",
-            "Отметки по пяти действиям этапа — поле marks, номера реплик "
+            "Отметки по пяти пунктам упражнения — поле marks, номера реплик "
             "к ним — поле evidence (см. чек-лист выше). Оценку за упражнение "
             "посчитает программа по отметкам.",
         )
         answer_shape = (
             "Верни JSON строго в этом порядке полей: {"
             '"judgeNotes": "строка", "passed": true | false, '
-            f"{checklist.marks_schema((stage_key,))}, "
+            f"{checklist.marks_schema((items_key,))}, "
             '"strength": "строка", "growthPoint": "строка"}'
         )
     else:
@@ -582,18 +592,18 @@ async def _review_drill(
         return None
 
     snapshot = None
-    if stage_key:
-        marks = checklist.marks_by_stage(result.get("marks"), (stage_key,))
+    if items_key:
+        marks = checklist.marks_by_stage(result.get("marks"), (items_key,))
         marks, msgs, dropped = checklist.ground(
-            marks, result.get("evidence"), history, (stage_key,)
+            marks, result.get("evidence"), history, (items_key,)
         )
         if dropped:
             logger.warning(
                 "Оценщик этапа: %d отметок без подтверждённой реплики сброшены в 0",
                 dropped,
             )
-        score = checklist.stage_score(marks[stage_key]) or 0.0
-        snapshot = checklist.snapshot(marks, msgs, (stage_key,))
+        score = checklist.stage_score(marks[items_key]) or 0.0
+        snapshot = checklist.snapshot(marks, msgs, (items_key,))
     else:
         score = _clamp(result.get("score"))
     passed = result.get("passed")

@@ -26,7 +26,8 @@ export interface ReviewChecklistItem {
 }
 
 export interface ReviewChecklistStage {
-  /** contact · iceBreaker · needs · objections · closing */
+  /** Этап сделки — contact · iceBreaker · needs · objections · closing —
+      либо слаг упражнения, у которого этапа нет: prevention · intercept */
   stage: string;
   /** false — этапа в разговоре не было (пациент не возражал):
       ни числа, ни полоски, в общую не входит */

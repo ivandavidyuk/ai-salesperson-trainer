@@ -212,3 +212,104 @@ def test_схема_ответа_перечисляет_этапы():
     assert '"closing": [5 номеров реплик или null]' in схема
     # Фоновому оценщику доказательства не нужны — и в схеме их нет
     assert "evidence" not in checklist.marks_schema(("contact",), with_evidence=False)
+
+
+# --- Упражнения без этапа сделки ----------------------------------------------
+
+
+def test_у_профилактики_и_перехвата_свои_пять_пунктов():
+    # До 11.09 у этих двух пунктов не было вовсе: менеджер видел число
+    # и вердикт, а из чего сложилось число — ниоткуда
+    for key in checklist.DRILL_KEYS:
+        items = checklist.CHECKLIST[key]
+        assert len(items) == checklist.ITEMS_PER_STAGE, key
+        assert all(i.name and i.full for i in items), key
+
+
+def test_номера_пунктов_сквозные_по_всем_наборам():
+    # Номер — то, на что ссылается снимок старого разбора. Дыра или повтор
+    # означали бы, что два разных пункта показываются одним номером
+    ключи = (*checklist.STAGE_KEYS_ALL, *checklist.DRILL_KEYS)
+    номера = [i.n for key in ключи for i in checklist.CHECKLIST[key]]
+    assert номера == list(range(1, 36))
+
+
+def test_у_каждого_набора_есть_название():
+    # Без названия падает печать снимка в review_transcript и sim_conversation
+    for key in checklist.CHECKLIST:
+        assert checklist.TITLES[key]
+
+
+def test_упражнения_без_этапа_не_попадают_в_полный_разговор():
+    # Пятый этап сделки Дима отклонил 03.08: он утянул бы порог доверия
+    for key in checklist.DRILL_KEYS:
+        assert key not in checklist.STAGE_KEYS_ALL
+        assert key not in build_rubric()
+
+
+def test_рубрика_профилактики_несёт_свои_пункты_и_правило_про_когда():
+    текст = build_rubric(stages=("prevention",))
+    for item in checklist.CHECKLIST["prevention"]:
+        assert item.name in текст, item.name
+    # Главное правило упражнения: меряется не «снял ли», а «когда снял»
+    assert "снял раньше, чем пациент заговорил" in текст
+    assert "Установка контакта" not in текст
+
+
+def test_рубрика_перехвата_говорит_что_пункты_накопительные():
+    текст = build_rubric(stages=("intercept",))
+    assert "по ВСЕМ вопросам пациента" in текст
+    assert "Вернул вопрос" in текст
+    # Без явной шкалы оценщик ставил двойку там, где сам же писал
+    # «выполнено на 3 из 4»
+    assert "«Три из четырёх» — это 1" in текст
+
+
+def test_снимок_упражнения_без_этапа():
+    marks = {"intercept": [2, 1, 0, 0, 0]}
+    msgs = {"intercept": [4, 6, None, None, None]}
+    snap = checklist.snapshot(marks, msgs, ("intercept",))
+    assert snap[0]["stage"] == "intercept" and snap[0]["measured"] is True
+    assert [i["n"] for i in snap[0]["items"]] == [31, 32, 33, 34, 35]
+    # Оценка складывается из отметок так же, как у этапных упражнений
+    assert checklist.stage_score(marks["intercept"]) == 3.0
+
+
+def test_пункт_вопрос_не_доказывается_репликой_без_вопроса():
+    # 11.09 оценщик поставил перехвату 10 из 10, сославшись всеми пятью
+    # пунктами на одну реплику без вопроса — в разговоре, где менеджер
+    # не спросил ни разу
+    история = [
+        {"role": "user", "text": "Понимаю вас, это обычная картина при помутнении."},
+        {"role": "assistant", "text": "А долго восстанавливаться?"},
+    ]
+    marks = {"intercept": [2, 2, 2, 2, 2]}
+    evidence = {"intercept": [0, 0, 0, 0, 0]}
+    grounded, msgs, dropped = checklist.ground(marks, evidence, история, ("intercept",))
+    # 32 и 33 — это вопрос менеджера, и реплика без «?» их не подтверждает
+    assert grounded["intercept"][1] == 0 and msgs["intercept"][1] is None
+    assert grounded["intercept"][2] == 0 and msgs["intercept"][2] is None
+    # Остальные три отметки эта проверка не трогает: их доказывает смысл
+    assert grounded["intercept"][0] == 2
+    assert dropped == 2
+
+
+def test_реплика_с_вопросом_пункт_вопрос_подтверждает():
+    история = [
+        {"role": "user", "text": "Двадцать минут. А вас что беспокоит больше?"},
+        {"role": "assistant", "text": "Боюсь, что станет хуже."},
+    ]
+    marks = {"intercept": [0, 2, 2, 0, 0]}
+    evidence = {"intercept": [None, 0, 0, None, None]}
+    grounded, msgs, dropped = checklist.ground(marks, evidence, история, ("intercept",))
+    assert grounded["intercept"][1] == 2 and msgs["intercept"][1] == 0
+    assert grounded["intercept"][2] == 2
+    assert dropped == 0
+
+
+def test_правило_профилактики_называет_свою_точку_отсчёта():
+    текст = build_rubric(stages=("prevention",))
+    assert "ИМЕННО ОБ ЭТОМ сомнении" in текст
+    # 11.09 оценщик обнулил «назвал цену сам» на том, что пациент перед этим
+    # спросил про внуков: чужой вопрос точкой отсчёта быть не может
+    assert "Другие вопросы пациента к ней" in текст

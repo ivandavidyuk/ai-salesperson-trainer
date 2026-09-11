@@ -324,8 +324,9 @@ fail2ban-client status sshd   # счётчик Total failed должен рас�
 # 1. Советы дня и мотивации — ОБЯЗАТЕЛЬНО, иначе блок на главной пуст
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:content
 
-# 2. Пациенты и типы тренировки — ОБЯЗАТЕЛЬНО: в них лежат промпты,
-#    без которых backend откажется начинать разговор
+# 2. Пациенты — ОБЯЗАТЕЛЬНО: в них лежат промпты, без которых backend
+#    откажется начинать разговор. Типы тренировки с 11.09 наливаются сами
+#    при старте контейнера, но команда рабочая и лишней не будет
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:patients
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:training
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:achievements
