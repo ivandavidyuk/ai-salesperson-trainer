@@ -13,8 +13,11 @@ import PatientAvatar from "@/app/components/PatientAvatar";
 import { plural } from "@/lib/format";
 import {
   DIFFICULTY,
+  ЗАМОК_КНОПКА,
+  замок,
   splitPatientSubtitle,
   type DifficultyKey,
+  type Замок,
   type WizardPatient,
 } from "@/lib/training";
 
@@ -256,8 +259,10 @@ function PatientCard({
   onStart,
 }: PatientCardProps) {
   const { reason } = splitPatientSubtitle(patient.description);
-  // Промпта ещё нет — тренировку не начать, backend всё равно откажет
-  const blocked = !patient.isActive;
+  // Промпта ещё нет или клиент закрыт демо-доступом — тренировку
+  // не начать, сервер всё равно откажет
+  const закрыт: Замок = замок(patient);
+  const blocked = закрыт !== null;
 
   return (
     // Ширину держит сетка страницы, а не карточка: при расчётной ширине
@@ -328,7 +333,13 @@ function PatientCard({
           type="button"
           onClick={onStart}
           disabled={blocked}
-          title={blocked ? "Для этого пациента ещё не готов промпт" : undefined}
+          title={
+            закрыт === "скоро"
+              ? "Для этого пациента ещё не готов промпт"
+              : закрыт === "демо"
+                ? "Откроется на полном доступе"
+                : undefined
+          }
           // Шире «Подробнее» в 1,3 раза: равные по виду кнопки заставляли бы
           // выбирать, а читать необязательно — тренироваться цель
           className={`flex flex-[1.3] items-center justify-center gap-2 rounded-input px-2 py-3 text-[16.5px] font-semibold text-white transition-colors ${
@@ -337,8 +348,8 @@ function PatientCard({
               : "bg-brand hover:bg-brand-hover"
           }`}
         >
-          {blocked ? (
-            "Скоро"
+          {закрыт ? (
+            ЗАМОК_КНОПКА[закрыт]
           ) : (
             <>
               <span className="inline-block h-2 w-2 rounded-full bg-white" />

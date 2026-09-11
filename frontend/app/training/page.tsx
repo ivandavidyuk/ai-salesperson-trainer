@@ -8,7 +8,14 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import AppShell from "@/app/components/AppShell";
 import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
-import { GROUP_LABELS, type WizardTrainingType } from "@/lib/training";
+import {
+  GROUP_LABELS,
+  ЗАМОК_БЕЙДЖ,
+  ЗАМОК_КНОПКА,
+  замок,
+  type Замок,
+  type WizardTrainingType,
+} from "@/lib/training";
 
 // Иконки этапов из макета. Ключ — id типа в базе; для типа, которого здесь
 // нет, берётся запасная иконка, иначе новый тип уронил бы страницу.
@@ -176,10 +183,10 @@ function CarouselArrow({
   );
 }
 
-function SoonBadge() {
+function SoonBadge({ причина }: { причина: "скоро" | "демо" }) {
   return (
     <span className="rounded-full bg-surface px-2 py-0.5 text-[12px] font-semibold text-ink-subtle">
-      скоро
+      {ЗАМОК_БЕЙДЖ[причина]}
     </span>
   );
 }
@@ -302,7 +309,8 @@ interface CardProps {
 
 // Полный разговор — главный формат, поэтому широкая тиловая карточка
 function FullCard({ type, onStart }: CardProps) {
-  const blocked = !type.isActive;
+  const закрыт: Замок = замок(type);
+  const blocked = закрыт !== null;
 
   return (
     <div className="flex items-center gap-6 rounded-2xl bg-gradient-to-br from-brand to-brand-hover px-7 py-[26px] text-white shadow-[0_18px_40px_-22px_rgba(10,95,85,.7)]">
@@ -339,8 +347,8 @@ function FullCard({ type, onStart }: CardProps) {
             : "bg-white text-brand-hover hover:bg-brand-panel-meta"
         }`}
       >
-        {blocked ? (
-          "Скоро"
+        {закрыт ? (
+          ЗАМОК_КНОПКА[закрыт]
         ) : (
           <>
             <span className="inline-block h-2 w-2 rounded-full bg-brand-hover" />
@@ -359,7 +367,8 @@ function StageCard({
   number,
   onStart,
 }: CardProps & { number: number }) {
-  const blocked = !type.isActive;
+  const закрыт: Замок = замок(type);
+  const blocked = закрыт !== null;
 
   return (
     <div className="flex w-[288px] shrink-0 snap-start flex-col rounded-[14px] border border-line bg-surface-card p-5">
@@ -368,7 +377,7 @@ function StageCard({
           <Icon>{STAGE_ICONS[type.id] ?? FALLBACK_ICON}</Icon>
         </span>
         <div className="flex items-center gap-2">
-          {blocked && <SoonBadge />}
+          {закрыт && <SoonBadge причина={закрыт} />}
           <span className="font-mono text-[14.5px] font-medium text-ink-placeholder">
             {String(number).padStart(2, "0")}
           </span>
@@ -393,8 +402,8 @@ function StageCard({
             : "bg-brand hover:bg-brand-hover"
         }`}
       >
-        {blocked ? (
-          "Скоро"
+        {закрыт ? (
+          ЗАМОК_КНОПКА[закрыт]
         ) : (
           <>
             <span className="inline-block h-[7px] w-[7px] rounded-full bg-white" />
@@ -408,7 +417,8 @@ function StageCard({
 
 // Спецнавык — широкая карточка с янтарной иконкой
 function SpecialCard({ type, onStart }: CardProps) {
-  const blocked = !type.isActive;
+  const закрыт: Замок = замок(type);
+  const blocked = закрыт !== null;
 
   return (
     <div className="flex items-center gap-[22px] rounded-[14px] border border-line bg-surface-card px-6 py-[22px]">
@@ -421,7 +431,7 @@ function SpecialCard({ type, onStart }: CardProps) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <div className="text-[18.5px] font-semibold text-ink">{type.title}</div>
-          {blocked && <SoonBadge />}
+          {закрыт && <SoonBadge причина={закрыт} />}
         </div>
         <p className="mt-1 max-w-[620px] text-pretty text-[15px] leading-normal text-ink-muted">
           {type.description}
@@ -438,8 +448,8 @@ function SpecialCard({ type, onStart }: CardProps) {
             : "bg-brand hover:bg-brand-hover"
         }`}
       >
-        {blocked ? (
-          "Скоро"
+        {закрыт ? (
+          ЗАМОК_КНОПКА[закрыт]
         ) : (
           <>
             <span className="inline-block h-2 w-2 rounded-full bg-white" />
