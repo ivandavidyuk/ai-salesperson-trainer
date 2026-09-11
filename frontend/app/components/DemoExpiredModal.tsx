@@ -1,14 +1,19 @@
 "use client";
 
-// Окно «Демо-доступ завершён» — то, что видит демо-пара вместо мастера
-// настройки, когда сутки вышли или сгорел тихий потолок часов.
+// Окно «Демо-доступ завершён» — то, что видит демо вместо мастера настройки,
+// когда кончились сутки, разговоры или сгорел тихий потолок часов.
 //
-// Текст один на оба случая, и это осознанно: потолок — аварийный
+// Текст один на все случаи, и это осознанно: потолок — аварийный
 // предохранитель, клиенту о нём не говорим, поэтому его срабатывание
-// неотличимо от конца суток. В отличие от HoursExhaustedModal здесь
+// неотличимо от конца доступа. В отличие от HoursExhaustedModal здесь
 // нет ни одного числа — ни остатка, ни лимита, ни даты сброса.
 //
-// Контакта в тексте тоже нет: клиента ведёт Дима лично и напишет сам.
+// Кнопка одна. Вторая, «Посмотреть разборы», вела на «/» — то есть на ту же
+// главную, где окно и показывается: страница перезагружалась, окно вставало
+// заново, и человек решал, что оно сломано. Дорогу к разборам объясняем
+// словами: они открываются из списка разговоров на главной, за этим окном.
+
+const TELEGRAM = "https://t.me/kimpodhod";
 
 interface DemoExpiredModalProps {
   onClose: () => void;
@@ -29,29 +34,32 @@ export default function DemoExpiredModal({ onClose }: DemoExpiredModalProps) {
 
         <p className="mt-4 text-[15.5px] leading-relaxed text-ink-body">
           Спасибо, что попробовали тренажёр. Новые разговоры в демо-режиме
-          закрыты, но расшифровки и разборы остаются доступны ещё несколько
-          дней — их можно пересматривать и показать коллегам.
+          закрыты, а расшифровки и разборы остаются ещё несколько дней: чтобы
+          перечитать разбор, откройте разговор в разделе «Прошлые разговоры»
+          на главной.
         </p>
 
         <div className="mt-[18px] rounded-[11px] border border-line-soft bg-surface px-[15px] py-3 text-[14.5px] leading-normal text-ink-muted">
           Чтобы команда продолжила тренироваться на полном доступе — напишите
-          нам.
+          Дмитрию в Telegram:{" "}
+          <a
+            href={TELEGRAM}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-brand hover:underline"
+          >
+            t.me/kimpodhod
+          </a>
         </div>
 
-        <div className="mt-[22px] flex justify-end gap-2.5">
+        <div className="mt-[22px] flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-[11px] text-[15.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble"
+            className="rounded-[10px] bg-brand px-[22px] py-[11px] text-[15.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
           >
             Понятно
           </button>
-          <a
-            href="/"
-            className="inline-flex items-center rounded-[10px] bg-brand px-[22px] py-[11px] text-[15.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
-          >
-            Посмотреть разборы
-          </a>
         </div>
       </div>
     </div>
