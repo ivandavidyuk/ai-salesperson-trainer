@@ -74,6 +74,12 @@ interface Patient {
 // чтобы индикатор переключался незаметно для глаза и не грузил страницу.
 const SPEAKER_POLL_MS = 250;
 
+// Сколько ждём открывающую реплику пациента, прежде чем перестать показывать
+// «говорит клиент». Обычная задержка — полторы-две секунды (модель плюс
+// синтез); восемь с запасом покрывают повтор у провайдера, а дальше честнее
+// вернуть экран в «слушаю вас», чем держать менеджера в неведении.
+const PATIENT_OPENS_TIMEOUT_MS = 8000;
+
 // useSearchParams требует границы Suspense, иначе страница не соберётся
 // статически. Сам экран — во вложенном компоненте.
 export default function SessionPage() {
@@ -115,6 +121,11 @@ function SessionScreen() {
   // Та же величина ссылкой: сторож тишины опрашивает её из интервала,
   // и пересоздавать интервал на каждое переключение речи незачем
   const aiSpeakingRef = useRef(false);
+  // Пациент заговорит первым — сервер предупреждает об этом до того, как
+  // пойдёт звук. Полторы-две секунды между предупреждением и первым чанком
+  // экран обязан показывать «говорит клиент», иначе он зовёт менеджера
+  // говорить ровно тогда, когда начинает пациент
+  const patientOpensRef = useRef(false);
 
   // Ссылки на активные ресурсы разговора
   const wsRef = useRef<WebSocket | null>(null);
@@ -309,7 +320,11 @@ function SessionScreen() {
       return;
     }
     const id = setInterval(() => {
-      const speaking = playerRef.current?.isPlaying() ?? false;
+      // Пациент собирается заговорить первым — держим «говорит клиент»,
+      // пока не пошёл звук. Иначе экран просит менеджера говорить ровно
+      // в ту секунду, когда начинает пациент, и первое же слово его перебьёт
+      const speaking =
+        (playerRef.current?.isPlaying() ?? false) || patientOpensRef.current;
       setAiSpeaking(speaking);
       aiSpeakingRef.current = speaking;
     }, SPEAKER_POLL_MS);
@@ -444,7 +459,21 @@ function SessionScreen() {
         try {
           const msg = JSON.parse(event.data as string);
           switch (msg.type) {
+            case "patient_opens":
+              // Упражнение, где разговор ведёт пациент: он сейчас заговорит
+              patientOpensRef.current = true;
+              setAiSpeaking(true);
+              aiSpeakingRef.current = true;
+              // Страховка: если реплика так и не зазвучала (модель молчит,
+              // сеть отвалилась), экран не должен ждать её вечно — иначе
+              // менеджер будет молча смотреть на «говорит клиент»
+              setTimeout(() => {
+                patientOpensRef.current = false;
+              }, PATIENT_OPENS_TIMEOUT_MS);
+              break;
             case "audio_chunk":
+              // Звук пошёл — дальше состояние считает плеер, как обычно
+              patientOpensRef.current = false;
               playerRef.current?.pushChunk(msg.data);
               break;
             case "audio_end":
@@ -455,6 +484,7 @@ function SessionScreen() {
               playerRef.current?.confirmInterrupt();
               break;
             case "error":
+              patientOpensRef.current = false;
               setErrorMsg(msg.message || "Ошибка сервера");
               break;
             case "diagnostics_result":

@@ -115,6 +115,17 @@ def test_задание_не_закрывается_пустым_разгово�
     assert "a.\"status\" = 'active'" in sql
 
 
+def test_задание_не_закрывается_одной_репликой_пациента():
+    # С открывающим ходом пациент здоровается сам, и строка в Message
+    # появляется до того, как менеджер сказал хоть слово. Считать такой
+    # разговор отработанным заданием нельзя — ищем реплику менеджера
+    store = _store({"durationSec": 5})
+    _run(store.finish_if_unfinished("s1"))
+
+    sql, _ = store._pool.запросы[1]
+    assert 'm."role" = \'user\'' in sql
+
+
 def test_сессия_на_паузе_тоже_закрывается():
     # Пауза с мёртвым сокетом — тот же брошенный разговор: статус не
     # completed, значит условие совпадёт и строка обновится.
@@ -185,3 +196,72 @@ def test_сбой_очистки_redis_тоже_не_пробрасываетс�
     monkeypatch.setattr(main, "store", store)
 
     assert _run(main.close_if_abandoned("s1")) is None
+
+
+def test_флаг_открывающего_хода_берётся_у_типа_тренировки():
+    # Пациент заговаривает первым не везде: у трёх начальных этапов
+    # и полного разговора приветствие менеджера и есть упражнение
+    store = _store({"opens_dialog": True})
+    assert _run(store.opens_dialog("s1")) is True
+
+    sql, args = store._pool.запросы[0]
+    assert '"opensDialog"' in sql and '"TrainingType"' in sql
+    assert args == ("s1",)
+
+
+def test_сессия_без_типа_разговор_не_открывает():
+    # Начатые до мастера настройки были полными разговорами: там первым
+    # здоровается менеджер, и COALESCE в запросе даёт false
+    store = _store(None)
+    assert _run(store.opens_dialog("s1")) is False
+
+
+# --- Открывающий ход пациента -----------------------------------------------
+
+
+def _менеджер_ходов():
+    return main.TurnManager(
+        ws=None,
+        session_id="s1",
+        tts_stream=None,
+        system_prompt="Ты — Тамара Михайловна.",
+        scores_deal=False,
+    )
+
+
+def test_открывающий_ход_идёт_отменяемой_задачей():
+    # Задача обязана быть выставлена: по ней _ai_speaking понимает, что ИИ
+    # говорит. Без неё перебивание ушло бы в ветку «играет буфер» — клиент
+    # сбросил бы звук, а сервер продолжил бы слать чанки
+    async def сценарий():
+        manager = _менеджер_ходов()
+        сказано = []
+
+        async def подделка(text):
+            сказано.append(text)
+
+        manager._run = подделка
+        manager.open_dialog()
+        assert manager.task is not None
+        await manager.task
+        # Реплики менеджера нет — пустая строка, и именно строка, не None:
+        # _is_phantom разбирает last_user_text на слова
+        assert сказано == [""]
+        assert manager.current_text == ""
+
+    _run(сценарий())
+
+
+def test_открывающий_ход_не_пишет_пустую_реплику_менеджера(monkeypatch):
+    # Пустое сообщение в расшифровке выглядело бы как потерянная реплика
+    записано = []
+
+    class ЗаписьСообщений:
+        async def persist_message(self, session_id, role, text):
+            записано.append((role, text))
+
+    monkeypatch.setattr(main, "store", ЗаписьСообщений())
+    manager = _менеджер_ходов()
+    _run(manager._persist_turn("", "А сколько это будет стоить?"))
+
+    assert записано == [("assistant", "А сколько это будет стоить?")]

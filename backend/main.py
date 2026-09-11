@@ -66,6 +66,13 @@ _SCORER_BROKEN_AFTER_TURNS = 12
 _NOISE_RESTART_SILENCE_SECS = 1.2
 _NOISE_RESTART_POLL_SECS = 0.5
 
+# Открывающий ход: запрос к модели из одного системного промпта провайдер
+# отвергает, поэтому первую реплику пациента просим затравкой. В историю
+# разговора она не попадает и в расшифровке не появляется — это служебная
+# строка, ровно та же, которой в scripts/sim_conversation.py начинает
+# модель-менеджер
+_ЗАТРАВКА_ОТКРЫТИЯ = "(менеджер молчит — начни разговор первым)"
+
 # Barge-in по partial: сколько секунд назад во входящем аудио должен был
 # звучать реальный голос, чтобы partial-транскрипт считался речью менеджера,
 # а не галлюцинацией Scribe на тишине
@@ -603,7 +610,10 @@ class TurnManager:
                 reason,
                 len(self.sent_sentences),
             )
-            await store.append_message_cache(self.session_id, "user", user_text)
+            # Пустой текст — перебили открывающий ход пациента, реплики
+            # менеджера ещё не было
+            if user_text:
+                await store.append_message_cache(self.session_id, "user", user_text)
             self.last_user_text = user_text
             if spoken:
                 await safe_send(self.ws, {"type": "transcript_ai", "text": spoken})
@@ -632,8 +642,13 @@ class TurnManager:
 
         Параллельные вставки давали одинаковый createdAt, и в расшифровке
         (ORDER BY createdAt) ответ ИИ мог оказаться раньше реплики менеджера.
+
+        Пустой текст менеджера — это открывающий ход пациента: он говорит
+        первым, и записывать нечего. Пустое сообщение в расшифровке выглядело
+        бы как потерянная реплика.
         """
-        await store.persist_message(self.session_id, "user", user_text)
+        if user_text:
+            await store.persist_message(self.session_id, "user", user_text)
         if reply:
             await store.persist_message(self.session_id, "assistant", reply)
 
@@ -725,6 +740,25 @@ class TurnManager:
         self.sent_sentences = []
         self.reply_words = set()
         self.task = asyncio.create_task(self._run(text))
+
+    def open_dialog(self) -> None:
+        """Пациент заговаривает первым — до единой реплики менеджера.
+
+        Нужно там, где разговор по замыслу ведёт он: в отработке возражений
+        и перехвате инициативы. Пока первым обязан был говорить менеджер,
+        он спрашивал — и упражнение выключалось на первом же ходе: пациент
+        уходил в ответы и больше не возвращался.
+
+        Идёт тем же путём, что обычный ход, и это не формальность. `task`
+        обязан быть выставлен: по нему `_ai_speaking` понимает, что ИИ
+        говорит, и без него перебивание ушло бы в ветку «играет буфер» —
+        клиент сбросил бы звук, а сервер продолжил бы слать чанки.
+
+        Текста менеджера здесь нет, и вместо него пустая строка, не None:
+        `_is_phantom` разбирает `last_user_text` на слова, и None там —
+        падение на первом же коммите распознавания.
+        """
+        self._start("")
 
     def _with_diagnostics(self, prompt: str) -> str:
         """Доклеивает документ диагностики, если менеджер его уже показал.
@@ -840,14 +874,23 @@ class TurnManager:
         ws = self.ws
         session_id = self.session_id
         producer: Optional[asyncio.Task] = None
+        # Открывающий ход: реплики менеджера нет вовсе, он ещё молчит
+        открывающий = not text
         try:
             t_start = time.perf_counter()
-            await safe_send(ws, {"type": "transcript_user", "text": text})
+            if not открывающий:
+                await safe_send(ws, {"type": "transcript_user", "text": text})
 
             # Контекст: история из Redis-кэша + текущая (ещё не записанная)
             # реплика менеджера
             history = await store.get_messages(session_id)
-            history.append({"role": "user", "text": text})
+            if открывающий:
+                # Одним системным промптом провайдер запрос отвергает,
+                # поэтому кладём затравку — ту же, которой в симуляторе
+                # начинает модель-менеджер. В историю она не попадает
+                history.append({"role": "user", "text": _ЗАТРАВКА_ОТКРЫТИЯ})
+            else:
+                history.append({"role": "user", "text": text})
 
             # Промпт на этот ход: постоянная часть плюс строка про доверие.
             # Она зависит от последней фоновой оценки и решает, может ли
@@ -972,13 +1015,18 @@ class TurnManager:
             # Успешное завершение хода — фиксируем историю: кэш синхронно
             # (дёшево, Redis локальный), Postgres фоном одной задачей,
             # чтобы createdAt сохранял порядок user → assistant
-            await store.append_message_cache(session_id, "user", text)
+            if not открывающий:
+                await store.append_message_cache(session_id, "user", text)
             await store.append_message_cache(session_id, "assistant", reply)
             asyncio.create_task(self._persist_turn(text, reply))
             self.last_user_text = text
             # Пересчёт оценки — в фоне: следующий ход её уже увидит, а этот
-            # ничего не ждёт
-            self.schedule_scoring()
+            # ничего не ждёт.
+            #
+            # Открывающий ход не считаем: оценивать работу менеджера, который
+            # ещё не сказал ни слова, нечего, а вызов оценщика платный
+            if not открывающий:
+                self.schedule_scoring()
 
             total_ms = (time.perf_counter() - t_start) * 1000
             logger.info(
@@ -1261,7 +1309,24 @@ async def session_ws(ws: WebSocket, session_id: str):
             {"type": "error", "message": "Распознавание речи недоступно"},
         )
 
-    # 5. Основной цикл приёма сообщений от клиента
+    # 5. Открывающий ход: в упражнениях, где разговор ведёт пациент, он
+    # заговаривает первым — до единой реплики менеджера.
+    #
+    # Пустая история обязательна в условии: этот же код выполняется при
+    # ПЕРЕПОДКЛЮЧЕНИИ к живой сессии, и без проверки пациент здоровался бы
+    # посреди разговора.
+    #
+    # Клиенту говорим заранее: у него на экране написано «Слушаю вас», и без
+    # предупреждения менеджер начал бы говорить ровно тогда, когда собирается
+    # пациент, — и перебил бы его первым же словом.
+    if not await store.get_messages(session_id) and await store.opens_dialog(
+        session_id
+    ):
+        logger.info("Сессия %s: пациент начинает разговор сам", session_id)
+        await safe_send(ws, {"type": "patient_opens"})
+        manager.open_dialog()
+
+    # 6. Основной цикл приёма сообщений от клиента
     try:
         while True:
             message = await ws.receive_json()
