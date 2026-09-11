@@ -56,6 +56,13 @@ interface ReviewPanelProps {
   startedAt?: string;
   /** «Показать в диалоге»: страница прокручивает к реплике и подсвечивает её */
   onShowMessage?: (index: number) => void;
+  /**
+   * Название упражнения — заголовок панели. Без него человек, прошедший три
+   * упражнения подряд, к третьему разбору уже не помнит, который на экране:
+   * панель звалась общим «Разбор упражнения». null — тип неизвестен
+   * (разговоры до мастера настройки), тогда заголовок остаётся общим.
+   */
+  trainingTypeTitle?: string | null;
 }
 
 // Кольцо общей оценки. Дуга рисуется через stroke-dasharray, поэтому
@@ -120,12 +127,27 @@ function OutcomeStamp({ outcome }: { outcome: DealOutcome }) {
  * Итог этапной тренировки. Своей плашки не заводим: у менеджера уже есть
  * язык «получилось / не получилось», и учить его второму незачем — меняются
  * только слова.
+ *
+ * Слово «этап» из вердикта ушло: у профилактики возражений и перехвата
+ * инициативы этапа сделки нет вовсе, и «этап отработан» под их именем было
+ * неправдой. Подлежащее теперь стоит строкой выше — в заголовке панели,
+ * а вердикт его не повторяет.
  */
 function DrillStamp({ passed }: { passed: boolean }) {
   return passed ? (
-    <Stamp good title="Этап отработан" stamp="ЗАЧТЕНО" />
+    <Stamp
+      good
+      title="Отработано"
+      stamp="ЗАЧТЕНО"
+      note="исход сделки в упражнении не считаем"
+    />
   ) : (
-    <Stamp good={false} title="Этап не отработан" stamp="НЕ ЗАЧТЕНО" />
+    <Stamp
+      good={false}
+      title="Не отработано"
+      stamp="НЕ ЗАЧТЕНО"
+      note="исход сделки в упражнении не считаем"
+    />
   );
 }
 
@@ -133,10 +155,14 @@ function Stamp({
   good,
   title,
   stamp,
+  note,
 }: {
   good: boolean;
   title: string;
   stamp: string;
+  /** Строка под вердиктом. У упражнения объясняет, почему тут нет исхода
+      сделки: раньше это стояло в подписи вместе с именем этапа */
+  note?: string;
 }) {
   const closed = good;
 
@@ -185,12 +211,23 @@ function Stamp({
         </svg>
       </span>
 
-      <div
-        className={`animate-textrise relative text-[19.5px] font-semibold tracking-[-.01em] ${
-          closed ? "text-white" : "text-ink"
-        }`}
-      >
-        {title}
+      <div className="animate-textrise relative min-w-0">
+        <div
+          className={`text-[19.5px] font-semibold tracking-[-.01em] ${
+            closed ? "text-white" : "text-ink"
+          }`}
+        >
+          {title}
+        </div>
+        {note && (
+          <div
+            className={`mt-0.5 text-[12.5px] ${
+              closed ? "text-white/70" : "text-ink-muted"
+            }`}
+          >
+            {note}
+          </div>
+        )}
       </div>
 
       <span
@@ -610,6 +647,7 @@ export default function ReviewPanel({
   messages,
   startedAt,
   onShowMessage,
+  trainingTypeTitle,
 }: ReviewPanelProps) {
   const isDrill =
     review !== null && review.drillPassed !== null && review.drillPassed !== undefined;
@@ -634,9 +672,24 @@ export default function ReviewPanel({
 
   return (
     <div className="flex-1 overflow-y-auto bg-surface-card px-7 py-8">
-      <div className="mb-4 text-base font-semibold text-ink">
-        {isDrill ? "Разбор упражнения" : "Разбор разговора"}
-      </div>
+      {/* Имя упражнения — заголовок панели, а прежнее «Разбор упражнения»
+          уехало наверх надстрочной подписью. Новой строки не добавилось:
+          поменялось содержимое уже потраченной. Режим панели («упражнение»,
+          а не «разговор») подпись держит, но читается первым имя. */}
+      {isDrill && trainingTypeTitle ? (
+        <div className="mb-4">
+          <div className="font-mono text-[11px] font-medium uppercase tracking-[.12em] text-ink-subtle">
+            Разбор упражнения
+          </div>
+          <div className="mt-1.5 text-[20px] font-semibold tracking-[-.01em] text-ink">
+            {trainingTypeTitle}
+          </div>
+        </div>
+      ) : (
+        <div className="mb-4 text-base font-semibold text-ink">
+          {isDrill ? "Разбор упражнения" : "Разбор разговора"}
+        </div>
+      )}
 
       {pending && !review ? (
         <PendingReview />

@@ -312,6 +312,7 @@ export default function TranscriptPage() {
             messages={data.messages}
             startedAt={data.session.startedAt}
             onShowMessage={showMessage}
+            trainingTypeTitle={data.session.trainingTypeTitle}
           />
         </div>
       )}

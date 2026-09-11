@@ -37,6 +37,10 @@ export async function GET(
         // Кнопке «Ещё разговор»: повторить того же пациента и тот же тип
         patientId: true,
         trainingTypeId: true,
+        // Название упражнения — заголовок панели разбора. До 11.09 панель
+        // звалась общим «Разбор упражнения», и какое это было упражнение,
+        // на экране не говорилось нигде
+        trainingType: { select: { title: true } },
         patient: { select: { name: true } },
         // Организация того, кто вёл разговор, — по ней ищется случай
         // пациента и его услуга; у читателя-руководителя она та же
@@ -108,6 +112,7 @@ export async function GET(
         patientName: session.patient?.name ?? null,
         patientId: session.patientId,
         trainingTypeId: session.trainingTypeId,
+        trainingTypeTitle: session.trainingType?.title ?? null,
         // Документ диагностики отдаём только показанный: середина
         // расшифровки на него ссылается, и без него читателю не сойдётся
         // контекст. Сгенерированный, но не показанный — не существовал
