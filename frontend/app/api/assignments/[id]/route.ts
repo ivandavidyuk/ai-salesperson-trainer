@@ -37,7 +37,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
     }
 
-    const итог = await разобратьЗадание(body, { всеОбязательны: false });
+    const итог = await разобратьЗадание(body, {
+      всеОбязательны: false,
+      организация: head.organizationId,
+    });
     if (!итог.ok) {
       return NextResponse.json({ error: итог.ошибка }, { status: 400 });
     }

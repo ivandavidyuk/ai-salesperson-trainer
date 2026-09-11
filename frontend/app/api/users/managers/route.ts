@@ -1,6 +1,12 @@
 // GET /api/users/managers
 // Менеджеры, которым руководитель может назначить тренировку.
 // Только для роли head: список сотрудников не должен быть виден всем.
+//
+// И только своего отдела. До 11.09 условие было одно — «роль менеджер», —
+// и руководитель Диоптра видел в мастере назначения десять человек из пяти
+// клиник, включая демо-аккаунты чужих компаний. Организация у сотрудника
+// одна, сверяем прямо в условии запроса: чужой человек не должен находиться
+// даже теоретически.
 
 import { NextRequest, NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
@@ -20,8 +26,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Руководитель без организации — состояние возможное (заведён до
+    // организаций). Отдаём пустой список: показывать ему всех подряд хуже,
+    // чем не показывать никого
+    if (!head.organizationId) return NextResponse.json([]);
+
     const managers = await prisma.user.findMany({
-      where: { role: UserRole.manager },
+      where: { role: UserRole.manager, organizationId: head.organizationId },
       orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
       select: {
         id: true,
