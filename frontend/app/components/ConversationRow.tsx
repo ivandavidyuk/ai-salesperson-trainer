@@ -72,8 +72,25 @@ export default function ConversationRow({
         <div className="truncate text-sm font-semibold text-ink">
           {title || "Разговор"}
         </div>
-        <div className="mt-px whitespace-nowrap text-xs text-ink-subtle">
-          {formatConversationDate(conversation.startedAt)}
+        {/* Тип тренировки встал первым на строку даты: она была занята
+            на треть, и ни имя с темой, ни оценка не потеряли ни пикселя.
+            Текстом, а не плашкой: шесть плашек столбиком читаются узором,
+            а капсула в строке уже есть — оценка.
+
+            Полный разговор подписан наравне с упражнениями. Оставить его
+            без подписи нельзя: тогда «без подписи» означало бы «полный
+            разговор», а это место занято разговорами до мастера настройки.
+            Им тип не выдумываем — «Тип не указан», тише остальных. */}
+        <div className="mt-px truncate text-xs">
+          <span
+            className={conversation.trainingType ? "text-ink-muted" : "text-ink-subtle"}
+          >
+            {conversation.trainingType ?? "Тип не указан"}
+          </span>
+          <span className="text-ink-placeholder"> · </span>
+          <span className="text-ink-subtle">
+            {formatConversationDate(conversation.startedAt)}
+          </span>
         </div>
       </div>
 

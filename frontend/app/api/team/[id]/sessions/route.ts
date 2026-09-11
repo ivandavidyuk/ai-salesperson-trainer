@@ -63,6 +63,7 @@ export async function GET(
         isFavorite: true,
         patient: { select: { name: true } },
         review: { select: { overallScore: true } },
+        trainingType: { select: { title: true } },
       },
     });
 
@@ -82,6 +83,7 @@ export async function GET(
         durationSec: row.durationSec,
         score: round1(row.review?.overallScore ?? null),
         isFavorite: row.isFavorite,
+        trainingType: row.trainingType?.title ?? null,
       })),
     });
   } catch (error) {

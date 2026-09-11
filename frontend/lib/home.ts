@@ -48,6 +48,11 @@ export interface HomeConversation {
   durationSec: number | null;
   score: number | null;
   isFavorite: boolean;
+  /**
+   * Название типа тренировки. null — у разговоров, начатых до мастера
+   * настройки: они были полными, но утверждать это на экране мы не можем.
+   */
+  trainingType: string | null;
 }
 
 export interface ProgressMetric {
@@ -122,6 +127,9 @@ export async function listConversations(
       isFavorite: true,
       patient: { select: { name: true } },
       review: { select: { overallScore: true } },
+      // Тип тренировки: до 11.09 строка его не называла, и полный разговор
+      // с упражнением выглядели одинаково — вместе с несравнимыми оценками
+      trainingType: { select: { title: true } },
     },
   });
 
@@ -133,6 +141,7 @@ export async function listConversations(
     durationSec: row.durationSec,
     score: round1(row.review?.overallScore ?? null),
     isFavorite: row.isFavorite,
+    trainingType: row.trainingType?.title ?? null,
   }));
 }
 
