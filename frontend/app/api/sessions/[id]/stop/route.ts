@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
+import { ЕСТЬ_РЕПЛИКА_МЕНЕДЖЕРА } from "@/lib/statsWindow";
 
 export const runtime = "nodejs";
 
@@ -61,11 +62,22 @@ export async function POST(
       },
     });
 
-    // Разговор по заданию закрывает это задание. updateMany с userId
-    // в условии: чужое задание не должно закрыться даже теоретически.
+    // Разговор по заданию закрывает это задание — если разговор состоялся,
+    // то есть в нём есть реплика менеджера. То же правило у бэкенда при
+    // обрыве связи и у статистики. Без него сессия, брошенная сразу после
+    // «Начать» или после открывающей реплики пациента, ставила руководителю
+    // «выполнено», а в статистике и в списке разговоров её не было.
+    //
+    // Всё в условии одного updateMany: и чужое задание, и несостоявшийся
+    // разговор отсекаются там же, где пишется статус.
     if (session.assignmentId) {
       await prisma.assignment.updateMany({
-        where: { id: session.assignmentId, userId: user.sub, status: "active" },
+        where: {
+          id: session.assignmentId,
+          userId: user.sub,
+          status: "active",
+          sessions: { some: { id: sessionId, ...ЕСТЬ_РЕПЛИКА_МЕНЕДЖЕРА } },
+        },
         data: { status: "done", completedAt: endedAt },
       });
     }

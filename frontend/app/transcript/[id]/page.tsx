@@ -35,10 +35,12 @@ function reviewExpected(data: TranscriptData | null): boolean {
   if (!data || data.review) return false;
   // Без endedAt сессию никто не закрыл штатно — разбор не запускался
   if (!data.session.endedAt) return false;
-  // Без единой реплики разбирать нечего: оценщик на пустую историю
-  // не зовётся вовсе (backend: review_conversation), и две минуты
-  // «Оценщик читает расшифровку» здесь были бы обещанием впустую
-  if (data.messages.length === 0) return false;
+  // Меньше двух реплик — разбирать нечего: оценщик не зовётся вовсе
+  // (backend: finalize_review), и две минуты «Оценщик читает расшифровку»
+  // здесь были бы обещанием впустую. Одна реплика — типичный случай
+  // упражнения, где пациент начинает сам: он сказал первую фразу,
+  // а менеджер завершил разговор, не сказав ни слова
+  if (data.messages.length < 2) return false;
   return Date.now() - new Date(data.session.endedAt).getTime() < REVIEW_WAIT_MS;
 }
 
