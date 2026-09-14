@@ -47,6 +47,9 @@ interface TrainingTypeSeed {
   // Заговаривает ли пациент первым. true там, где разговор ведёт он:
   // отработка возражений и перехват инициативы
   opensDialog: boolean;
+  // Услуга с ценой по кнопке на экране звонка. true в упражнениях, которые
+  // начинаются с середины разговора: узнать, что продаёшь, там неоткуда
+  showsService: boolean;
   position: number;
 }
 
@@ -76,6 +79,8 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
     scoresDeal: true,
     // Первым говорит менеджер: разговор начинается с приветствия
     opensDialog: false,
+    // Услуга приходит вместе с документом диагностики, по своей кнопке
+    showsService: false,
     position: 1,
   },
   {
@@ -115,6 +120,8 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
     scoresDeal: false,
     // Первым здоровается менеджер — это и есть упражнение
     opensDialog: false,
+    // Начало разговора: что нужно пациенту, ещё не выяснено
+    showsService: false,
     position: 2,
   },
   {
@@ -143,6 +150,8 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
     scoresDeal: false,
     // Первым говорит менеджер: он и растапливает лёд
     opensDialog: false,
+    // Начало разговора: что нужно пациенту, ещё не выяснено
+    showsService: false,
     position: 3,
   },
   {
@@ -177,6 +186,8 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
     scoresDeal: false,
     // Первым говорит менеджер: он ведёт расспрос
     opensDialog: false,
+    // Выяснить, что нужно пациенту, и есть упражнение
+    showsService: false,
     position: 4,
   },
   {
@@ -214,6 +225,8 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
     // Первым говорит менеджер: он объясняет, что предлагает клиника,
     // и снимает сомнения заранее — в этом всё упражнение
     opensDialog: false,
+    // С середины разговора: цену менеджер должен назвать сам
+    showsService: true,
     position: 5,
   },
   {
@@ -242,6 +255,8 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
     // Пока первым говорил менеджер, ему было нечего сказать — сомнений
     // ещё не прозвучало, а отрабатывать полагалось именно их
     opensDialog: true,
+    // С середины разговора: пациент спорит о деньгах с первой реплики
+    showsService: true,
     position: 6,
   },
   {
@@ -297,6 +312,8 @@ export const TRAINING_TYPES: TrainingTypeSeed[] = [
     // Пациент начинает сам: инициатива его, вопросы задаёт он. Первый
     // вопрос менеджера отдавал ему ход и выключал упражнение
     opensDialog: true,
+    // С середины разговора: пациент спрашивает, сколько стоит
+    showsService: true,
     position: 7,
   },
 ];
