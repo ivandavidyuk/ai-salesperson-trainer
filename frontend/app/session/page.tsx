@@ -15,6 +15,7 @@ import AudioDevicePicker from "@/app/components/AudioDevicePicker";
 import BackLink from "@/app/components/BackLink";
 import CallAvatar from "@/app/components/CallAvatar";
 import CaseServiceBlock from "@/app/components/CaseServiceBlock";
+import CaseServiceToggle from "@/app/components/CaseServiceToggle";
 import DiagnosticsDocument from "@/app/components/DiagnosticsDocument";
 import Logo from "@/app/components/Logo";
 import SpeakerPill from "@/app/components/SpeakerPill";
@@ -70,6 +71,15 @@ interface Patient {
   anamnesis: string | null;
 }
 
+// Упражнение, а не полный разговор. Приходит в ответе на «Начать»
+interface Drill {
+  title: string;
+  // Кнопка «Показать услугу» — в упражнениях с середины разговора
+  showsService: boolean;
+  // null — «услуга не подобрана»
+  service: CaseService | null;
+}
+
 // Как часто спрашиваем плеер, звучит ли ответ ИИ. Четверти секунды хватает,
 // чтобы индикатор переключался незаметно для глаза и не грузил страницу.
 const SPEAKER_POLL_MS = 250;
@@ -116,6 +126,8 @@ function SessionScreen() {
   // waiting — кнопка нажата, ждём ответа сервера (или повтор при pending)
   const [diagnostics, setDiagnostics] = useState<string | null>(null);
   const [diagnosticsWaiting, setDiagnosticsWaiting] = useState(false);
+  // Название упражнения и услуга к нему; у полного разговора null
+  const [drill, setDrill] = useState<Drill | null>(null);
   // Звучит ли сейчас ответ ИИ — от этого зависит индикатор и вид аватара
   const [aiSpeaking, setAiSpeaking] = useState(false);
   // Та же величина ссылкой: сторож тишины опрашивает её из интервала,
@@ -403,11 +415,14 @@ function SessionScreen() {
         sessionId: id,
         wsUrl,
         opensDialog,
+        drill: drillInfo,
       } = (await res.json()) as {
         sessionId: string;
         wsUrl: string;
         opensDialog?: boolean;
+        drill?: Drill | null;
       };
+      setDrill(drillInfo ?? null);
 
       // Пациент заговорит первым — экран обязан сказать это сразу по нажатию
       // кнопки. Сокет открывается, поднимает распознавание и синтез, и только
@@ -845,7 +860,17 @@ function SessionScreen() {
             <div className="mt-[30px] text-[31px] font-semibold text-ink">
               {patient?.name ?? "Пациент"}
             </div>
-            <div className="mt-3">
+            {/* Название упражнения — моноширинной подписью, а не обычным
+                серым набором. Обычным оно читалось бы второй строкой
+                о пациенте, как «62 года · диагностика зрения» до старта,
+                и сошло бы за причину визита. Без описания задачи: только
+                название, чтобы не спорить с тем, кто на линии */}
+            {drill && (
+              <div className="mt-[11px] font-mono text-[13.5px] font-medium uppercase tracking-[.12em] text-ink-muted">
+                {drill.title}
+              </div>
+            )}
+            <div className={drill ? "mt-3.5" : "mt-3"}>
               <SpeakerPill
                 size="lg"
                 state={
@@ -930,7 +955,11 @@ function SessionScreen() {
               </div>
             )}
 
-            <div className="mt-10 flex gap-3.5">
+            {/* В упражнении под именем стоит ещё и название, и с плашкой
+                «Микрофон не даёт сигнала» и списком устройств колонка
+                на 1280×800 вылезала на 6 px — появлялась прокрутка. Отступ
+                над кнопками в этом состоянии меньше, как в макете */}
+            <div className={`${drill && micAlert ? "mt-7" : "mt-10"} flex gap-3.5`}>
               {/* Результат диагностики — только в полном разговоре и до
                   показа. Маркера «сценка отыграна» нет намеренно: менеджер
                   сам решает, когда пациент «сходил», — сценку он всё равно
@@ -945,6 +974,11 @@ function SessionScreen() {
                   {diagnosticsWaiting ? "Готовим…" : "Результат диагностики"}
                 </button>
               )}
+
+              {/* Услуга по кнопке — в упражнениях с середины разговора:
+                  знакомство и расспрос будто бы позади, и узнать, что на
+                  столе и почём, менеджеру больше неоткуда */}
+              {drill?.showsService && <CaseServiceToggle service={drill.service} />}
 
               {screenState === "active" ? (
                 <button

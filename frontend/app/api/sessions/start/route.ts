@@ -1,7 +1,8 @@
 // POST /api/sessions/start
 // Создаёт новую сессию со статусом active для текущего пользователя
-// и возвращает { sessionId, wsUrl, opensDialog } для подключения
-// к WebSocket-серверу.
+// и возвращает { sessionId, wsUrl, opensDialog, drill } для подключения
+// к WebSocket-серверу. drill — название упражнения и его услуга для экрана
+// звонка; у полного разговора null.
 //
 // Тело { patientId?, trainingType? } приходит из мастера настройки. Без тела
 // роут работает как раньше — прямой заход на /session должен оставаться живым.
@@ -13,6 +14,8 @@ import { расходЧасовПользователя } from "@/lib/hours";
 import { демоСтатус, засечьПервыйРазговор } from "@/lib/demoAccess";
 import { ВЫБОР_ЗАКРЫТ, ДЕМО_КЛИЕНТЫ, ДЕМО_ТИП } from "@/lib/demoScope";
 import { backendUrl } from "@/lib/cases";
+import type { CaseService } from "@/lib/caseService";
+import { caseService } from "@/lib/caseServiceQuery";
 
 export const runtime = "nodejs";
 
@@ -78,14 +81,21 @@ export async function POST(request: NextRequest) {
     // бэкенд успевает предупредить — полторы секунды, в которые экран просит
     // говорить менеджера, хотя начинает пациент
     let opensDialog = false;
+    // Название упражнения под именем пациента — во всех упражнениях, кроме
+    // полного разговора. Задачу менеджер читал в мастере, а после «Начать»
+    // на экране не оставалось даже того, что он отрабатывает
+    let drillTitle: string | null = null;
+    let showsService = false;
     if (body.trainingType) {
       const type = await prisma.trainingType.findUnique({
         where: { id: body.trainingType },
         select: {
           id: true,
+          title: true,
           isActive: true,
           scoresDeal: true,
           opensDialog: true,
+          showsService: true,
         },
       });
       if (!type || !type.isActive) {
@@ -102,6 +112,8 @@ export async function POST(request: NextRequest) {
       trainingTypeId = type.id;
       scoresDeal = type.scoresDeal;
       opensDialog = type.opensDialog;
+      drillTitle = type.scoresDeal ? null : type.title;
+      showsService = type.showsService;
     }
 
     // Пациент, которого играет ИИ. Проверяем на сервере, что он активен:
@@ -210,6 +222,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Услуга с ценой — сразу в ответе, а не отдельным запросом по кнопке:
+    // в отработке возражений пациент может спросить про деньги через
+    // полторы секунды после старта. Документ диагностики для неё не нужен,
+    // услуга лежит в случае пациента
+    let service: CaseService | null = null;
+    if (showsService) {
+      const owner = await prisma.user.findUnique({
+        where: { id: user.sub },
+        select: { organizationId: true },
+      });
+      service = await caseService(patientId, owner?.organizationId ?? null);
+    }
+
     // Формируем URL WebSocket-сервера (FastAPI).
     // Базовый адрес берём из env, по умолчанию — локальный.
     const wsBase = process.env.FASTAPI_WS_URL || "ws://localhost:8000";
@@ -219,6 +244,7 @@ export async function POST(request: NextRequest) {
       sessionId: session.id,
       wsUrl,
       opensDialog,
+      drill: drillTitle ? { title: drillTitle, showsService, service } : null,
     });
   } catch (error) {
     console.error("Ошибка в /api/sessions/start:", error);

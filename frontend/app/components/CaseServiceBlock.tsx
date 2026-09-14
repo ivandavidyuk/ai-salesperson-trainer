@@ -17,10 +17,12 @@ interface CaseServiceBlockProps {
   /**
    * card — на экране звонка: единственный залитый прямоугольник в карточке,
    * менеджер читает его первым, пока пациент «ходит к врачу».
+   * popover — в окошке «Показать услугу» в упражнении: тот же блок, но без
+   * подписи — она стоит в шапке окошка рядом с крестиком.
    * line — в расшифровке: одна тихая строка над документом. Разговор прошёл,
    * там услуга — контекст, а не подсказка, и подсвечивать её нечестно.
    */
-  variant: "card" | "line";
+  variant: "card" | "popover" | "line";
 }
 
 export default function CaseServiceBlock({ service, variant }: CaseServiceBlockProps) {
@@ -40,25 +42,31 @@ export default function CaseServiceBlock({ service, variant }: CaseServiceBlockP
     );
   }
 
+  const withLabel = variant === "card";
+
   if (!service) {
     // Тот же блок того же размера, заливка на пунктир и одна фраза.
     // Ни жёлтого, ни красного: это не сбой, а честный ответ прайса
     return (
       <div className="rounded-[10px] border border-dashed border-line-strong bg-surface px-[15px] py-[13px]">
-        <div className="text-xs font-medium uppercase tracking-[.1em] text-ink-subtle">
-          Услуга по диагнозу
-        </div>
-        <div className="mt-1.5 text-sm leading-snug text-ink-label">{SERVICE_NOT_MATCHED}</div>
+        {withLabel && (
+          <div className="mb-1.5 text-xs font-medium uppercase tracking-[.1em] text-ink-subtle">
+            Услуга по диагнозу
+          </div>
+        )}
+        <div className="text-sm leading-snug text-ink-label">{SERVICE_NOT_MATCHED}</div>
       </div>
     );
   }
 
   return (
     <div className="rounded-[10px] border border-line-accent bg-brand-on-muted px-[15px] py-[13px]">
-      <div className="text-xs font-semibold uppercase tracking-[.1em] text-brand-hover">
-        Услуга по диагнозу
-      </div>
-      <div className="mt-1.5 text-lg font-semibold leading-tight tracking-[-.01em] text-ink">
+      {withLabel && (
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-[.1em] text-brand-hover">
+          Услуга по диагнозу
+        </div>
+      )}
+      <div className="text-lg font-semibold leading-tight tracking-[-.01em] text-ink">
         {service.name}
       </div>
       <div className="mt-1.5 font-mono text-base font-medium text-brand-score">{service.price}</div>
