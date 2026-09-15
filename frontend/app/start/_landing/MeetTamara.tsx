@@ -52,7 +52,10 @@ export default function MeetTamara() {
                 className="relative h-[200px] w-[200px] rounded-full border-2 border-brand-on-dark bg-surface-dark object-cover lg:h-[320px] lg:w-[320px]"
               />
             </div>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-2 lg:mt-7">
+            {/* Строка должна уместиться в одну линию: иначе на телефоне «ещё 15» падает
+                отдельной строкой, а на десктопе блок портрета перерастает колонку черт.
+                Отсюда ступени: до 375 px узкий зазор, с 1024 — 56 px, с 1280 — 64 px */}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-1 min-[375px]:gap-2 lg:mt-7 xl:gap-3">
               {OTHERS.map((name) => (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -60,16 +63,17 @@ export default function MeetTamara() {
                   src={portraitFor(name) ?? ""}
                   alt=""
                   loading="lazy"
-                  className="h-10 w-10 shrink-0 rounded-full border-[length:1.5px] border-white/10 object-cover"
+                  className="h-11 w-11 shrink-0 rounded-full border-[length:1.5px] border-white/10 object-cover lg:h-14 lg:w-14 xl:h-16 xl:w-16"
                 />
               ))}
-              <span className="inline-flex h-10 items-center whitespace-nowrap rounded-full bg-white/10 px-3.5 text-[13.5px] font-semibold text-brand-on-dark">
+              <span className="inline-flex h-11 items-center whitespace-nowrap rounded-full bg-white/10 px-3 text-[14px] font-semibold text-brand-on-dark lg:h-14 lg:px-4 lg:text-[16px] xl:h-16 xl:px-5 xl:text-[17.5px]">
                 ещё 15
               </span>
             </div>
           </Reveal>
 
-          <div className="flex w-full flex-col gap-4 lg:h-[448px] lg:max-w-[560px] lg:flex-1 lg:justify-between lg:gap-0">
+          {/* Высота = портрет 380 + отступ 28 + строка аватаров, чтобы колонки кончались вровень */}
+          <div className="flex w-full flex-col gap-4 lg:h-[464px] xl:h-[472px] lg:max-w-[560px] lg:flex-1 lg:justify-between lg:gap-0">
             {TRAITS.map((trait, i) => (
               <div key={trait} className="flex flex-col gap-4 lg:gap-0 lg:contents">
                 {i > 0 && <span className="block h-px bg-white/10" />}
