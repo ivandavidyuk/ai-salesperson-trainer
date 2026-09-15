@@ -165,6 +165,12 @@ cd ~/ai-trainer && docker compose pull && docker compose up -d
   `DOCKERHUB_USER`.
 - `frontend/.env` — по [frontend/.env.production.example](frontend/.env.production.example);
   `REDIS_URL` — на DE (`redis://:ПАРОЛЬ@103.7.55.214:6379`).
+- `backend.env` на DE: `TELEGRAM_BOT_TOKEN` и `TELEGRAM_LEADS_CHAT_ID` —
+  бот и группа, куда приходят заявки с лендинга `/start`. Лежат на DE,
+  а не в `frontend/.env`: RU-сервер не достаёт `api.telegram.org` по IPv4,
+  поэтому Next.js сохраняет заявку в `Lead` и отдаёт уведомление backend
+  по `/leads/notify`. Без переменных заявка в базе есть, а `notifiedAt`
+  пуст и в логе backend — строка об этом.
 
 Согласованность значений:
 

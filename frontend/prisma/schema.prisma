@@ -587,3 +587,22 @@ model DailyContent {
 
   @@unique([kind, position])
 }
+
+// Заявка на демо-доступ с лендинга podhod.tech/start.
+// Дима пишет человеку в Telegram, поэтому контакт — ник или номер там.
+// IP не храним: для потолка заявок он нужен только хешем и только в Redis.
+model Lead {
+  id        String   @id @default(uuid())
+  name      String
+  telegram  String
+  // Сфера компании своими словами: «стоматология», «автосалон»
+  industry  String
+  // Сколько менеджеров в отделе — одно из TEAM_SIZES в lib/leads.ts
+  teamSize  String
+  createdAt DateTime @default(now())
+  // Когда заявка ушла в группу «Заявки podhod». Пусто — Telegram не ответил,
+  // и заявку надо забрать из базы руками
+  notifiedAt DateTime?
+
+  @@index([createdAt])
+}

@@ -14,8 +14,21 @@ import { jwtVerify } from "jose";
 // Имя cookie с токеном (дублируем константу, чтобы не тянуть Node-модули)
 const TOKEN_COOKIE = "token";
 
-// Пути, доступные без авторизации
-const PUBLIC_PATHS = ["/login", "/api/auth/login"];
+// Пути, доступные без авторизации.
+//
+// Лендинг /start и всё, что ему нужно, открыты гостю: политика, приём
+// заявок, портреты персонажей и фото. Статика из public/ тоже проходит
+// через middleware (matcher исключает только _next), поэтому без
+// /portraits и /landing гость увидел бы вместо картинок редирект на вход
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth/login",
+  "/start",
+  "/privacy",
+  "/api/leads",
+  "/portraits",
+  "/landing",
+];
 
 // Возвращает секрет для проверки JWT
 function getSecretKey(): Uint8Array {
