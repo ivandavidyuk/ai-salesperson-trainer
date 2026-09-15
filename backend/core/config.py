@@ -206,6 +206,12 @@ class Settings(BaseSettings):
     redis_url: str = ""
     jwt_secret: str = ""
 
+    # Заявки с лендинга: бот и группа «Заявки podhod». Живут на DE, а не
+    # во фронтенде: RU-сервер не достаёт Telegram по IPv4
+    # (services/lead_notify.py)
+    telegram_bot_token: str = ""
+    telegram_leads_chat_id: str = ""
+
     @property
     def asyncpg_dsn(self) -> str:
         """DSN для asyncpg.
