@@ -165,6 +165,9 @@ cd ~/ai-trainer && docker compose pull && docker compose up -d
   `DOCKERHUB_USER`.
 - `frontend/.env` — по [frontend/.env.production.example](frontend/.env.production.example);
   `REDIS_URL` — на DE (`redis://:ПАРОЛЬ@103.7.55.214:6379`).
+  `TELEGRAM_BOT_TOKEN` и `TELEGRAM_LEADS_CHAT_ID` — бот и группа, куда
+  приходят заявки с лендинга `/start`. Без них заявка сохраняется в таблицу
+  `Lead`, но уведомления нет, а в логе frontend — строка об этом.
 
 Согласованность значений:
 
