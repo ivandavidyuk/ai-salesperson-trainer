@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { parseLead } from "@/lib/leads";
 import { ensureRedisConnected, redis } from "@/lib/redis";
-import { notifyLead } from "@/lib/telegram";
+import { notifyLead } from "@/lib/leadNotify";
 
 export const runtime = "nodejs";
 

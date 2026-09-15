@@ -93,6 +93,18 @@ export async function signToken(payload: {
   return token;
 }
 
+// Короткий служебный токен для вызова backend без пользователя — сейчас
+// это уведомление о заявке с лендинга. Backend проверяет только подпись
+// и наличие sub, поэтому живёт токен минуту и в whitelist не попадает.
+export async function signServiceToken(subject: string): Promise<string> {
+  return new SignJWT({})
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(subject)
+    .setIssuedAt()
+    .setExpirationTime("1m")
+    .sign(getSecretKey());
+}
+
 // Проверяет подпись и срок действия токена.
 // Возвращает полезную нагрузку или null, если токен невалиден.
 export async function verifyToken(
