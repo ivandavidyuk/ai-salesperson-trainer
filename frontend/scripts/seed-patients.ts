@@ -2,48 +2,41 @@
 // Запуск: npm run seed:patients
 //
 // Сами пациенты лежат по файлу на человека в scripts/patients/ — здесь только
-// заливка. Промпт собирается из слоёв (см. patient-prompt.ts) и ПЕРЕЗАПИСЫВАЕТСЯ
+// заливка личности, досье, голоса и сложности. Значения ПЕРЕЗАПИСЫВАЮТСЯ
 // при каждом запуске: источник правды — репозиторий, правки прямо в базе
 // будут потеряны.
 //
-// Пациент без случая заливается неактивным и без промпта: случай пишет
-// генератор по данным клиники, а без него в роли нет «зачем пришла».
+// Промпта роли в Patient нет: он собирается под организацию из личности
+// и её случая (seed:presets, rebuild:prompts) и лежит в PatientCase.prompt.
+// До 16.09 сюда писался «глобальный» офтальмологический промпт как запасной;
+// на проде им никто не пользовался, и его убрали вместе со случаями
+// из файлов личностей.
 //
 // Скрипт идемпотентный: пациентов ищет по имени и обновляет.
 
 import { PrismaClient, Prisma } from "@prisma/client";
-import { buildRolePrompt, type PatientRole } from "./patient-prompt";
 import { PROFILES } from "./patients";
 
 const prisma = new PrismaClient();
 
-// Пациенты, у которых собран случай, — по ним проверялка промптов убеждается,
-// что слой механизма дошёл до каждого дословно, а случай не протёк в личность
-export const LAYERED_ROLES: Record<string, PatientRole> = Object.fromEntries(
-  PROFILES.filter((p) => p.case).map((p) => [
-    p.name,
-    { personality: p.personality, case: p.case! },
-  ])
-);
-
 function toRow(profile: (typeof PROFILES)[number]): Prisma.PatientCreateInput {
-  const role = profile.case
-    ? { personality: profile.personality, case: profile.case }
-    : null;
   return {
     name: profile.name,
-    description: profile.description ?? null,
-    anamnesis: profile.anamnesis ?? null,
-    prompt: role ? buildRolePrompt(role) : null,
+    // Видимые отраслевые поля и промпт живут в случае организации.
+    // В Patient их обнуляем явно, чтобы прежние значения не пережили сид
+    description: null,
+    anamnesis: null,
+    prompt: null,
+    objections: [],
     character: profile.character,
-    objections: profile.objections ?? [],
     decisionMaker: profile.decisionMaker,
     approach: profile.approach,
     // Пусто у женщин — им достаётся общий голос из настроек
     voice: profile.voice ?? null,
     difficulty: profile.difficulty,
-    // Без случая роль неполна: в мастере такой пациент виден, но не выбирается
-    isActive: Boolean(role),
+    // Активны все: есть ли у организации случай этого пациента, проверяется
+    // на старте разговора, а не флагом
+    isActive: true,
   };
 }
 
@@ -90,20 +83,17 @@ async function main() {
     } else {
       await prisma.patient.create({ data: row });
     }
-    const mark = row.isActive ? "доступен" : "ждёт случая";
-    const size = row.prompt ? `${row.prompt.length} символов промпта` : "без промпта";
-    console.log(`${existing ? "обновлён" : "создан  "}  ${row.name} · ${mark} · ${size}`);
+    console.log(`${existing ? "обновлён" : "создан  "}  ${row.name}`);
   }
 
   await removeStale(PROFILES.map((p) => p.name));
 
-  const ready = PROFILES.filter((p) => p.case).length;
-  console.log(`\nВсего пациентов: ${PROFILES.length}, со случаем: ${ready}`);
-  console.log("Промпты перезаписаны значениями из репозитория.");
+  console.log(`\nВсего пациентов: ${PROFILES.length}.`);
+  console.log("Личности и досье перезаписаны значениями из репозитория; случаи — в пресетах.");
 }
 
-// Сид запускается только при прямом вызове: проверялка промптов импортирует
-// отсюда LAYERED_ROLES, и заливать при этом базу не должна
+// Сид запускается только при прямом вызове: импорт файла не должен
+// заливать базу
 if (require.main === module) {
   main()
     .catch((error) => {

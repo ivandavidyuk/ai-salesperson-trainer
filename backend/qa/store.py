@@ -45,15 +45,14 @@ from core.config import get_settings
     "Юлия Андреевна": "yulia-tkachenko",
 }
 
-# Роль пациента ровно как её собирает бой (services/session.py): сначала
-# случай под клинику, при его отсутствии — промпт из сида. На проде случаев
-# нет вовсе, и COALESCE отдаёт сидовый промпт — то же, что услышит менеджер
+# Роль пациента ровно как её собирает бой (services/session.py): случай
+# под организацию. Глобального промпта в Patient с 16.09 нет, COALESCE
+# оставлен на строки старых баз; без случая клетка пропускается ниже
 _ПАЦИЕНТЫ = (
     'SELECT p."id", p."name", '
     'COALESCE(pc."prompt", p."prompt") AS prompt, '
     # Анамнез и карточка — то, что менеджер видит на экране до разговора.
-    # Берутся тем же COALESCE, что и промпт: иначе менеджер читал бы
-    # исходный анамнез, а роль играла случай клиники
+    # Берутся тем же COALESCE, что и промпт, — из случая организации
     'COALESCE(pc."anamnesis", p."anamnesis") AS anamnesis, '
     'COALESCE(pc."description", p."description") AS description, '
     '(pc."prompt" IS NOT NULL) AS case_generated '

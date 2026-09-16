@@ -154,7 +154,7 @@ export interface WizardPatient {
   description: string | null;
   anamnesis: string | null;
   difficulty: DifficultyKey;
-  /** false — промпта для этого пациента ещё нет, выбрать нельзя */
+  /** false — пациент снят из репозитория, но за ним разговоры; выбрать нельзя */
   isActive: boolean;
   /** true — клиент закрыт демо-доступом: виден, но откроется на полном */
   demoLocked?: boolean;
