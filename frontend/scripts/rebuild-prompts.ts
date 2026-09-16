@@ -49,31 +49,6 @@ interface Итог {
   пропущено: string[];
 }
 
-/** Глобальные промпты: пациенты с замороженным случаем из репозитория. */
-async function пересобратьГлобальные(): Promise<Итог> {
-  const итог: Итог = { обновлено: 0, бездела: 0, пропущено: [] };
-
-  for (const профиль of PROFILES) {
-    if (!профиль.case) continue; // без случая роль неполна, промпта и не было
-    const свежий = buildRolePrompt({ personality: профиль.personality, case: профиль.case });
-    const строка = await prisma.patient.findFirst({
-      where: { name: профиль.name },
-      select: { id: true, prompt: true },
-    });
-    if (!строка) {
-      итог.пропущено.push(`${профиль.name}: нет в базе`);
-      continue;
-    }
-    if (строка.prompt === свежий) {
-      итог.бездела += 1;
-      continue;
-    }
-    await prisma.patient.update({ where: { id: строка.id }, data: { prompt: свежий } });
-    итог.обновлено += 1;
-  }
-  return итог;
-}
-
 /** Промпты под клиники: случай клиента, личность и механизм — наши сегодняшние. */
 async function пересобратьКлиентские(): Promise<Итог> {
   const итог: Итог = { обновлено: 0, бездела: 0, пропущено: [] };
@@ -131,7 +106,6 @@ function рассказать(что: string, итог: Итог): void {
 }
 
 async function main(): Promise<void> {
-  рассказать("Глобальные промпты", await пересобратьГлобальные());
   рассказать("Промпты под клиники", await пересобратьКлиентские());
 }
 

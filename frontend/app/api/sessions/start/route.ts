@@ -17,6 +17,10 @@ import { backendUrl } from "@/lib/cases";
 import type { CaseService } from "@/lib/caseService";
 import { caseService } from "@/lib/caseServiceQuery";
 
+// Организация без собранных случаев: пресет не налит и генерация не запускалась
+const СЛУЧАЙ_НЕ_СОБРАН =
+  "Для вашей организации этот клиент ещё не подготовлен";
+
 export const runtime = "nodejs";
 
 interface StartBody {
@@ -116,8 +120,24 @@ export async function POST(request: NextRequest) {
       showsService = type.showsService;
     }
 
-    // Пациент, которого играет ИИ. Проверяем на сервере, что он активен:
-    // в мастере неактивные показаны, и запрос с их id прийти может.
+    // Роль пациента собирается только под организацию: глобального промпта
+    // у пациента нет, и без случая организации разговор не из чего начать.
+    // Проверяем это здесь, а не полагаемся на пустую роль в backend
+    const владелец = await prisma.user.findUnique({
+      where: { id: user.sub },
+      select: { organizationId: true },
+    });
+    const organizationId = владелец?.organizationId ?? null;
+    if (!organizationId) {
+      return NextResponse.json({ error: СЛУЧАЙ_НЕ_СОБРАН }, { status: 400 });
+    }
+    const соСлучаем = {
+      cases: { some: { organizationId, prompt: { not: "" } } },
+    };
+
+    // Пациент, которого играет ИИ. Проверяем на сервере, что он активен
+    // и что у организации есть его случай: в мастере закрытые показаны,
+    // и запрос с их id прийти может.
     let patientId: string | null = null;
     if (body.patientId) {
       const chosen = await prisma.patient.findUnique({
@@ -133,15 +153,23 @@ export async function POST(request: NextRequest) {
       if (демо?.режим === "разговоры" && !ДЕМО_КЛИЕНТЫ.includes(chosen.name)) {
         return NextResponse.json({ error: ВЫБОР_ЗАКРЫТ }, { status: 403 });
       }
+      const случай = await prisma.patientCase.findFirst({
+        where: { patientId: chosen.id, organizationId, prompt: { not: "" } },
+        select: { patientId: true },
+      });
+      if (!случай) {
+        return NextResponse.json({ error: СЛУЧАЙ_НЕ_СОБРАН }, { status: 400 });
+      }
       patientId = chosen.id;
     } else {
-      // Пациент не выбран — берём первого активного; без этой привязки
-      // разговоры в истории остались бы без имени и темы. В демо выбираем
-      // из открытой тройки, иначе прямой заход на /session привёл бы
+      // Пациент не выбран — берём первого, у кого есть случай; без этой
+      // привязки разговоры в истории остались бы без имени и темы. В демо
+      // выбираем из открытой тройки, иначе прямой заход на /session привёл бы
       // к закрытому клиенту
       const fallback = await prisma.patient.findFirst({
         where: {
           isActive: true,
+          ...соСлучаем,
           ...(демо?.режим === "разговоры"
             ? { name: { in: ДЕМО_КЛИЕНТЫ } }
             : {}),
@@ -228,11 +256,7 @@ export async function POST(request: NextRequest) {
     // услуга лежит в случае пациента
     let service: CaseService | null = null;
     if (showsService) {
-      const owner = await prisma.user.findUnique({
-        where: { id: user.sub },
-        select: { organizationId: true },
-      });
-      service = await caseService(patientId, owner?.organizationId ?? null);
+      service = await caseService(patientId, organizationId);
     }
 
     // Формируем URL WebSocket-сервера (FastAPI).

@@ -30,7 +30,6 @@ import { writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-import { LAYERED_ROLES } from "./seed-patients";
 import { PROFILES } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
 import { проверитьНабор, проверитьСлучай } from "./presets/validate";
@@ -119,12 +118,31 @@ import {
 // 5693 / 2d78b460… (до перезаморозки случаев),
 // 5600 / 756826c9… (до запрета на чужое имя),
 // 5245 / 43357e28… (до блока «отношение к деньгам»).
+// Обновлён 16.09.2026: эталон переведён на пресетную Тамару из офтальмологии —
+// тот же текст, что стоит у клиник на проде. Прежний рукописный случай
+// («Хочешь проверить зрение и получить рекомендацию врача…») убран из файла
+// личности вместе со всем старым набором. Сама личность и механизм не менялись:
+// новый хеш — другой случай, а не правка. Прежний эталон: 11282 / 43ce688c….
 const TAMARA_BASELINE = {
-  length: 11282,
-  md5: "43ce688c26700b4cb78a146d0201c594",
+  length: 11795,
+  md5: "3e0bc14b7ba0b1a26a95caa54cbfd251",
 };
 
 const md5 = (text: string) => createHash("md5").update(text, "utf8").digest("hex");
+
+// Эталонный набор — пресет офтальмологии: на нём отлаживался механизм,
+// с него снят хеш Тамары. До 16.09 роли для проверок собирались из
+// «глобальных» случаев в файлах личностей; тот набор убран, и эталон
+// переехал на пресет — тот же текст, что стоит у клиник на проде
+const ЭТАЛОННЫЙ_НАБОР = ПРЕСЕТЫ.find((п) => п.clinic.industry === "офтальмология");
+if (!ЭТАЛОННЫЙ_НАБОР) throw new Error("Пресета офтальмологии нет — проверять нечего");
+const ЛИЧНОСТИ = new Map(PROFILES.map((p) => [p.name, p.personality]));
+const ЭТАЛОННЫЕ_РОЛИ: Record<string, PatientRole> = Object.fromEntries(
+  ЭТАЛОННЫЙ_НАБОР.cases.flatMap((случай) => {
+    const личность = ЛИЧНОСТИ.get(случай.patientName);
+    return личность ? [[случай.patientName, { personality: личность, case: случай.case }]] : [];
+  }),
+);
 
 // Чужой случай для подстановки: стоматология вместо офтальмологии. Личность
 // при подстановке не меняется — в этом и смысл разделения.
@@ -305,7 +323,7 @@ function main(): void {
   console.log("=== Проверка промптов ===\n");
 
   // 1. Тамара совпадает с эталоном
-  const tamara = buildRolePrompt(LAYERED_ROLES["Тамара Михайловна"]);
+  const tamara = buildRolePrompt(ЭТАЛОННЫЕ_РОЛИ["Тамара Михайловна"]);
   const actual = { length: tamara.length, md5: md5(tamara) };
   const same =
     actual.length === TAMARA_BASELINE.length && actual.md5 === TAMARA_BASELINE.md5;
@@ -329,19 +347,19 @@ function main(): void {
   }
 
   // 2-3. Слой механизма и непротекание отрасли — у всех на слоях и у пробной
-  for (const [name, role] of Object.entries(LAYERED_ROLES)) {
+  for (const [name, role] of Object.entries(ЭТАЛОННЫЕ_РОЛИ)) {
     checkMechanicLayer(name, buildRolePrompt(role));
     checkNoCaseLeak(name, role);
   }
   checkMechanicLayer("пробный пациент", buildRolePrompt(PROBE_ROLE));
 
-  const layered = Object.keys(LAYERED_ROLES).length;
+  const layered = Object.keys(ЭТАЛОННЫЕ_РОЛИ).length;
   console.log(
     `Слой механизма: ${MECHANIC_BLOCKS.length} блоков проверено ` +
       `у ${layered + 1} ролей (${layered} настоящих + пробная)`,
   );
 
-  const words = Object.values(LAYERED_ROLES).reduce(
+  const words = Object.values(ЭТАЛОННЫЕ_РОЛИ).reduce(
     (sum, role) => sum + role.case.vocabulary.length,
     0,
   );
@@ -349,7 +367,7 @@ function main(): void {
 
   // 4. Подстановка чужого случая: личность та же, случай стоматологический
   const swapped: PatientRole = {
-    personality: LAYERED_ROLES["Тамара Михайловна"].personality,
+    personality: ЭТАЛОННЫЕ_РОЛИ["Тамара Михайловна"].personality,
     case: DENTAL_CASE,
   };
   const swappedPrompt = buildRolePrompt(swapped);
@@ -357,7 +375,7 @@ function main(): void {
   checkNoCaseLeak("Тамара со стоматологическим случаем", swapped);
   // И наоборот: офтальмологических слов в подменённом промпте быть не должно
   // вовсе — ни в личности, ни в блоках случая
-  const leaked = LAYERED_ROLES["Тамара Михайловна"].case.vocabulary.filter((stem) =>
+  const leaked = ЭТАЛОННЫЕ_РОЛИ["Тамара Михайловна"].case.vocabulary.filter((stem) =>
     containsStem(swappedPrompt, stem),
   );
   if (leaked.length > 0) {
@@ -374,12 +392,7 @@ function main(): void {
   // 6. Отраслевые пресеты
   checkPresets();
 
-  // 5. Кто ещё ждёт случая — чтобы не забылось молча
-  const waiting = PROFILES.filter((p) => !p.case);
-  console.log(`\nСо случаем: ${layered} из ${PROFILES.length} пациентов`);
-  if (waiting.length > 0) {
-    console.log(`Ждут генератора: ${waiting.map((p) => p.name).join(", ")}`);
-  }
+  console.log(`\nЭталонный набор: ${layered} из ${PROFILES.length} пациентов`);
 
   if (problems.length > 0) {
     console.error(`\n${problems.length} проблем:`);

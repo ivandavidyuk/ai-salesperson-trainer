@@ -51,7 +51,7 @@ npm install
 Copy-Item .env.example .env
 npx prisma migrate deploy     # применить миграции
 npm run seed:content          # советы дня и мотивации (иначе блок пустой)
-npm run seed:patients         # пациенты и их промпты
+npm run seed:patients         # пациенты: личности и досье (случаи — в пресетах)
 npm run seed:training         # типы тренировки и их промпты
 npm run seed:achievements     # достижения
 npm run seed:team             # три демо-менеджера с историей (для статистики РОПа)
@@ -176,8 +176,8 @@ WebSocket: `ws://localhost:8000/ws/session/{id}?token=...` — стриминг�
 | `Achievement` / `UserAchievement` | игровые бейджи и кто их получил |
 | `DailyContent` | «Совет дня» и «Мотивация» |
 
-Системный промпт для ИИ backend собирает из `Patient.prompt` и
-`TrainingType.prompt` — обе части наливаются сидами, источник правды
+Системный промпт для ИИ backend собирает из `PatientCase.prompt` (случай
+под организацию) и `TrainingType.prompt` — обе части наливаются сидами, источник правды
 в `frontend/scripts/`.
 
 «Совет дня» и «Мотивация» меняются раз в сутки: элемент выбирается по индексу
