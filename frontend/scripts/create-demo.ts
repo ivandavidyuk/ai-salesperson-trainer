@@ -12,14 +12,14 @@
 //    Сутки начнут тикать с ПЕРВОГО разговора (lib/demoAccess.ts), не с выдачи;
 //    у режима на разговоры суток нет вовсе.
 // 2. Ищет отраслевой пресет — организацию isPreset с той же отраслью —
-//    и копирует её случаи. Пресета нет: суточному демо честно говорит
-//    об этом и выдаёт на глобальных промптах (они офтальмологические),
-//    а демо собственнику отказывает — оно уходит в переписке без нас рядом.
+//    и копирует её случаи (scripts/demo-clinic.ts). Пресета нет —
+//    отказывает в любом режиме: без случаев разговоры не начнутся.
 // 3. Создаёт аккаунты со случайными паролями и печатает блок,
 //    который целиком пересылается Диме.
 
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { ДЕМО_КЛИЕНТЫ } from "../lib/demoScope";
+import { скопироватьПресет } from "./demo-clinic";
 import { plural } from "../lib/format";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
@@ -121,68 +121,11 @@ async function main() {
 
   // Отраслевой пресет: шаблонная организация с вычитанными случаями.
   // Копируем случаи, чтобы не генерировать под каждое демо за деньги
-  const пресет = await prisma.organization.findFirst({
-    where: { isPreset: true, industry: организация.industry },
-    select: { id: true, name: true },
-  });
+  const пресет = await скопироватьПресет(prisma, организация.id, организация.industry);
   if (пресет) {
-    // Прайс и диагнозы копируем вместе со случаями. Разговору они не нужны —
-    // цены звучат из уст менеджера, — но руководитель демо-клиники первым
-    // делом открывает «Клиника и услуги», и пустая форма там читается
-    // как недоделанный продукт, хотя случаи на месте
-    const услуги = await prisma.service.findMany({
-      where: { organizationId: пресет.id },
-      orderBy: { position: "asc" },
-    });
-    const диагнозы = await prisma.diagnosis.findMany({
-      where: { organizationId: пресет.id },
-      orderBy: { position: "asc" },
-    });
-    if (услуги.length > 0) {
-      await prisma.service.createMany({
-        data: услуги.map((у, i) => ({
-          organizationId: организация.id,
-          name: у.name,
-          price: у.price,
-          description: у.description,
-          position: i,
-        })),
-      });
-    }
-    if (диагнозы.length > 0) {
-      await prisma.diagnosis.createMany({
-        data: диагнозы.map((д, i) => ({
-          organizationId: организация.id,
-          name: д.name,
-          complaint: д.complaint,
-          position: i,
-        })),
-      });
-    }
-
-    const случаи = await prisma.patientCase.findMany({
-      where: { organizationId: пресет.id },
-    });
-    if (случаи.length > 0) {
-      await prisma.patientCase.createMany({
-        // Спред, а не список полей поимённо. Список приходилось дописывать
-        // при каждой новой колонке, и забытая колонка молча не доезжала
-        // до демо: случай у клиента выглядел целым, но был беднее пресетного.
-        // Со спредом следующее поле поедет само.
-        data: случаи.map(({ organizationId: _, ...c }) => ({
-          ...c,
-          organizationId: организация.id,
-          // Тип чтения Json допускает null, тип записи — нет: разводим явно
-          caseData:
-            c.caseData === null
-              ? Prisma.JsonNull
-              : (c.caseData as Prisma.InputJsonValue),
-        })),
-      });
-    }
     console.log(
-      `Пресет «${пресет.name}»: случаев ${случаи.length}, ` +
-        `услуг ${услуги.length}, диагнозов ${диагнозы.length}`
+      `Пресет «${пресет.имя}»: случаев ${пресет.случаев}, ` +
+        `услуг ${пресет.услуг}, диагнозов ${пресет.диагнозов}`
     );
   } else {
     // Без пресета у демо нет ни одного случая, и разговор не начнётся:

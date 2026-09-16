@@ -14,6 +14,7 @@
 // иначе перезалив демо-данных ломал бы вход. Сменить намеренно: DEMO_PASSWORD.
 
 import { PrismaClient, type DealOutcome } from "@prisma/client";
+import { демоКлиника } from "./demo-clinic";
 import { deriveDealResult } from "./deal-result";
 import { seedPassword } from "./seed-password";
 
@@ -297,6 +298,10 @@ async function main() {
   console.log(`Пациент разговоров: ${patient.name}`);
 
   // 2. Демо-пользователь
+  // Без организации разговор не начнётся: случаи живут в ней. Аккаунт,
+  // у которого организация уже есть (например, на проде), не переселяем
+  const organizationId = await демоКлиника(prisma);
+
   const existing = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
   const password = await seedPassword("DEMO_PASSWORD");
 
@@ -312,8 +317,12 @@ async function main() {
       passwordHash: password.hash,
       firstName: DEMO_FIRST_NAME,
       lastName: DEMO_LAST_NAME,
+      organizationId,
     },
   });
+  if (!user.organizationId) {
+    await prisma.user.update({ where: { id: user.id }, data: { organizationId } });
+  }
   console.log(`${existing ? "Обновлён" : "Создан"} аккаунт: ${user.email}`);
 
   // 3. Разговоры пересоздаём: так повторный запуск даёт предсказуемый
@@ -381,8 +390,12 @@ async function main() {
       lastName: HEAD_LAST_NAME,
       role: "head",
       jobTitle: "Руководитель отдела продаж",
+      organizationId,
     },
   });
+  if (!head.organizationId) {
+    await prisma.user.update({ where: { id: head.id }, data: { organizationId } });
+  }
 
   // Остальные менеджеры — для заданий из TEAM_ASSIGNMENTS. У руководителя
   // в списке должны быть разные адресаты, а не один демо-аккаунт.

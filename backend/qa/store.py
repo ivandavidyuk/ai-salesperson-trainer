@@ -52,8 +52,7 @@ _ПАЦИЕНТЫ = (
     'SELECT p."id", p."name", '
     'COALESCE(pc."prompt", p."prompt") AS prompt, '
     # Анамнез и карточка — то, что менеджер видит на экране до разговора.
-    # Берутся тем же COALESCE, что и промпт: иначе менеджер читал бы
-    # исходный анамнез, а роль играла случай клиники
+    # Берутся тем же COALESCE, что и промпт, — из случая организации
     'COALESCE(pc."anamnesis", p."anamnesis") AS anamnesis, '
     'COALESCE(pc."description", p."description") AS description, '
     '(pc."prompt" IS NOT NULL) AS case_generated '

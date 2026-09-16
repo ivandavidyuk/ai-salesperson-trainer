@@ -39,7 +39,8 @@ lib/
 scripts/
   create-user.ts   интерактивное создание пользователя
   seed-content.ts  советы дня и мотивации (продовый контент)
-  seed-patients.ts пациенты, их анамнез и промпты
+  seed-patients.ts пациенты: личности, досье, голоса и сложность
+  seed-presets.ts  отраслевые пресеты: случаи всех пациентов под отрасль
   seed-training-types.ts типы тренировки и их промпты
   seed-achievements.ts достижения (кто что получил — в seed-demo)
   seed-team.ts     три демо-менеджера с разговорами и оценками
@@ -71,7 +72,7 @@ npm run dev
 | `npm run lint` | ESLint |
 | `npm run create-user` | создать пользователя |
 | `npm run seed:content` | налить советы дня и мотивации |
-| `npm run seed:patients` | налить пациентов и их промпты |
+| `npm run seed:patients` | налить пациентов: личности и досье |
 | `npm run seed:training` | налить типы тренировки и их промпты |
 | `npm run seed:achievements` | налить достижения |
 | `npm run seed:team` | три демо-менеджера для статистики РОПа |

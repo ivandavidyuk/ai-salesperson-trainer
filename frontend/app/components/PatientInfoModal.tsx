@@ -229,7 +229,7 @@ export default function PatientInfoModal({
               title={
                 patient.isActive
                   ? undefined
-                  : "Для этого пациента ещё не готов промпт"
+                  : "Этот пациент больше не доступен"
               }
               className={`flex items-center gap-2 rounded-input px-[22px] py-[11px] text-[16.5px] font-semibold text-white transition-colors ${
                 patient.isActive

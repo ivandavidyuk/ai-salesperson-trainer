@@ -11,6 +11,7 @@
 // выдуманные разговоры там мешали бы.
 
 import { PrismaClient } from "@prisma/client";
+import { демоКлиника } from "./demo-clinic";
 import { deriveDealResult } from "./deal-result";
 import { seedPassword } from "./seed-password";
 
@@ -144,6 +145,9 @@ async function main() {
   const lastWeekStart = new Date(weekStart);
   lastWeekStart.setDate(lastWeekStart.getDate() - 7);
 
+  // Без организации разговор не начнётся: случаи живут в ней
+  const organizationId = await демоКлиника(prisma);
+
   for (const member of TEAM) {
     const existing = await prisma.user.findUnique({ where: { email: member.email } });
     if (!existing) created = true;
@@ -164,8 +168,12 @@ async function main() {
         lastName: member.lastName,
         jobTitle: member.jobTitle,
         role: "manager",
+        organizationId,
       },
     });
+    if (!user.organizationId) {
+      await prisma.user.update({ where: { id: user.id }, data: { organizationId } });
+    }
 
     // Пересоздаём: даты считаются от сегодняшнего дня, иначе при повторном
     // запуске разговоры уехали бы в прошлое и «за неделю» обнулилось

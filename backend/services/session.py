@@ -347,7 +347,7 @@ class SessionStore:
             session_id,
             row["patient_name"],
             row["type_title"] or "не задан",
-            "клиники" if row["case_generated"] else "исходный",
+            "клиники" if row["case_generated"] else "нет — старая строка Patient",
             len(prompt),
         )
         await self._redis.set(_prompt_key(session_id), prompt)
