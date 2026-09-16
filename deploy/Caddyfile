@@ -28,12 +28,6 @@
 	@diagnostics path /diagnostics/*
 	reverse_proxy @diagnostics {$BACKEND_UPSTREAM}
 
-	# Уведомление о заявке с лендинга → FastAPI на DE. Next.js зовёт его
-	# по FASTAPI_WS_URL, как сборку случаев. Через DE, потому что RU-сервер
-	# не достаёт Telegram по IPv4, а DE достаёт (замер 15.09)
-	@leads path /leads/*
-	reverse_proxy @leads {$BACKEND_UPSTREAM}
-
 	# Всё остальное (интерфейс + REST API) → Next.js
 	reverse_proxy frontend:3000
 }

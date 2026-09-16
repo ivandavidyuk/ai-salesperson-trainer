@@ -3,12 +3,14 @@
 // Роут публичный (PUBLIC_PATHS в middleware.ts): его зовёт гость без входа.
 // Вместо авторизации три защиты: строгая проверка полей, скрытое
 // поле-ловушка для ботов и потолок заявок с одного адреса.
+//
+// Всё, что касается заявки, остаётся на RU-сервере: база, потолок
+// и отправка письма. Поэтому потолок не в Redis — тот стоит на DE.
 
-import { createHash } from "crypto";
+import { createHmac, randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { parseLead } from "@/lib/leads";
-import { ensureRedisConnected, redis } from "@/lib/redis";
 import { notifyLead } from "@/lib/leadNotify";
 
 export const runtime = "nodejs";
@@ -16,52 +18,39 @@ export const runtime = "nodejs";
 // Человек отправляет заявку один раз, от силы исправляет опечатку.
 // Пятая за час — уже не человек
 const LIMIT_PER_HOUR = 5;
-const WINDOW_SEC = 60 * 60;
+const WINDOW_MS = 60 * 60 * 1000;
 
-// Сколько ждать Redis. Клиент при недоступном сервере не падает, а бесконечно
-// переподключается, и без потолка ожидания заявка висела бы вместе с ним
-const REDIS_WAIT_MS = 1500;
+// Разовых посетителей больше этого числа — пора вычистить старых
+const SWEEP_AT = 1000;
 
-/**
- * Ключ адреса для потолка. IP приходит от Caddy в X-Forwarded-For;
- * храним только хеш и только на время окна — адрес нам не нужен.
- */
+// Ключ хеша рождается при старте процесса и нигде не записан. Без него
+// адрес по хешу не восстановить даже перебором всех IPv4
+const HASH_KEY = randomBytes(32);
+
+// Времена недавних заявок по хешу адреса. Живёт в памяти процесса:
+// frontend — один контейнер, счётчик общий; после выкатки он обнуляется,
+// и для потолка «пять в час» это не страшно
+const attempts = new Map<string, number[]>();
+
+/** Ключ адреса для потолка. IP приходит от Caddy в X-Forwarded-For */
 function clientKey(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   const ip = forwarded || request.headers.get("x-real-ip") || "unknown";
-  const hash = createHash("sha256").update(ip).digest("hex").slice(0, 32);
-  return `lead:rate:${hash}`;
+  return createHmac("sha256", HASH_KEY).update(ip).digest("hex");
 }
 
-async function countAttempt(key: string): Promise<number> {
-  await ensureRedisConnected();
-  const count = await redis.incr(key);
-  if (count === 1) {
-    await redis.expire(key, WINDOW_SEC);
-  }
-  return count;
-}
+function overLimit(key: string, now = Date.now()): boolean {
+  const recent = (attempts.get(key) ?? []).filter((at) => now - at < WINDOW_MS);
+  // Хвост длиннее потолка не нужен: решение от него не меняется
+  attempts.set(key, [...recent, now].slice(-(LIMIT_PER_HOUR + 1)));
 
-async function overLimit(key: string): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const count = await Promise.race([
-      countAttempt(key),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`Redis не ответил за ${REDIS_WAIT_MS} мс`)),
-          REDIS_WAIT_MS,
-        );
-      }),
-    ]);
-    return count > LIMIT_PER_HOUR;
-  } catch (err) {
-    // Упавший Redis не должен терять заявки: без потолка лучше, чем без заявок
-    console.error("Потолок заявок не проверен, Redis недоступен:", err);
-    return false;
-  } finally {
-    clearTimeout(timer);
+  if (attempts.size > SWEEP_AT) {
+    attempts.forEach((times, other) => {
+      if (times.every((at) => now - at >= WINDOW_MS)) attempts.delete(other);
+    });
   }
+
+  return recent.length + 1 > LIMIT_PER_HOUR;
 }
 
 export async function POST(request: Request) {
@@ -75,7 +64,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  if (await overLimit(clientKey(request))) {
+  if (overLimit(clientKey(request))) {
     return NextResponse.json(
       {
         error:

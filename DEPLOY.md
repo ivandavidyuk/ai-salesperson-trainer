@@ -165,12 +165,15 @@ cd ~/ai-trainer && docker compose pull && docker compose up -d
   `DOCKERHUB_USER`.
 - `frontend/.env` — по [frontend/.env.production.example](frontend/.env.production.example);
   `REDIS_URL` — на DE (`redis://:ПАРОЛЬ@103.7.55.214:6379`).
-- `backend.env` на DE: `TELEGRAM_BOT_TOKEN` и `TELEGRAM_LEADS_CHAT_ID` —
-  бот и группа, куда приходят заявки с лендинга `/start`. Лежат на DE,
-  а не в `frontend/.env`: RU-сервер не достаёт `api.telegram.org` по IPv4,
-  поэтому Next.js сохраняет заявку в `Lead` и отдаёт уведомление backend
-  по `/leads/notify`. Без переменных заявка в базе есть, а `notifiedAt`
-  пуст и в логе backend — строка об этом.
+- `frontend/.env`, письма о заявках с лендинга `/start`: `MAIL_FROM`,
+  `DKIM_SELECTOR`, `DKIM_PRIVATE_KEY`, по желанию `LEADS_EMAIL_TO`. Сервер
+  доставляет письмо сам, напрямую почтовому серверу получателя на 25-й порт,
+  поэтому заявка не покидает Россию. Закрытый ключ лежит на RU в
+  `/root/dkim-podhod.pem`, в `.env` — он же в base64 одной строкой. В DNS
+  домена у REG.RU: `TXT @` со SPF (`ip4:` адрес RU-сервера), `TXT
+  podhod._domainkey` с открытым ключом, `TXT _dmarc`. Исходящий SMTP
+  Timeweb по умолчанию закрывает, на RU открыт по тикету 16.09. Без переменных
+  заявка в базе есть, а `notifiedAt` пуст и в логе frontend — строка об этом.
 
 Согласованность значений:
 
