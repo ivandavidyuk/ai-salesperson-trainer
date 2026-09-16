@@ -5,13 +5,13 @@ import Reveal from "./Reveal";
 import { H2, INNER, SCREEN, SECTION_X } from "./ui";
 
 const NOW: [string, string][] = [
-  ["Ролевые игры с руководителем", "час руководителя каждый день"],
+  ["Ролевые игры с руководителем", "час руководителя каждый день"],
   ["Прослушивание записей", "клиент, который уже ушёл"],
   ["Сразу на живых клиентах", "ваши деньги"],
 ];
 
 const WITH_TRAINER = [
-  "Разговор с ИИ-клиентом — когда угодно, без руководителя",
+  "Разговор с ИИ-клиентом — когда угодно, без руководителя",
   "Разбор по фразам сразу после разговора",
   "Ошибка стоит ноль: клиент ненастоящий",
 ];
@@ -53,8 +53,11 @@ function Check() {
   );
 }
 
+// Ширина из макета — с 1280: две карточки по 480 с зазором не влезают
+// в колонку на 1024–1279 и сдвигали страницу вбок. Там они делят место поровну,
+// но шире макета не становятся
 const CARD =
-  "rounded-[20px] bg-surface-card px-6 pb-8 pt-7 lg:w-[480px] lg:shrink-0 lg:px-[34px] lg:pb-9 lg:pt-8";
+  "rounded-[20px] bg-surface-card px-6 pb-8 pt-7 lg:min-w-0 lg:max-w-[480px] lg:flex-1 lg:px-[34px] lg:pb-9 lg:pt-8 xl:w-[480px] xl:flex-none";
 const CAPTION = "font-mono text-[12px] font-medium uppercase tracking-[0.16em] lg:text-[13px]";
 const ITEM = "text-[19.5px] font-medium leading-[1.3] text-ink [text-wrap:pretty] lg:text-[22px]";
 
