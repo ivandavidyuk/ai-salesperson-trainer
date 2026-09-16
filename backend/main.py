@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 
 from core.auth import verify_token
 from core.config import get_settings
-from services import achievements, case_generator, diagnostics, lead_notify, llm, scoring, tts
+from services import achievements, case_generator, diagnostics, llm, scoring, tts
 from services.text import strip_for_speech
 from services.session import (
     STATUS_ACTIVE,
@@ -226,33 +226,6 @@ app = FastAPI(title="AI Salesperson Trainer — WS Server", lifespan=lifespan)
 async def health():
     """Простой healthcheck."""
     return {"status": "ok"}
-
-
-@app.post("/leads/notify")
-async def notify_lead_endpoint(request: Request):
-    """Пересылает заявку с лендинга в Telegram. Зовёт Next.js после того,
-    как сохранил заявку в своей базе.
-
-    Путь через DE — из-за сети: с RU-сервера Telegram по IPv4 недоступен,
-    отсюда доступен. Эндпоинт ничего не хранит: получил заявку — отправил.
-    """
-    token = (request.headers.get("authorization") or "").removeprefix("Bearer ").strip()
-    if verify_token(token) is None:
-        raise HTTPException(status_code=401, detail="Недействительный токен")
-
-    try:
-        body = await request.json()
-    except Exception:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail="Некорректный запрос") from None
-
-    lead = lead_notify.parse_lead(body)
-    if lead is None:
-        raise HTTPException(status_code=400, detail="Некорректная заявка")
-
-    if not await lead_notify.send_lead(lead):
-        # Причина уже в логе. Заявка лежит в базе на RU, её не потеряли
-        raise HTTPException(status_code=502, detail="Telegram не принял уведомление")
-    return {"sent": True}
 
 
 @app.post("/cases/generate")

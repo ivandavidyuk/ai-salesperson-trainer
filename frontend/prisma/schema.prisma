@@ -600,8 +600,8 @@ model Lead {
   // Сколько менеджеров в отделе — одно из TEAM_SIZES в lib/leads.ts
   teamSize  String
   createdAt DateTime @default(now())
-  // Когда заявка ушла в группу «Заявки podhod». Пусто — Telegram не ответил,
-  // и заявку надо забрать из базы руками
+  // Когда письмо о заявке ушло на рабочую почту. Пусто — почта его
+  // не приняла, и заявку надо забрать из базы руками
   notifiedAt DateTime?
 
   @@index([createdAt])

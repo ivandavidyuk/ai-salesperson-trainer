@@ -8,4 +8,4 @@ export const OPERATOR = {
 } as const;
 
 /** Дата редакции политики — показывается в её шапке */
-export const PRIVACY_UPDATED = "15 сентября 2026 года";
+export const PRIVACY_UPDATED = "16 сентября 2026 года";
