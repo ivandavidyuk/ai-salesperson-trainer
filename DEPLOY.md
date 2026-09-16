@@ -165,10 +165,14 @@ cd ~/ai-trainer && docker compose pull && docker compose up -d
   `DOCKERHUB_USER`.
 - `frontend/.env` — по [frontend/.env.production.example](frontend/.env.production.example);
   `REDIS_URL` — на DE (`redis://:ПАРОЛЬ@103.7.55.214:6379`).
-- `frontend/.env`, письма о заявках с лендинга `/start`: `SMTP_HOST`,
-  `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, по желанию `LEADS_EMAIL_TO`.
-  Ящик и SMTP — российского почтового сервиса, чтобы заявка не покидала
-  Россию; у Mail.ru пароль — «пароль для внешних приложений». Без переменных
+- `frontend/.env`, письма о заявках с лендинга `/start`: `MAIL_FROM`,
+  `DKIM_SELECTOR`, `DKIM_PRIVATE_KEY`, по желанию `LEADS_EMAIL_TO`. Сервер
+  доставляет письмо сам, напрямую почтовому серверу получателя на 25-й порт,
+  поэтому заявка не покидает Россию. Закрытый ключ лежит на RU в
+  `/root/dkim-podhod.pem`, в `.env` — он же в base64 одной строкой. В DNS
+  домена у REG.RU: `TXT @` со SPF (`ip4:` адрес RU-сервера), `TXT
+  podhod._domainkey` с открытым ключом, `TXT _dmarc`. Исходящий SMTP
+  Timeweb по умолчанию закрывает, на RU открыт по тикету 16.09. Без переменных
   заявка в базе есть, а `notifiedAt` пуст и в логе frontend — строка об этом.
 
 Согласованность значений:
