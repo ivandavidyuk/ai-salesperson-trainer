@@ -17,6 +17,7 @@
 недвижимости, — клиника.
 """
 
+import json
 import re
 from typing import Callable, Union
 
@@ -59,6 +60,27 @@ _ЗАМЕНЫ = {НЕДВИЖИМОСТЬ: _НЕДВИЖИМОСТЬ_ЗАМЕН�
 
 # Чем не должен пахнуть перевод — то, что тест ищет в переведённых текстах
 МЕДИЦИНСКИЕ_КОРНИ = ("пациент", "медицин", "услуг", "операци", "клиник", "приём", "симптом", "наркоз", "жалоб")
+
+
+def pick_variant(base: str, variants: object, industry: Union[str, None]) -> str:
+    """Текст по отрасли из JSON-колонки `promptByIndustry` типа тренировки.
+
+    `variants` приходит из asyncpg как строка JSON или как dict (смотря
+    как настроен кодек), поэтому принимаем оба. Нет варианта для отрасли —
+    базовый текст, пропущенный через перевод: у нейтральных типов он
+    и так без медицинских слов, у медицины перевод тождественный.
+    """
+    if isinstance(variants, (str, bytes)):
+        try:
+            variants = json.loads(variants or "{}")
+        except ValueError:
+            variants = {}
+    if not isinstance(variants, dict):
+        variants = {}
+    свой = variants.get(industry_key(industry))
+    if isinstance(свой, str) and свой.strip():
+        return свой
+    return translate(base or "", industry)
 
 
 def translate(text: str, industry: Union[str, None]) -> str:

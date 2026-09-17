@@ -66,3 +66,19 @@ def test_недвижимость_говорит_своими_словами():
     assert industry.translate("вопрос пациенту и ответ пациентки", "недвижимость") == "вопрос клиенту и ответ клиентки"
     # Латинские идентификаторы в схеме ответа не трогаются
     assert "patientAsked" in industry.translate("поле `patientAsked`", "недвижимость")
+
+
+def test_сцена_упражнения_по_отрасли():
+    base = "Ты пришла в клинику и ждёшь у стойки."
+    variants = '{"недвижимость": "Ты пришла в офис продаж и ждёшь у макета."}'
+    # У клиники — базовый текст как был, включая слово «клинику»
+    assert industry.pick_variant(base, variants, "стоматология") == base
+    assert industry.pick_variant(base, "{}", "офтальмология") == base
+    # У офиса продаж — свой вариант; JSON и dict — одно и то же
+    assert industry.pick_variant(base, variants, "недвижимость").startswith("Ты пришла в офис продаж")
+    assert industry.pick_variant(base, {"недвижимость": "макет"}, "застройщик") == "макет"
+    # Нет варианта — базовый текст через перевод, без «пациента»
+    assert industry.pick_variant("пациент молчит", "{}", "недвижимость") == "клиент молчит"
+    # Битый JSON и None не роняют сборку промпта
+    assert industry.pick_variant(base, "не json", "недвижимость") == base
+    assert industry.pick_variant(base, None, "недвижимость") == base

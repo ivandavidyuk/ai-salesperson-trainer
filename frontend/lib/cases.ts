@@ -13,6 +13,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { signToken } from "@/lib/auth";
 import { buildRolePrompt, industryRules, type PatientCase } from "@/scripts/patient-prompt";
+import { медицинскаяОтрасль } from "@/lib/industry";
 import { PROFILES } from "@/scripts/patients";
 import { пресетныйСлучай } from "@/scripts/presets";
 
@@ -238,6 +239,17 @@ export async function rebuildCases(organizationId: string, headId: string): Prom
     },
   });
   if (!organization) {
+    await снятьФлаг();
+    return;
+  }
+
+  // Медицинский конвейер — только клиникам: офису продаж он собрал бы
+  // диагнозы. Роуты это уже отсекли, но сборка платная и необратимая —
+  // второй замок здесь, на самом входе
+  if (!медицинскаяОтрасль(organization.industry)) {
+    console.warn(
+      `Сборка случаев для отрасли «${organization.industry}» закрыта: случаи из пресета`
+    );
     await снятьФлаг();
     return;
   }

@@ -23,6 +23,7 @@ import redis.asyncio as aioredis
 
 from core.config import get_settings
 from services import diagnostics, llm
+from services.industry import pick_variant
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,9 @@ _PATIENT_PROMPT_SQL = (
     'p."name" AS patient_name, '
     '(pc."prompt" IS NOT NULL) AS case_generated, '
     't."id" AS type_id, t."prompt" AS type_prompt, t."title" AS type_title, '
+    # Сцена упражнения словами отрасли: {"недвижимость": "…"}; выбор — при
+    # сборке промпта по отрасли организации (services/industry.py)
+    't."promptByIndustry" AS type_prompts, '
     # Рубрика, критерий и способ оценки — оценщику, а не роли: знай роль,
     # по каким признакам судят собеседника, она начала бы подыгрывать
     't."rubric" AS type_rubric, t."doneWhen" AS type_done_when, '
@@ -343,7 +347,10 @@ class SessionStore:
             )
             return None
 
-        prompt = llm.build_system_prompt(row["patient_prompt"], row["type_prompt"])
+        # Тип тренировки один на все организации, а сцена у него — по отрасли:
+        # «ждёшь у стойки» в офисе продаж не годится
+        type_prompt = pick_variant(row["type_prompt"], row["type_prompts"], row["industry"])
+        prompt = llm.build_system_prompt(row["patient_prompt"], type_prompt)
 
         logger.info(
             "Сессия %s: промпт собран — пациент «%s», тип «%s», случай %s, "

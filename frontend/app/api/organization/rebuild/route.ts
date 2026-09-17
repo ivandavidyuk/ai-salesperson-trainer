@@ -19,6 +19,7 @@ import { prisma } from "@/lib/db";
 import { requireHead } from "@/lib/access";
 import { rebuildCases, идётСборка, целиПересборки } from "@/lib/cases";
 import { ГЕНЕРАЦИЯ_ЗАКРЫТА, этоДемо } from "@/lib/demoAccess";
+import { ГЕНЕРАЦИЯ_НЕ_ДЛЯ_ОТРАСЛИ, медицинскаяОтрасль } from "@/lib/industry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,16 @@ export async function POST(request: NextRequest) {
     // обходился бы одним нажатием «Собрать заново»
     if (await этоДемо(head.organizationId)) {
       return NextResponse.json({ error: ГЕНЕРАЦИЯ_ЗАКРЫТА }, { status: 403 });
+    }
+
+    // Третий замок — отрасль: медицинский конвейер собрал бы офису продаж
+    // диагнозы. Случаи немедицинских отраслей пишутся заранее в пресете
+    const организация = await prisma.organization.findUnique({
+      where: { id: head.organizationId },
+      select: { industry: true },
+    });
+    if (организация && !медицинскаяОтрасль(организация.industry)) {
+      return NextResponse.json({ error: ГЕНЕРАЦИЯ_НЕ_ДЛЯ_ОТРАСЛИ }, { status: 403 });
     }
 
     // Вторую сборку поверх живой не запускаем. Кнопка нажимается там же,

@@ -49,6 +49,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.config import get_settings  # noqa: E402
 from services import checklist, llm, scoring  # noqa: E402
+from services.industry import pick_variant  # noqa: E402
 
 
 def load_lines(path: str) -> list[str]:
@@ -115,26 +116,29 @@ def имя_роли(role: str) -> str:
     return (совпадение.group(1) if совпадение else "ПАЦИЕНТ").upper()
 
 
-async def тип_тренировки(type_id: str) -> dict:
+async def тип_тренировки(type_id: str, industry: str = "") -> dict:
     """Настройки типа из базы — той же самой, откуда их берёт бой.
 
     Не из сида и не из копии в скрипте: сид перезаписывает базу, и копия
     разошлась бы незаметно. Прогон должен проверять то, что реально стоит
-    у пациента, а не то, что мы думаем, что там стоит.
+    у пациента, а не то, что мы думаем, что там стоит. Сцена — по отрасли,
+    тем же выбором, что в бою (services/industry.py).
     """
     settings = get_settings()
     pool = await asyncpg.create_pool(dsn=settings.asyncpg_dsn, min_size=1, max_size=2)
     try:
         row = await pool.fetchrow(
-            'SELECT "title", "description", "prompt", "rubric", "doneWhen", '
-            '"stageKey", "scoresDeal" FROM "TrainingType" WHERE "id" = $1',
+            'SELECT "title", "description", "prompt", "promptByIndustry", "rubric", '
+            '"doneWhen", "stageKey", "scoresDeal" FROM "TrainingType" WHERE "id" = $1',
             type_id,
         )
     finally:
         await pool.close()
     if row is None:
         raise SystemExit(f"типа тренировки «{type_id}» нет в базе")
-    return dict(row)
+    тип = dict(row)
+    тип["prompt"] = pick_variant(тип["prompt"], тип.pop("promptByIndustry"), industry)
+    return тип
 
 
 # Сколько ходов играет менеджер-модель по умолчанию. Скрипту длина задана
@@ -210,7 +214,7 @@ async def main() -> None:
     settings = get_settings()
     threshold = settings.deal_score_threshold
 
-    тип = await тип_тренировки(type_id) if type_id else None
+    тип = await тип_тренировки(type_id, industry) if type_id else None
     if тип is not None:
         # Склейка ровно как в бою (services/session.py): роль, потом блок этапа.
         # Своей склейки здесь нет и быть не должно — на разошедшемся порядке
