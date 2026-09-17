@@ -2,8 +2,8 @@
 
 Голосовой ИИ-тренажёр по продажам: менеджер разговаривает голосом с ИИ-клиентом
 «Тамарой Михайловной», после разговора остаётся расшифровка. Подробности —
-в [README.md](README.md), деплой — в [DEPLOY.md](DEPLOY.md),
-персонажи — как писать и проверять — в [CHARACTERS.md](CHARACTERS.md).
+в [README.md](README.md), деплой — в [DEPLOY.md](docs/DEPLOY.md),
+персонажи — как писать и проверять — в [CHARACTERS.md](docs/CHARACTERS.md).
 
 ## Архитектура в двух абзацах
 
@@ -239,7 +239,7 @@ docker exec ai-trainer-backend-1 sh -c 'cd /app && python scripts/smoke_diagnost
 
 Разбор разговора ставится автоматически: фоновый оценщик считает этапы по ходу
 разговора, итоговый — записывает исход сделки и выводы после завершения сессии
-(`backend/services/scoring.py`, механизм целиком — в [DEAL-OUTCOME.md](DEAL-OUTCOME.md)).
+(`backend/services/scoring.py`, механизм целиком — в [DEAL-OUTCOME.md](docs/DEAL-OUTCOME.md)).
 В демо-данных оценки руками не задаются: закрытие, исход и общая оценка
 выводятся из четырёх этапов той же формулой (`frontend/scripts/deal-result.ts`).
 

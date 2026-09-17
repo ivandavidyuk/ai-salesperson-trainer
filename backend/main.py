@@ -894,7 +894,7 @@ class TurnManager:
 
             # Промпт на этот ход: постоянная часть плюс строка про доверие.
             # Она зависит от последней фоновой оценки и решает, может ли
-            # пациент вообще согласиться на оплату (см. DEAL-OUTCOME.md)
+            # пациент вообще согласиться на оплату (см. docs/DEAL-OUTCOME.md)
             turn_prompt = await self._prompt_with_trust(len(history))
 
             # Очередь предложений между LLM (producer) и TTS (consumer);
