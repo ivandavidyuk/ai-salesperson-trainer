@@ -15,7 +15,7 @@ import { join } from "path";
 
 import { PROFILES } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
-import type { Preset } from "./presets/types";
+import { клиническая, type Preset } from "./presets/types";
 
 function аргумент(имя: string): string | null {
   const i = process.argv.indexOf(`--${имя}`);
@@ -71,6 +71,8 @@ function отчёт(пресет: Preset): string {
   ];
 
   for (const c of cases) {
+    // Вычитка врачом — для клиник; запрос покупателя читается иначе
+    if (!клиническая(c.picture)) continue;
     const к = c.picture;
     куски.push(
       `## ${c.patientName}, ${возраст(c.patientName)}`,

@@ -20,7 +20,9 @@ import { ПРЕСЕТЫ } from "./presets";
 
 const ЛИЧНОСТИ = new Map(PROFILES.map((p) => [p.name, p.personality]));
 
-const выгрузка = ПРЕСЕТЫ.flatMap((пресет) =>
+// Критик читает клиническую картину; у офиса продаж её нет, и критик
+// туда не зовётся (каркас недвижимости, п. 8)
+const выгрузка = ПРЕСЕТЫ.filter((п) => п.clinic.kind === "клиника").flatMap((пресет) =>
   пресет.cases.map((случай) => {
     const личность = ЛИЧНОСТИ.get(случай.patientName);
     if (!личность) {

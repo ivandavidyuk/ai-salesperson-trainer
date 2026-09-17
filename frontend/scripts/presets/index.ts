@@ -8,8 +8,9 @@ import type { PatientCase } from "../patient-prompt";
 import type { Preset } from "./types";
 import { ПРЕСЕТ as СТОМАТОЛОГИЯ } from "./stomatologiya";
 import { ПРЕСЕТ as ОФТАЛЬМОЛОГИЯ } from "./oftalmologiya";
+import { ПРЕСЕТ as НЕДВИЖИМОСТЬ } from "./nedvizhimost";
 
-export const ПРЕСЕТЫ: Preset[] = [СТОМАТОЛОГИЯ, ОФТАЛЬМОЛОГИЯ];
+export const ПРЕСЕТЫ: Preset[] = [СТОМАТОЛОГИЯ, ОФТАЛЬМОЛОГИЯ, НЕДВИЖИМОСТЬ];
 
 /**
  * Пресетный случай пациента в отрасли — по нему пересборка и генератор

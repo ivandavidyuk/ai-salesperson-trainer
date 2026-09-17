@@ -43,6 +43,7 @@ import {
   МЕДИЦИНА,
   НЕДВИЖИМОСТЬ,
   industryRules,
+  mechanicBlocks,
 } from "./patient-prompt";
 
 // Эталон Тамары. История: 4451 / ba3d2d9c… — снят с прода 30.07.2026;
@@ -316,14 +317,14 @@ const PROBE_ROLE: PatientRole = {
 const problems: string[] = [];
 const fail = (text: string) => problems.push(text);
 
-function checkMechanicLayer(label: string, prompt: string): void {
+function checkMechanicLayer(label: string, prompt: string, blocks: string[] = MECHANIC_BLOCKS): void {
   // Сборщик обязан отдавать LF независимо от того, как лежит рабочая копия:
   // иначе сид с Windows записал бы в базу другой текст, чем сид в контейнере
   if (prompt.includes("\r")) {
     fail(`${label}: в собранном промпте остался CRLF — сборщик не нормализовал`);
   }
 
-  MECHANIC_BLOCKS.forEach((block, index) => {
+  blocks.forEach((block, index) => {
     if (!prompt.includes(block)) {
       const head = block.split("\n")[0];
       fail(`${label}: блок механизма №${index + 1} отсутствует или изменён — «${head}»`);
@@ -416,9 +417,10 @@ function checkPresets(): void {
       }
       const метка = `${случай.patientName} · ${отрасль}`;
       const роль: PatientRole = { personality: личность, case: случай.case };
-      const prompt = buildRolePrompt(роль);
+      const правила = industryRules(отрасль);
+      const prompt = buildRolePrompt(роль, правила);
 
-      checkMechanicLayer(метка, prompt);
+      checkMechanicLayer(метка, prompt, mechanicBlocks(правила));
       checkNoCaseLeak(метка, роль);
       for (const беда of проверитьСлучай(случай, личность, пресет.clinic)) {
         fail(`${метка}: ${беда}`);
