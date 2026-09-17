@@ -422,6 +422,7 @@ export function personalityText(personality: PatientPersonality): string {
     personality.manner,
     ...personality.fears,
     ...(personality.finances ?? []),
+    personality.budget ?? "",
     ...personality.warmsUp,
     ...personality.closesUp,
     ...personality.conditions,
