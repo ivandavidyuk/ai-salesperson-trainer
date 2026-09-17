@@ -317,22 +317,23 @@ const PROBE_ROLE: PatientRole = {
 const problems: string[] = [];
 const fail = (text: string) => problems.push(text);
 
-function checkMechanicLayer(label: string, prompt: string, blocks: string[] = MECHANIC_BLOCKS): void {
+function checkMechanicLayer(label: string, prompt: string, rules: IndustryRules = МЕДИЦИНА): void {
   // Сборщик обязан отдавать LF независимо от того, как лежит рабочая копия:
   // иначе сид с Windows записал бы в базу другой текст, чем сид в контейнере
   if (prompt.includes("\r")) {
     fail(`${label}: в собранном промпте остался CRLF — сборщик не нормализовал`);
   }
 
-  blocks.forEach((block, index) => {
+  mechanicBlocks(rules).forEach((block, index) => {
     if (!prompt.includes(block)) {
       const head = block.split("\n")[0];
       fail(`${label}: блок механизма №${index + 1} отсутствует или изменён — «${head}»`);
     }
   });
 
-  // Условие про оплату занимает первый номер, свои условия пациента идут с 2
-  if (!prompt.includes("1. Менеджер прямо предложил оплатить")) {
+  // Условие про оплату занимает первый номер, свои условия пациента идут с 2;
+  // что именно предлагают оплатить — слово отрасли
+  if (!prompt.includes(`1. Менеджер прямо предложил ${rules.offerToPay}`)) {
     fail(`${label}: условие про прямое предложение оплатить не первым номером`);
   }
   if (!/\n2\. /.test(prompt)) {
@@ -420,7 +421,7 @@ function checkPresets(): void {
       const правила = industryRules(отрасль);
       const prompt = buildRolePrompt(роль, правила);
 
-      checkMechanicLayer(метка, prompt, mechanicBlocks(правила));
+      checkMechanicLayer(метка, prompt, правила);
       checkNoCaseLeak(метка, роль);
       for (const беда of проверитьСлучай(случай, личность, пресет.clinic)) {
         fail(`${метка}: ${беда}`);

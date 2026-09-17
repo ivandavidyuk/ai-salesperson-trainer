@@ -6,8 +6,9 @@
 
 import type { Preset } from "../types";
 import { КЛИНИКА } from "./clinic";
+import { СЛУЧАЙ as ТАМАРА } from "./tamara-sokolova";
 
 export const ПРЕСЕТ: Preset = {
   clinic: КЛИНИКА,
-  cases: [],
+  cases: [ТАМАРА],
 };
