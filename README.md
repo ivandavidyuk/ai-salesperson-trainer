@@ -16,7 +16,7 @@ ai-salesperson-trainer/
 ├── docker-compose.yml        # PostgreSQL + Redis (локально)
 ├── docker-compose.prod.yml   # RU-продакшен (Caddy, frontend, PostgreSQL)
 ├── CLAUDE.md                 # шпаргалка по проекту
-└── docs/                 # DEPLOY.md (деплой), CHARACTERS.md, DEAL-OUTCOME.md
+└── docs/                     # DEPLOY.md (деплой), CHARACTERS.md, DEAL-OUTCOME.md
 ```
 
 **Продакшен:** https://5.129.206.63.nip.io
