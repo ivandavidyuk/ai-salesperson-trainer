@@ -403,10 +403,14 @@ class TurnManager:
         tts_stream: "tts.TtsWsStream",
         system_prompt: str,
         scores_deal: bool = True,
+        industry: str = "",
     ) -> None:
         self.ws = ws
         self.session_id = session_id
         self.tts_stream = tts_stream
+        # Отрасль организации: строка доверия и оценщик говорят её словами
+        # (у клиники «оплатить услугу», у офиса продаж «внести бронь»)
+        self.industry = industry
         # Роль пациента вместе с инструкцией этапа: загружается один раз
         # при подключении и не меняется в течение разговора
         self.system_prompt = system_prompt
@@ -803,13 +807,13 @@ class TurnManager:
                 )
                 return self._with_diagnostics(self.system_prompt)
             return self._with_diagnostics(
-                f"{self.system_prompt}\n\n{llm.trust_instruction(False)}"
+                f"{self.system_prompt}\n\n{llm.trust_instruction(False, self.industry)}"
             )
 
         average = scores.get("average", 0.0)
         reached = average >= settings.deal_score_threshold
         return self._with_diagnostics(
-            f"{self.system_prompt}\n\n{llm.trust_instruction(reached)}"
+            f"{self.system_prompt}\n\n{llm.trust_instruction(reached, self.industry)}"
         )
 
     def schedule_scoring(self) -> None:
@@ -832,7 +836,9 @@ class TurnManager:
             # судить, докопался ли менеджер до настоящей боли пациента.
             # Рубрика при этом остаётся общей — от неё зависит
             # сопоставимость оценок между разными пациентами
-            scores = await scoring.score_stages(history, self.system_prompt)
+            scores = await scoring.score_stages(
+                history, self.system_prompt, industry=self.industry
+            )
             if scores is None:
                 return
 
@@ -1150,6 +1156,7 @@ async def finalize_review(session_id: str) -> None:
             scores_deal=context["scores_deal"],
             stage_key=context["stage_key"],
             type_id=context["type_id"],
+            industry=context["industry"],
         )
         if review is None:
             logger.warning("Сессия %s: оценщик не вернул разбор", session_id)
@@ -1285,6 +1292,7 @@ async def session_ws(ws: WebSocket, session_id: str):
         tts_stream=tts_stream,
         system_prompt=system_prompt,
         scores_deal=await store.get_scores_deal(session_id),
+        industry=await store.get_industry(session_id),
     )
 
     # 4. Инициализируем STT (ElevenLabs Realtime)

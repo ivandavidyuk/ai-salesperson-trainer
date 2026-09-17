@@ -64,11 +64,15 @@ _PATIENT_PROMPT_SQL = (
     't."stageKey" AS type_stage_key, '
     # У сессий, начатых до мастера настройки, типа нет вовсе — это были
     # полные разговоры, поэтому COALESCE на true
-    'COALESCE(t."scoresDeal", true) AS type_scores_deal '
+    'COALESCE(t."scoresDeal", true) AS type_scores_deal, '
+    # Отрасль организации — оценщику и строке доверия: слова у них свои
+    # на отрасль (services/industry.py), рубрика одна
+    'o."industry" AS industry '
     'FROM "Session" s '
     'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
     'LEFT JOIN "TrainingType" t ON t."id" = s."trainingTypeId" '
     'LEFT JOIN "User" u ON u."id" = s."userId" '
+    'LEFT JOIN "Organization" o ON o."id" = u."organizationId" '
     'LEFT JOIN "PatientCase" pc ON pc."patientId" = s."patientId" '
     '  AND pc."organizationId" = u."organizationId" '
     'WHERE s."id" = $1'
@@ -536,7 +540,25 @@ class SessionStore:
             "scores_deal": bool(row["type_scores_deal"]),
             "type_id": row["type_id"],
             "type_title": row["type_title"],
+            "industry": row["industry"] or "",
         }
+
+    async def get_industry(self, session_id: str) -> str:
+        """Отрасль организации менеджера — для строки доверия и фонового оценщика.
+
+        Отдельным коротким запросом при подключении, как `get_scores_deal`:
+        промпт роли собирается лениво и живёт в Redis, а отрасль нужна
+        менеджеру ходов сразу. Пустая строка — медицина, как было до отраслей.
+        """
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            'SELECT o."industry" AS industry FROM "Session" s '
+            'LEFT JOIN "User" u ON u."id" = s."userId" '
+            'LEFT JOIN "Organization" o ON o."id" = u."organizationId" '
+            'WHERE s."id" = $1',
+            session_id,
+        )
+        return (row["industry"] or "") if row else ""
 
     async def save_review(self, session_id: str, review: dict) -> None:
         """Записывает разбор разговора. Существующий перезаписывает.

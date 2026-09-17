@@ -17,6 +17,7 @@ import httpx
 
 from core.config import get_settings
 from services import usage
+from services.industry import translate as по_отрасли
 
 logger = logging.getLogger(__name__)
 
@@ -79,10 +80,14 @@ _TRUST_ABOVE = (
 )
 
 
-def trust_instruction(threshold_reached: bool) -> str:
-    """Строка про доверие, которая подмешивается в промпт на каждом ходу."""
+def trust_instruction(threshold_reached: bool, industry: str = "") -> str:
+    """Строка про доверие, которая подмешивается в промпт на каждом ходу.
+
+    `industry` — отрасль организации: у клиники «оплатить услугу», у офиса
+    продаж «внести бронь» (services/industry.py); пустая — медицина, как было.
+    """
     body = _TRUST_ABOVE if threshold_reached else _TRUST_BELOW
-    return f"{_TRUST_HEADER}\n{body}"
+    return по_отрасли(f"{_TRUST_HEADER}\n{body}", industry)
 
 
 # Результат диагностики — второе динамическое знание пациента после доверия.

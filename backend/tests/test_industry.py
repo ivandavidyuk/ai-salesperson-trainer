@@ -1,0 +1,68 @@
+"""Слова отрасли: медицина — тождество, недвижимость — без медицинских слов."""
+
+import re
+
+from services import checklist, industry, llm, scoring
+
+ТЕКСТЫ_МЕДИЦИНЫ = {
+    "доверие ниже": llm.trust_instruction(False),
+    "доверие выше": llm.trust_instruction(True),
+    "чек-лист полный": checklist.rubric_block(checklist.STAGE_KEYS_ALL),
+    "чек-лист фоновый": checklist.rubric_block(scoring.STAGE_KEYS, partial=True),
+    "чек-лист профилактики": checklist.rubric_block(("prevention",)),
+    "чек-лист перехвата": checklist.rubric_block(("intercept",)),
+    "своя рубрика": scoring.build_rubric("Оцениваешь тон."),
+    "инструкции исхода": scoring._FINAL_INSTRUCTIONS,
+    "инструкции упражнения": scoring._DRILL_INSTRUCTIONS,
+}
+
+
+def test_разборщик_отрасли():
+    assert industry.industry_key("офтальмология") == industry.МЕДИЦИНА
+    assert industry.industry_key("стоматология: терапия и имплантация") == industry.МЕДИЦИНА
+    assert industry.industry_key("") == industry.МЕДИЦИНА
+    assert industry.industry_key(None) == industry.МЕДИЦИНА
+    assert industry.industry_key("Недвижимость: офис продаж застройщика") == industry.НЕДВИЖИМОСТЬ
+    assert industry.industry_key("застройщик") == industry.НЕДВИЖИМОСТЬ
+
+
+def test_медицина_не_меняется_ни_на_байт():
+    for название, текст in ТЕКСТЫ_МЕДИЦИНЫ.items():
+        assert industry.translate(текст, "офтальмология") == текст, название
+        assert industry.translate(текст, "") == текст, название
+
+
+def test_у_клиник_прежние_тексты_через_параметр_отрасли():
+    # Параметр отрасли у функций — та же тождественность, что у translate:
+    # с ним и без него клиники получают один и тот же текст
+    assert llm.trust_instruction(False, "стоматология") == llm.trust_instruction(False)
+    assert checklist.rubric_block(checklist.STAGE_KEYS_ALL, industry="офтальмология") == checklist.rubric_block(
+        checklist.STAGE_KEYS_ALL
+    )
+    assert scoring.build_rubric(stages=scoring.STAGE_KEYS, partial=True, industry="офтальмология") == scoring.build_rubric(
+        stages=scoring.STAGE_KEYS, partial=True
+    )
+
+
+def test_недвижимость_без_медицинских_слов():
+    for название, текст in ТЕКСТЫ_МЕДИЦИНЫ.items():
+        перевод = industry.translate(текст, "недвижимость")
+        остались = [
+            корень
+            for корень in industry.МЕДИЦИНСКИЕ_КОРНИ
+            if re.search(rf"(?<![А-Яа-яЁё]){корень}", перевод, re.IGNORECASE)
+        ]
+        assert not остались, f"{название}: {остались}"
+
+
+def test_недвижимость_говорит_своими_словами():
+    ниже = llm.trust_instruction(False, "недвижимость")
+    assert "внести бронь" in ниже
+    assert "услугу" not in ниже
+    рубрика = checklist.rubric_block(checklist.STAGE_KEYS_ALL, industry="недвижимость")
+    assert "менеджера отдела продаж застройщика" in рубрика
+    assert "клиент" in рубрика and "пациент" not in рубрика
+    # Склонение сохраняется: «пациенту» → «клиенту», «пациентка» не ломается
+    assert industry.translate("вопрос пациенту и ответ пациентки", "недвижимость") == "вопрос клиенту и ответ клиентки"
+    # Латинские идентификаторы в схеме ответа не трогаются
+    assert "patientAsked" in industry.translate("поле `patientAsked`", "недвижимость")

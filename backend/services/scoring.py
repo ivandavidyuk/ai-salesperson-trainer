@@ -24,6 +24,7 @@ from typing import Optional, Sequence
 
 from core.config import get_settings
 from services import checklist
+from services.industry import translate as по_отрасли
 from services.llm_json import ask_json
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,7 @@ def build_rubric(
     *,
     stages: Optional[Sequence[str]] = None,
     partial: bool = False,
+    industry: str = "",
 ) -> str:
     """Собирает рубрику: чек-лист этапов сделки либо своя рубрика упражнения.
 
@@ -81,8 +83,10 @@ def build_rubric(
     @param partial фоновый режим — расшифровка растёт, «не дошли» = 0.
     """
     if custom and custom.strip():
-        return f"{_SCALE}\n\n{custom.strip()}\n\n{_HOW_TO_SCORE}"
-    return checklist.rubric_block(stages or checklist.STAGE_KEYS_ALL, partial=partial)
+        return по_отрасли(f"{_SCALE}\n\n{custom.strip()}\n\n{_HOW_TO_SCORE}", industry)
+    return checklist.rubric_block(
+        stages or checklist.STAGE_KEYS_ALL, partial=partial, industry=industry
+    )
 
 
 @dataclass
@@ -141,7 +145,7 @@ def format_transcript(history: list[dict]) -> str:
 
 
 async def score_stages(
-    history: list[dict], patient_role: Optional[str] = None
+    history: list[dict], patient_role: Optional[str] = None, industry: str = ""
 ) -> Optional[StageScores]:
     """Фоновая оценка четырёх этапов по накопленной расшифровке.
 
@@ -169,7 +173,8 @@ async def score_stages(
         [
             {
                 "role": "system",
-                "content": build_rubric(stages=STAGE_KEYS, partial=True) + context,
+                "content": build_rubric(stages=STAGE_KEYS, partial=True, industry=industry)
+                + по_отрасли(context, industry),
             },
             {
                 "role": "user",
@@ -387,6 +392,7 @@ async def review_conversation(
     scores_deal: bool = True,
     stage_key: Optional[str] = None,
     type_id: Optional[str] = None,
+    industry: str = "",
 ) -> Optional[FinalReview]:
     """Итоговый разбор после разговора.
 
@@ -411,7 +417,7 @@ async def review_conversation(
 
     if not scores_deal:
         return await _review_drill(
-            history, patient_prompt, rubric, done_when, stage_key, type_id
+            history, patient_prompt, rubric, done_when, stage_key, type_id, industry
         )
 
     # Порог подставляется в инструкции: без него оценщик не сможет отличить
@@ -422,15 +428,15 @@ async def review_conversation(
         {
             "role": "system",
             "content": (
-                f"{build_rubric(stages=checklist.STAGE_KEYS_ALL)}\n\n"
-                f"{_FINAL_INSTRUCTIONS.replace('{threshold}', str(threshold))}"
+                f"{build_rubric(stages=checklist.STAGE_KEYS_ALL, industry=industry)}\n\n"
+                f"{по_отрасли(_FINAL_INSTRUCTIONS, industry).replace('{threshold}', str(threshold))}"
             ),
         },
         {
             "role": "user",
             "content": (
-                "РОЛЬ ПАЦИЕНТА (по ней он и играл, здесь же условия "
-                f"его согласия):\n\n{patient_prompt}\n\n"
+                по_отрасли("РОЛЬ ПАЦИЕНТА (по ней он и играл, здесь же условия ", industry)
+                + f"его согласия):\n\n{patient_prompt}\n\n"
                 "РАСШИФРОВКА РАЗГОВОРА (число в скобках — номер реплики, "
                 "его указывают в evidence):\n\n"
                 f"{checklist.format_numbered(history)}\n\n"
@@ -529,6 +535,7 @@ async def _review_drill(
     done_when: Optional[str],
     stage_key: Optional[str],
     type_id: Optional[str] = None,
+    industry: str = "",
 ) -> Optional[FinalReview]:
     """Разбор этапной тренировки: одна оценка и «отработан или нет».
 
@@ -561,7 +568,7 @@ async def _review_drill(
     items_key = stage_key or (type_id if type_id in checklist.CHECKLIST else None)
 
     if items_key:
-        rubric_text = build_rubric(stages=(items_key,))
+        rubric_text = build_rubric(stages=(items_key,), industry=industry)
         if rubric and rubric.strip():
             rubric_text += f"\n\nЧТО ВАЖНО В ЭТОМ УПРАЖНЕНИИ:\n{rubric.strip()}"
         instructions = _DRILL_INSTRUCTIONS.replace(
@@ -584,7 +591,7 @@ async def _review_drill(
             '"strength": "строка", "growthPoint": "строка"}'
         )
     else:
-        rubric_text = build_rubric(rubric)
+        rubric_text = build_rubric(rubric, industry=industry)
         instructions = _DRILL_INSTRUCTIONS
         answer_shape = (
             "Верни JSON строго в этом порядке полей: {"
@@ -598,15 +605,18 @@ async def _review_drill(
             "role": "system",
             "content": (
                 f"{rubric_text}\n\n"
-                f"{instructions.replace('{done_when}', done_when.strip())}"
+                f"{по_отрасли(instructions, industry).replace('{done_when}', done_when.strip())}"
             ),
         },
         {
             "role": "user",
             "content": (
-                "КОГО ИГРАЛ ПАЦИЕНТ — по этому тексту видно, что менеджер "
-                "мог из него вытянуть. Оцениваешь всё равно менеджера:\n\n"
-                f"{patient_prompt}\n\n"
+                по_отрасли(
+                    "КОГО ИГРАЛ ПАЦИЕНТ — по этому тексту видно, что менеджер "
+                    "мог из него вытянуть. Оцениваешь всё равно менеджера:\n\n",
+                    industry,
+                )
+                + f"{patient_prompt}\n\n"
                 "РАСШИФРОВКА РАЗГОВОРА (число в скобках — номер реплики):\n\n"
                 f"{checklist.format_numbered(history)}\n\n"
                 # judgeNotes первым не для красоты: пока вердикт стоял

@@ -28,6 +28,8 @@ import re
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
+from services.industry import translate as по_отрасли
+
 # Этапы в порядке прохождения. Первые четыре совпадают со STAGE_KEYS
 # в scoring.py и полосами «Прогресса»; закрытие оценивается только итогом
 STAGE_KEYS_ALL = ("contact", "iceBreaker", "needs", "objections", "closing")
@@ -590,12 +592,16 @@ _PARTIAL = """Расшифровка растёт: тебя зовут зано�
 все действия этапа возражений 0: этап впереди, а не отсутствует."""
 
 
-def rubric_block(stage_keys: Sequence[str], *, partial: bool = False) -> str:
+def rubric_block(
+    stage_keys: Sequence[str], *, partial: bool = False, industry: str = ""
+) -> str:
     """Текст чек-листа для промпта оценщика.
 
     @param stage_keys какие этапы оценивать: четыре у фонового оценщика,
         пять у итогового, один у этапной тренировки.
     @param partial фоновый режим — расшифровка не окончена, «не дошли» = 0.
+    @param industry отрасль организации: список один, слова — свои
+        (services/industry.py); пустая — медицина, текст как был.
     """
     parts = [_RULES, _EVIDENCE_PARTIAL if partial else _EVIDENCE, "ЭТАПЫ И ДЕЙСТВИЯ:"]
     for key in stage_keys:
@@ -611,7 +617,7 @@ def rubric_block(stage_keys: Sequence[str], *, partial: bool = False) -> str:
         parts.append("\n".join(lines))
     if partial:
         parts.append(_PARTIAL)
-    return "\n\n".join(parts)
+    return по_отрасли("\n\n".join(parts), industry)
 
 
 def marks_schema(stage_keys: Sequence[str], *, with_evidence: bool = True) -> str:
