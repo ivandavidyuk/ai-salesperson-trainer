@@ -21,9 +21,10 @@
 // Личности клиент не правит и править не будет — они наши по замыслу.
 // Поэтому источник истины для них один: репозиторий.
 
-import { PrismaClient } from "@prisma/client";
-import { buildRolePrompt, type PatientCase } from "./patient-prompt";
+import { Prisma, PrismaClient } from "@prisma/client";
+import { buildRolePrompt, industryRules, type PatientCase } from "./patient-prompt";
 import { PROFILES } from "./patients";
+import { пресетныйСлучай } from "./presets";
 
 const prisma = new PrismaClient();
 
@@ -36,6 +37,22 @@ const СЛОТЫ_СЛУЧАЯ = [
   "helps",
   "vocabulary",
 ] as const;
+
+/**
+ * Случай без новых слотов получает их из пресета отрасли. Возвращает новый
+ * объект, если что-то дописано, иначе null — так видно, надо ли сохранять.
+ */
+function дополнитьИзПресета(случай: PatientCase, отрасль: string, имя: string): PatientCase | null {
+  if (случай.fears !== undefined && случай.moneyToday !== undefined) return null;
+  const пресет = пресетныйСлучай(отрасль, имя);
+  if (!пресет) return null;
+  const дополнение: Partial<PatientCase> = {};
+  if (случай.fears === undefined && пресет.fears !== undefined) дополнение.fears = пресет.fears;
+  if (случай.moneyToday === undefined && пресет.moneyToday !== undefined) {
+    дополнение.moneyToday = пресет.moneyToday;
+  }
+  return Object.keys(дополнение).length ? { ...случай, ...дополнение } : null;
+}
 
 function годныйСлучай(данные: unknown): данные is PatientCase {
   if (!данные || typeof данные !== "object") return false;
@@ -61,6 +78,7 @@ async function пересобратьКлиентские(): Promise<Итог> {
       prompt: true,
       caseData: true,
       patient: { select: { name: true } },
+      organization: { select: { industry: true } },
     },
   });
 
@@ -78,8 +96,18 @@ async function пересобратьКлиентские(): Promise<Итог> {
       continue;
     }
 
-    const свежий = buildRolePrompt({ personality: личность, case: строка.caseData });
-    if (строка.prompt === свежий) {
+    // Слоты, появившиеся после того, как случай был собран, берутся
+    // из пресета той же отрасли: у клиник случаи и есть копии пресетов,
+    // а ситуативные страхи и деньги с собой одинаковы для пациента
+    // в пределах отрасли. Дополненный случай сохраняется, чтобы следующая
+    // пересборка не искала заново
+    const отрасль = строка.organization.industry;
+    const дополненный = дополнитьИзПресета(строка.caseData, отрасль, имя);
+    const свежий = buildRolePrompt(
+      { personality: личность, case: дополненный ?? строка.caseData },
+      industryRules(отрасль),
+    );
+    if (строка.prompt === свежий && !дополненный) {
       итог.бездела += 1;
       continue;
     }
@@ -90,7 +118,10 @@ async function пересобратьКлиентские(): Promise<Итог> {
           organizationId: строка.organizationId,
         },
       },
-      data: { prompt: свежий },
+      data: {
+        prompt: свежий,
+        ...(дополненный ? { caseData: дополненный as unknown as Prisma.InputJsonValue } : {}),
+      },
     });
     итог.обновлено += 1;
   }

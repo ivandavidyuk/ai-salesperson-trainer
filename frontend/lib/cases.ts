@@ -12,8 +12,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { signToken } from "@/lib/auth";
-import { buildRolePrompt, type PatientCase } from "@/scripts/patient-prompt";
+import { buildRolePrompt, industryRules, type PatientCase } from "@/scripts/patient-prompt";
 import { PROFILES } from "@/scripts/patients";
+import { пресетныйСлучай } from "@/scripts/presets";
 
 interface ClinicPayload {
   name: string;
@@ -329,6 +330,9 @@ async function generateAll(
         return false;
       }
       if (generated.diagnosis) usedDiagnoses.push(generated.diagnosis);
+      // Ситуативные страхи и деньги с собой генератор не пишет — они одни
+      // на пациента в пределах отрасли и берутся из пресета
+      const пресет = пресетныйСлучай(clinic.industry, patient.name);
       const patientCase: PatientCase = {
         situation: generated.situation,
         calmWhile: generated.calmWhile,
@@ -336,8 +340,13 @@ async function generateAll(
         conditions: generated.caseConditions,
         helps: generated.caseHelps,
         vocabulary: generated.vocabulary,
+        ...(пресет?.fears ? { fears: пресет.fears } : {}),
+        ...(пресет?.moneyToday ? { moneyToday: пресет.moneyToday } : {}),
       };
-      const prompt = buildRolePrompt({ personality: role.personality, case: patientCase });
+      const prompt = buildRolePrompt(
+        { personality: role.personality, case: patientCase },
+        industryRules(clinic.industry),
+      );
 
       await prisma.patientCase.upsert({
         where: {

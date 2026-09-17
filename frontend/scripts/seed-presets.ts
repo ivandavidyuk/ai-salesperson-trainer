@@ -16,7 +16,7 @@
 // случаи кладёт upsert-ом по составному ключу.
 
 import { PrismaClient, Prisma } from "@prisma/client";
-import { buildRolePrompt } from "./patient-prompt";
+import { buildRolePrompt, industryRules } from "./patient-prompt";
 import { PROFILES } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
 import type { Preset } from "./presets/types";
@@ -122,7 +122,10 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
       );
     }
 
-    const prompt = buildRolePrompt({ personality: личность, case: пресетныйСлучай.case });
+    const prompt = buildRolePrompt(
+      { personality: личность, case: пресетныйСлучай.case },
+      industryRules(clinic.industry),
+    );
     const строка = {
       prompt,
       // Слоты — источник правды: rebuild-prompts пересоберёт из них promt
