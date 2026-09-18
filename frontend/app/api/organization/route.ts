@@ -17,7 +17,7 @@ import {
 } from "@/lib/cases";
 import { ключ } from "@/lib/caseStaleness";
 import { затронутыеСлучаи } from "@/lib/caseStaleness";
-import { ГЕНЕРАЦИЯ_ЗАКРЫТА, этоДемо } from "@/lib/demoAccess";
+import { генерацияЗакрыта, этоДемо } from "@/lib/demoAccess";
 import { медицинскаяОтрасль } from "@/lib/industry";
 import { поставитьОтрасль } from "@/lib/industryCookie";
 import { словаОтрасли } from "@/lib/industryWords";
@@ -68,6 +68,20 @@ interface OrganizationBody {
   diagnoses?: DiagnosisBody[];
 }
 
+/** Сколько случаев организации стоит на каждой позиции прайса, по названию */
+async function клиентыНаПозициях(organizationId: string): Promise<Map<string, number>> {
+  const группы = await prisma.patientCase.groupBy({
+    by: ["serviceName"],
+    where: { organizationId, serviceName: { not: null } },
+    _count: { _all: true },
+  });
+  return new Map(
+    группы
+      .filter((г) => г.serviceName)
+      .map((г) => [г.serviceName as string, г._count._all] as const)
+  );
+}
+
 async function organizationForForm(id: string) {
   const organization = await prisma.organization.findUnique({
     where: { id },
@@ -113,8 +127,20 @@ async function organizationForForm(id: string) {
     пациентов.set(к, (пациентов.get(к) ?? 0) + г._count._all);
   }
 
+  // Сколько клиентов стоит на каждой позиции прайса — у неклиник. Их случаи
+  // написаны заранее и ищут цену по точному названию позиции
+  // (lib/caseServiceQuery.ts): переименуй её РОП, и в упражнениях у этих
+  // клиентов пропала бы цена. Форма по этому числу закрывает название
+  // и удаление, а PUT не пускает такую правку
+  const клиентовНа = медицинскаяОтрасль(organization.industry)
+    ? null
+    : await клиентыНаПозициях(id);
+
   return {
     ...organization,
+    services: клиентовНа
+      ? organization.services.map((у) => ({ ...у, clients: клиентовНа.get(у.name) ?? 0 }))
+      : organization.services,
     diagnoses: organization.diagnoses.map((д) => ({
       ...д,
       patients: пациентов.get(ключ(д.name)) ?? 0,
@@ -164,7 +190,14 @@ export async function PUT(request: NextRequest) {
     // пресета вычитаны людьми, а свежая генерация — нет, и подменять
     // первое вторым посреди демо незачем
     if (head.organizationId && (await этоДемо(head.organizationId))) {
-      return NextResponse.json({ error: ГЕНЕРАЦИЯ_ЗАКРЫТА }, { status: 403 });
+      const демо = await prisma.organization.findUnique({
+        where: { id: head.organizationId },
+        select: { industry: true },
+      });
+      return NextResponse.json(
+        { error: генерацияЗакрыта(демо?.industry ?? "") },
+        { status: 403 }
+      );
     }
 
     // Сохранение во время сборки отклоняем целиком, а не «сохраним, но
@@ -186,9 +219,21 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
     }
 
+    // Отрасль неклиники меняем только мы: поле в форме у неё скрыто, а одна
+    // правка текста перевела бы офис продаж на медицинский конвейер — платная
+    // сборка диагнозов, результат диагностики на каждом разговоре. Клиентов
+    // недвижимости заводим вручную (scripts/create-client.ts), с отраслью
+    const прежняя = head.organizationId
+      ? await prisma.organization.findUnique({
+          where: { id: head.organizationId },
+          select: { industry: true },
+        })
+      : null;
+    const отрасльЗакреплена = прежняя !== null && !медицинскаяОтрасль(прежняя.industry);
+
     const name = body.name?.trim() ?? "";
     const city = body.city?.trim() ?? "";
-    const industry = body.industry?.trim() ?? "";
+    const industry = отрасльЗакреплена ? прежняя.industry : body.industry?.trim() ?? "";
     // Отказы — словами той отрасли, что прислали: руководитель видит их
     // под своей формой, а она уже говорит этими словами
     const слова = словаОтрасли(industry);
@@ -240,6 +285,26 @@ export async function PUT(request: NextRequest) {
         { error: `${слова.Позиция} «${повторУслуги}» есть в списке дважды — оставьте одну` },
         { status: 400 }
       );
+    }
+
+    // Позиции, на которых стоят клиенты неклиники, остаются в прайсе под
+    // прежним названием: цену их случаи ищут по точному имени, а пересборки,
+    // которая у клиник подхватывает правку, у этих отраслей нет
+    if (отрасльЗакреплена && head.organizationId) {
+      const имена = new Set(services.map((у) => у.name));
+      const пропала = [...(await клиентыНаПозициях(head.organizationId)).keys()].find(
+        (имя) => !имена.has(имя)
+      );
+      if (пропала) {
+        return NextResponse.json(
+          {
+            error:
+              `${слова.Позиция} «${пропала}» есть в заявках клиентов — удалить или ` +
+              "переименовать её нельзя, можно поменять цену и описание",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const diagnoses = (body.diagnoses ?? [])

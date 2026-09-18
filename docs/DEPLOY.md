@@ -346,6 +346,14 @@ docker compose -f docker-compose.prod.yml exec frontend npm run seed:team
 # 3. Пользователь (email, пароль, имя, фамилия)
 docker compose -f docker-compose.prod.yml exec frontend npm run create-user
 
+# 3а. Клиент на полный доступ: организация с копией пресета отрасли,
+#     РОП и менеджеры со случайными паролями. Для неклиник это ЕДИНСТВЕННЫЙ
+#     путь: генерация случаев им закрыта, и организация из формы РОПа
+#     осталась бы без клиентов. Блок с паролями печатается один раз
+docker compose -f docker-compose.prod.yml exec -T frontend npm run create-client -- \
+  --company "ЖК Северный" --industry недвижимость --city Казань \
+  --head "rop@sever.ru=Ирина Соколова" --manager "m1@sever.ru=Алексей Петров"
+
 # 4. Демо-аккаунт с историей разговоров и оценками — для показов
 docker compose -f docker-compose.prod.yml exec frontend npm run seed:demo
 ```

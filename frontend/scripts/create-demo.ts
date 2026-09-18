@@ -22,22 +22,12 @@ import { демоКлиенты } from "../lib/demoScope";
 import { скопироватьПресет } from "./demo-clinic";
 import { plural } from "../lib/format";
 import bcrypt from "bcryptjs";
-import { randomBytes } from "crypto";
+import { пароль } from "./password";
 
 const prisma = new PrismaClient();
 
 /** Потолок расхода демо-организации, часов. Аварийный, клиенту не называется */
 const ПОТОЛОК_ЧАСОВ = 3;
-
-/**
- * Пароль, который можно продиктовать голосом: без нулей, «о», единиц и «л».
- * 10 знаков base58-алфавита — ~58 бит, для суточного доступа с запасом.
- */
-function пароль(): string {
-  const алфавит = "23456789abcdefghijkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ";
-  const байты = randomBytes(10);
-  return Array.from(байты, (b) => алфавит[b % алфавит.length]).join("");
-}
 
 /** Слаг для email: транслитерация не нужна, достаточно латиницы и цифр */
 function слаг(имя: string): string {

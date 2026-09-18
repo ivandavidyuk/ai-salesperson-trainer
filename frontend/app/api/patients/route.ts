@@ -12,7 +12,7 @@ import { демоНаРазговоры } from "@/lib/demoAccess";
 import { демоКлиенты } from "@/lib/demoScope";
 import { медицинскаяОтрасль } from "@/lib/industry";
 import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
-import { составОтрасли } from "@/scripts/patients";
+import { досьеОтрасли, составОтрасли } from "@/scripts/patients";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +67,8 @@ export async function GET(request: NextRequest) {
     const открытыВДемо = демоКлиенты(отрасль);
     const строки = patients.map((patient) => ({
       ...сНаложеннымСлучаем(patient),
+      // Досье руководителю — словами отрасли, где оно писано под клинику
+      ...(isHead ? досьеОтрасли(patient.name, отрасль) : {}),
       // У набора, который ещё пишется, случай есть не у всех: такой клиент
       // виден с пометкой «скоро», как неактивный, — выбрать его нельзя,
       // и старт разговора не отвечает отказом. У клиник случаи собирает

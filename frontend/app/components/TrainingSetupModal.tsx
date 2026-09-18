@@ -564,7 +564,7 @@ export default function TrainingSetupModal({
                   label="Название"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  placeholder="Возражение по цене операции"
+                  placeholder={слова.примерЗадания}
                 />
 
                 <div className="mt-3.5 grid grid-cols-2 gap-4">

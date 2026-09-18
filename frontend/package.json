@@ -9,6 +9,7 @@
     "lint": "next lint",
     "create-user": "ts-node scripts/create-user.ts",
     "create-demo": "ts-node scripts/create-demo.ts",
+    "create-client": "ts-node scripts/create-client.ts",
     "seed:content": "ts-node scripts/seed-content.ts",
     "seed:patients": "ts-node scripts/seed-patients.ts",
     "seed:training": "ts-node scripts/seed-training-types.ts",

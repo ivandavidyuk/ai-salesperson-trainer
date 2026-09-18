@@ -16,6 +16,7 @@ import {
   type ПоляЗадания,
 } from "@/lib/assignments";
 import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
+import { досьеОтрасли } from "@/scripts/patients";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,16 @@ export async function GET(request: NextRequest) {
     }
 
     const isHead = user.role === UserRole.head;
+    // Досье руководителю — словами отрасли его организации
+    const отрасль =
+      isHead && user.organizationId
+        ? ((
+            await prisma.organization.findUnique({
+              where: { id: user.organizationId },
+              select: { industry: true },
+            })
+          )?.industry ?? "")
+        : "";
     // Руководитель видит выданные им, менеджер — полученные
     const чьи = isHead ? { createdById: user.id } : { userId: user.id };
 
@@ -111,7 +122,10 @@ export async function GET(request: NextRequest) {
         comment: row.comment,
         dueAt: row.dueAt?.toISOString() ?? null,
         isPriority: row.isPriority,
-        patient: сНаложеннымСлучаем(row.patient),
+        patient: {
+          ...сНаложеннымСлучаем(row.patient),
+          ...(isHead ? досьеОтрасли(row.patient.name, отрасль) : {}),
+        },
         trainingType: row.trainingType,
         author: `${row.createdBy.firstName} ${row.createdBy.lastName}`.trim(),
         started: row._count.sessions > 0,

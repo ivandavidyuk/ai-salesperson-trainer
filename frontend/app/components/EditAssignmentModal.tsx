@@ -175,7 +175,7 @@ export default function EditAssignmentModal({
               onChange={(event) =>
                 setЧерновик({ ...черновик, title: event.target.value })
               }
-              placeholder="Возражение по цене операции"
+              placeholder={слова.примерЗадания}
             />
 
             <div className="grid grid-cols-2 gap-4">

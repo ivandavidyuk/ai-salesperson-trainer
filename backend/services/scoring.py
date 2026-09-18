@@ -135,11 +135,11 @@ def _clamp(value: object) -> float:
     return round(max(0.0, min(10.0, number)), 1)
 
 
-def format_transcript(history: list[dict]) -> str:
+def format_transcript(history: list[dict], industry: str = "") -> str:
     """Расшифровка в виде, пригодном для чтения моделью."""
     lines = []
     for item in history:
-        who = "Менеджер" if item.get("role") == "user" else "Пациент"
+        who = "Менеджер" if item.get("role") == "user" else по_отрасли("Пациент", industry)
         lines.append(f"{who}: {item.get('text', '')}")
     return "\n".join(lines)
 
@@ -180,7 +180,7 @@ async def score_stages(
                 "role": "user",
                 "content": (
                     "Расшифровка разговора:\n\n"
-                    f"{format_transcript(history)}\n\n"
+                    f"{format_transcript(history, industry)}\n\n"
                     "Верни JSON: {"
                     f"{checklist.marks_schema(STAGE_KEYS, with_evidence=False)}"
                     "}"
@@ -439,7 +439,7 @@ async def review_conversation(
                 + f"его согласия):\n\n{patient_prompt}\n\n"
                 "РАСШИФРОВКА РАЗГОВОРА (число в скобках — номер реплики, "
                 "его указывают в evidence):\n\n"
-                f"{checklist.format_numbered(history)}\n\n"
+                f"{checklist.format_numbered(history, industry)}\n\n"
                 "Верни JSON: {"
                 '"paymentOffered": true | false, '
                 '"outcome": "paid" | "refused" | "not_asked", '
@@ -620,7 +620,7 @@ async def _review_drill(
                 )
                 + f"{patient_prompt}\n\n"
                 "РАСШИФРОВКА РАЗГОВОРА (число в скобках — номер реплики):\n\n"
-                f"{checklist.format_numbered(history)}\n\n"
+                f"{checklist.format_numbered(history, industry)}\n\n"
                 # judgeNotes первым не для красоты: пока вердикт стоял
                 # раньше разбора, модель успевала выставить passed до того,
                 # как проверит критерий. В одном прогоне это видно прямо

@@ -106,9 +106,17 @@ export async function разобратьЗадание(
   }
 
   if (body.patientId !== undefined || всеОбязательны) {
+    // Клиент должен быть подготовлен для этой организации — тот же замок,
+    // что у старта разговора: иначе задание выдали бы на персонажа чужой
+    // отрасли, и менеджер упёрся бы в отказ уже при запуске
     const patient = body.patientId
-      ? await prisma.patient.findUnique({
-          where: { id: body.patientId },
+      ? await prisma.patient.findFirst({
+          where: {
+            id: body.patientId,
+            ...(организация
+              ? { cases: { some: { organizationId: организация, prompt: { not: "" } } } }
+              : {}),
+          },
           select: { id: true, isActive: true },
         })
       : null;

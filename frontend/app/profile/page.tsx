@@ -34,6 +34,10 @@ interface ServiceRow {
   name: string;
   price: string;
   description: string;
+  /** Сколько клиентов стоит на позиции — только у неклиник, с сервера.
+      Такую позицию нельзя удалить или переименовать: случаи ищут цену
+      по её точному названию */
+  clients?: number;
 }
 
 interface DiagnosisRow {
@@ -663,6 +667,10 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
   // Пока отрасль не указана — по отрасли из cookie, как и весь интерфейс
   const отрасль = industry.trim() ? industryKey(industry) : отрасльКонтекста;
   const медицина = отрасль === "медицина";
+  // Отрасль неклиники меняем только мы, и поля у неё нет вовсе. Судим по
+  // сохранённой, а не по введённой: иначе у клиники поле исчезало бы прямо
+  // под пальцами, стоило набрать «недвижимость»
+  const отрасльЗакреплена = saved !== null && industryKey(saved.industry) !== "медицина";
   const слова = словаДляКлюча(отрасль);
   const filled =
     name.trim() !== "" &&
@@ -885,17 +893,19 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                   placeholder="Например: Казань"
                 />
               </div>
-              <div className="col-span-2">
-                <FieldLabel>{слова.специализация}</FieldLabel>
-                <TextInput
-                  value={industry}
-                  onChange={(e) => setIndustry(e.target.value)}
-                  placeholder={слова.специализацияПример}
-                />
-                <p className="mt-1.5 text-[13px] leading-snug text-ink-muted">
-                  {слова.специализацияПодсказка}
-                </p>
-              </div>
+              {!отрасльЗакреплена && (
+                <div className="col-span-2">
+                  <FieldLabel>{слова.специализация}</FieldLabel>
+                  <TextInput
+                    value={industry}
+                    onChange={(e) => setIndustry(e.target.value)}
+                    placeholder={слова.специализацияПример}
+                  />
+                  <p className="mt-1.5 text-[13px] leading-snug text-ink-muted">
+                    {слова.специализацияПодсказка}
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             /* Те же три поля, но текстом: поле ввода без права ввода
@@ -909,10 +919,12 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                 <FieldLabel>Город</FieldLabel>
                 <div className="text-[16px] text-ink">{city || "—"}</div>
               </div>
-              <div className="col-span-2">
-                <FieldLabel>{слова.специализация}</FieldLabel>
-                <div className="text-[16px] text-ink">{industry || "—"}</div>
-              </div>
+              {!отрасльЗакреплена && (
+                <div className="col-span-2">
+                  <FieldLabel>{слова.специализация}</FieldLabel>
+                  <div className="text-[16px] text-ink">{industry || "—"}</div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1196,53 +1208,65 @@ function ServicesModal({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-7 pb-1 pt-4">
-          {services.map((service, index) => (
-            <div
-              key={index}
-              className="group shrink-0 rounded-xl border border-line-soft p-3 transition-colors hover:border-line-strong"
-            >
-              <div className="flex items-start gap-2.5">
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <div className="flex items-center gap-2.5">
+          {services.map((service, index) => {
+            // На позиции стоят клиенты: название и удаление закрыты, цена
+            // и описание — нет. Сервер такую правку всё равно не пустит
+            const клиентов = service.clients ?? 0;
+            const занята = клиентов > 0;
+            return (
+              <div
+                key={index}
+                className="group shrink-0 rounded-xl border border-line-soft p-3 transition-colors hover:border-line-strong"
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        value={service.name}
+                        onChange={(e) => update(index, { name: e.target.value })}
+                        readOnly={readOnly || занята}
+                        placeholder={слова.названиеУслуги}
+                        className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[16px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                      />
+                      <input
+                        value={service.price}
+                        onChange={(e) => update(index, { price: e.target.value })}
+                        readOnly={readOnly}
+                        placeholder="Цена"
+                        className="w-[236px] shrink-0 rounded-[9px] border border-line-strong px-3 py-2 text-right font-mono text-[14.5px] text-brand-hover outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                      />
+                    </div>
                     <input
-                      value={service.name}
-                      onChange={(e) => update(index, { name: e.target.value })}
+                      value={service.description}
+                      onChange={(e) => update(index, { description: e.target.value })}
                       readOnly={readOnly}
-                      placeholder={слова.названиеУслуги}
-                      className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[16px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                      placeholder={слова.описаниеПозиции}
+                      className="rounded-[9px] border border-line-strong px-3 py-2 text-[14.5px] text-ink-muted outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
                     />
-                    <input
-                      value={service.price}
-                      onChange={(e) => update(index, { price: e.target.value })}
-                      readOnly={readOnly}
-                      placeholder="Цена"
-                      className="w-[236px] shrink-0 rounded-[9px] border border-line-strong px-3 py-2 text-right font-mono text-[14.5px] text-brand-hover outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
-                    />
+                    {занята && !readOnly && (
+                      <p className="px-1 text-[13px] leading-snug text-ink-muted">
+                        В заявках у {клиентов} {plural(клиентов, "клиента", "клиентов", "клиентов")}:
+                        название не меняется, цену и описание править можно
+                      </p>
+                    )}
                   </div>
-                  <input
-                    value={service.description}
-                    onChange={(e) => update(index, { description: e.target.value })}
-                      readOnly={readOnly}
-                    placeholder={слова.описаниеПозиции}
-                    className="rounded-[9px] border border-line-strong px-3 py-2 text-[14.5px] text-ink-muted outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
-                  />
+                  {!readOnly && !занята && (
+                    <button
+                      type="button"
+                      title={слова.удалитьУслугу}
+                      onClick={() => {
+                        setRemoved({ row: service, at: index });
+                        onChange(services.filter((_, i) => i !== index));
+                      }}
+                      className="mt-1 h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
-                {!readOnly && (
-                  <button
-                    type="button"
-                    title={слова.удалитьУслугу}
-                    onClick={() => {
-                      setRemoved({ row: service, at: index });
-                      onChange(services.filter((_, i) => i !== index));
-                    }}
-                    className="mt-1 h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {services.length === 0 && (
             <div className="shrink-0 rounded-xl border-[1.5px] border-dashed border-line-accent bg-surface p-6 text-center">

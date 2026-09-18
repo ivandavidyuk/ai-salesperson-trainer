@@ -79,6 +79,15 @@ export const PROFILES: PatientProfile[] = [
  * Без него новый персонаж недвижимости появился бы в списках клиник,
  * и первая же пересборка собрала бы ему диагноз.
  */
+/** Досье для руководителя словами отрасли организации: только перекрытые поля */
+export function досьеОтрасли(
+  name: string,
+  industry: string
+): Partial<Pick<PatientProfile, "character" | "decisionMaker" | "approach">> {
+  const профиль = PROFILES.find((p) => p.name === name);
+  return профиль?.досьеПоОтрасли?.[industryKey(industry)] ?? {};
+}
+
 export function составОтрасли(industry: string): PatientProfile[] {
   const ключ = industryKey(industry);
   return PROFILES.filter((p) => !p.industries || p.industries.includes(ключ));

@@ -361,7 +361,7 @@ def verify_quote(quote: object, history: Sequence[dict]) -> Optional[int]:
     return None
 
 
-def format_numbered(history: Sequence[dict]) -> str:
+def format_numbered(history: Sequence[dict], industry: str = "") -> str:
     """Расшифровка с номерами реплик — для оценщиков, которым нужны доказательства.
 
     Номер — индекс в истории, тот же, что уходит в снимок как `msg`.
@@ -371,7 +371,7 @@ def format_numbered(history: Sequence[dict]) -> str:
     """
     lines = []
     for index, item in enumerate(history):
-        who = "Менеджер" if item.get("role") == "user" else "Пациент"
+        who = "Менеджер" if item.get("role") == "user" else по_отрасли("Пациент", industry)
         lines.append(f"[{index}] {who}: {item.get('text', '')}")
     return "\n".join(lines)
 

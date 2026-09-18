@@ -19,7 +19,8 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from core.auth import verify_token
 from core.config import get_settings
 from services import achievements, case_generator, diagnostics, llm, scoring, tts
-from services.industry import есть_диагностика
+from services.industry import МЕДИЦИНА, industry_key, есть_диагностика
+from services.industry import translate as по_отрасли
 from services.text import strip_for_speech
 from services.session import (
     STATUS_ACTIVE,
@@ -256,6 +257,13 @@ async def generate_case_endpoint(request: Request):
     clinic = body.get("clinic")
     if not isinstance(personality, dict) or not isinstance(clinic, dict):
         raise HTTPException(status_code=400, detail="Нужны personality и clinic")
+    # Второй замок после Node (lib/cases.ts, роуты организации): клинический
+    # конвейер собрал бы офису продаж диагноз и «услугу под диагноз» за наши
+    # деньги. Случаи немедицинских отраслей пишутся заранее в пресете
+    if industry_key(str(clinic.get("industry") or "")) != МЕДИЦИНА:
+        raise HTTPException(
+            status_code=409, detail="Для этой отрасли случаи не собираются"
+        )
 
     # Диагнозы, уже выданные другим пациентам этой клиники. Необязательное:
     # без него сборка работает, просто у пациентов чаще совпадут болезни
@@ -377,7 +385,7 @@ def _describe(exc: BaseException) -> str:
     return f"{name}: {text}" if text else name
 
 
-def _user_message(exc: BaseException) -> str:
+def _user_message(exc: BaseException, industry: str = "") -> str:
     """Что показать менеджеру на экране, когда ход сорвался.
 
     Менеджеру нужно знать, что делать дальше, а не как называется исключение.
@@ -385,7 +393,7 @@ def _user_message(exc: BaseException) -> str:
     пустая надпись «Ошибка обработки:» не говорит ни ему, ни нам ничего.
     """
     if isinstance(exc, asyncio.TimeoutError):
-        return "Пациент не ответил вовремя — повторите реплику"
+        return по_отрасли("Пациент не ответил вовремя — повторите реплику", industry)
     return f"Ошибка обработки: {_describe(exc)}"
 
 
@@ -1068,7 +1076,7 @@ class TurnManager:
             )
             await safe_send(
                 ws,
-                {"type": "error", "message": _user_message(exc)},
+                {"type": "error", "message": _user_message(exc, self.industry)},
             )
         finally:
             if producer is not None and not producer.done():
@@ -1263,7 +1271,10 @@ async def session_ws(ws: WebSocket, session_id: str):
             ws,
             {
                 "type": "error",
-                "message": "Для этого пациента ещё не настроен промпт",
+                "message": по_отрасли(
+                    "Для этого пациента ещё не настроен промпт",
+                    await store.get_industry(session_id),
+                ),
             },
         )
         await ws.close(code=1008)

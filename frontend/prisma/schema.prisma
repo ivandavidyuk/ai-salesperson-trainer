@@ -249,6 +249,12 @@ model TrainingType {
   rubric      String        @default("")
   // Чем определяется, что этап отработан. Тоже только оценщику
   doneWhen    String        @default("")
+  // Рубрика и критерий словами другой отрасли — там, где в них зашита
+  // сцена клиники («у стойки, по дороге в кабинет», «анамнез и диоптрии»).
+  // Выбор — в backend по отрасли организации; нет варианта — базовый текст
+  // её словами (services/industry.py)
+  rubricByIndustry   Json    @default("{}")
+  doneWhenByIndustry Json    @default("{}")
   // В какую колонку SessionReview ложится оценка этой тренировки:
   // «contact», «iceBreaker», «needs», «objections» — или null, если этапа
   // сделки под неё нет (профилактика, перехват) и в базу идёт только общая.
