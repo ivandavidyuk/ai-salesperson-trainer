@@ -6,6 +6,7 @@
 
 import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { словаОтрасли } from "@/lib/industryWords";
 
 /** Сколько дней держим выполненные задания в списке */
 export const ОКНО_ВЫПОЛНЕННЫХ_ДНЕЙ = 30;
@@ -53,6 +54,18 @@ type Итог =
  * чужой клиники — тот увидел бы у себя задание за подписью незнакомого
  * человека. Интерфейс такого не предлагал, но запрос можно послать мимо него.
  */
+// Слово для отказа — словами отрасли организации. Спрашиваем её только
+// на отказе: на обычном пути отрасль заданию не нужна
+async function клиентОрганизации(организация: string | null): Promise<string> {
+  const орг = организация
+    ? await prisma.organization.findUnique({
+        where: { id: организация },
+        select: { industry: true },
+      })
+    : null;
+  return словаОтрасли(орг?.industry).клиент;
+}
+
 export async function разобратьЗадание(
   body: ПоляЗадания,
   {
@@ -100,7 +113,10 @@ export async function разобратьЗадание(
         })
       : null;
     if (!patient?.isActive) {
-      return { ok: false, ошибка: "Этот пациент пока недоступен" };
+      return {
+        ok: false,
+        ошибка: `Этот ${await клиентОрганизации(организация)} пока недоступен`,
+      };
     }
     поля.patientId = patient.id;
   }

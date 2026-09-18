@@ -19,6 +19,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from core.auth import verify_token
 from core.config import get_settings
 from services import achievements, case_generator, diagnostics, llm, scoring, tts
+from services.industry import есть_диагностика
 from services.text import strip_for_speech
 from services.session import (
     STATUS_ACTIVE,
@@ -302,6 +303,11 @@ async def generate_diagnostics_endpoint(request: Request):
     if not контекст["scores_deal"]:
         # Этапная тренировка: сценка диагностики туда не помещается,
         # и кнопки на фронте нет. Генерировать впустую не будем
+        return {"status": "skipped"}
+    if not есть_диагностика(контекст["industry"]):
+        # Второй замок после /api/sessions/start: Node такие сессии сюда
+        # не шлёт, но вызов мимо него сгенерировал бы офису продаж
+        # медицинский осмотр за наши деньги
         return {"status": "skipped"}
     анамнез = (контекст["anamnesis"] or "").strip()
     if not анамнез:

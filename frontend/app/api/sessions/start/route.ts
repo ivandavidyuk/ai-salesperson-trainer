@@ -16,6 +16,8 @@ import { ВЫБОР_ЗАКРЫТ, ДЕМО_ТИП, демоКлиенты } from
 import { backendUrl } from "@/lib/cases";
 import type { CaseService } from "@/lib/caseService";
 import { caseService } from "@/lib/caseServiceQuery";
+import { медицинскаяОтрасль } from "@/lib/industry";
+import { словаОтрасли } from "@/lib/industryWords";
 
 // Организация без собранных случаев: пресет не налит и генерация не запускалась
 const СЛУЧАЙ_НЕ_СОБРАН =
@@ -125,9 +127,13 @@ export async function POST(request: NextRequest) {
     // Проверяем это здесь, а не полагаемся на пустую роль в backend
     const владелец = await prisma.user.findUnique({
       where: { id: user.sub },
-      select: { organizationId: true },
+      select: {
+        organizationId: true,
+        organization: { select: { industry: true } },
+      },
     });
     const organizationId = владелец?.organizationId ?? null;
+    const отрасль = владелец?.organization?.industry ?? "";
     if (!organizationId) {
       return NextResponse.json({ error: СЛУЧАЙ_НЕ_СОБРАН }, { status: 400 });
     }
@@ -146,7 +152,7 @@ export async function POST(request: NextRequest) {
       });
       if (!chosen || !chosen.isActive) {
         return NextResponse.json(
-          { error: "Этот пациент пока недоступен" },
+          { error: `Этот ${словаОтрасли(отрасль).клиент} пока недоступен` },
           { status: 400 }
         );
       }
@@ -226,8 +232,10 @@ export async function POST(request: NextRequest) {
     // микрофон и читает анамнез, — к сценке в разговоре документ уже ждёт
     // кнопки. Fire-and-forget по образцу rebuildCases: упавшая генерация
     // не должна мешать старту разговора, кнопка добёрет синхронно.
-    // Только для сделочного разговора: в этапных упражнениях сценки нет
-    if (scoresDeal) {
+    // Только для сделочного разговора: в этапных упражнениях сценки нет.
+    // И только у клиник: документ — медицинский осмотр, офису продаж он
+    // ни к чему, а генерация стоит денег за каждый разговор
+    if (scoresDeal && медицинскаяОтрасль(отрасль)) {
       void (async () => {
         const token = await signToken({
           userId: user.sub,

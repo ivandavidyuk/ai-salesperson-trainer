@@ -7,7 +7,7 @@
 // по недвижимости у нас нет, а медицинский конвейер собрал бы им диагнозы
 // (каркас недвижимости, п. 8, решение 17.09).
 
-import { industryKey } from "@/scripts/patient-prompt";
+import { industryKey } from "@/scripts/industry-key";
 
 /** Клиника ли это — то есть работает ли для неё сборка случаев */
 export function медицинскаяОтрасль(industry: string): boolean {

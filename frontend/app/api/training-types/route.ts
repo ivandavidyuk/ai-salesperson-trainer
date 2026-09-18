@@ -12,6 +12,8 @@ import { prisma } from "@/lib/db";
 import { getUserWithRole } from "@/lib/access";
 import { демоНаРазговоры } from "@/lib/demoAccess";
 import { ДЕМО_ТИП } from "@/lib/demoScope";
+import { описаниеУпражнения } from "@/lib/industryWords";
+import { industryKey } from "@/scripts/industry-key";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +26,15 @@ export async function GET(request: NextRequest) {
     }
 
     const демо = await демоНаРазговоры(user.organizationId);
+    // Описания упражнений написаны для клиник («пациент возражает») —
+    // у другой отрасли они читаются её словами
+    const организация = user.organizationId
+      ? await prisma.organization.findUnique({
+          where: { id: user.organizationId },
+          select: { industry: true },
+        })
+      : null;
+    const отрасль = industryKey(организация?.industry ?? "");
 
     const types = await prisma.trainingType.findMany({
       orderBy: { position: "asc" },
@@ -39,6 +50,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       types.map((type) => ({
         ...type,
+        description: описаниеУпражнения(type.id, type.description, отрасль),
         demoLocked: демо && type.id !== ДЕМО_ТИП,
       }))
     );

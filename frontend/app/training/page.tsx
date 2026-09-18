@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import AppShell from "@/app/components/AppShell";
 import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
+import { useWords } from "@/app/components/IndustryProvider";
 import {
   GROUP_LABELS,
   ЗАМОК_БЕЙДЖ,
@@ -192,6 +193,7 @@ function SoonBadge({ причина }: { причина: "скоро" | "дем�
 }
 
 export default function TrainingPage() {
+  const слова = useWords();
   const [types, setTypes] = useState<WizardTrainingType[] | null>(null);
   const [error, setError] = useState("");
   const [started, setStarted] = useState<WizardTrainingType | null>(null);
@@ -230,7 +232,7 @@ export default function TrainingPage() {
         </div>
         <p className="mb-6 text-sm text-ink-muted">
           Пройдите разговор целиком или отработайте отдельный этап — на
-          следующем шаге выберете пациента
+          следующем шаге выберете {слова.клиента}
         </p>
 
         {!types && !error && (

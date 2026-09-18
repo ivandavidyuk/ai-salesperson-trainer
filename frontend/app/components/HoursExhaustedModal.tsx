@@ -8,6 +8,7 @@
 // а не форма, которая всё равно упрётся в отказ на последнем шаге.
 
 import { plural } from "@/lib/format";
+import { useWords } from "@/app/components/IndustryProvider";
 
 interface HoursExhaustedModalProps {
   /** Когда лимит обновится, ISO */
@@ -22,6 +23,7 @@ export default function HoursExhaustedModal({
   limitHours,
   onClose,
 }: HoursExhaustedModalProps) {
+  const слова = useWords();
   const обновится = new Date(resetsAt).toLocaleDateString("ru-RU", {
     day: "numeric",
     month: "long",
@@ -40,7 +42,7 @@ export default function HoursExhaustedModal({
         </div>
 
         <p className="mt-4 text-[15.5px] leading-relaxed text-ink-body">
-          Клиника израсходовала месячный лимит —{" "}
+          {слова.Организация} израсходовала месячный лимит —{" "}
           {limitHours} {plural(limitHours, "час", "часа", "часов")} на весь отдел. Новые
           разговоры не начнутся до {обновится}: тогда лимит обновится сам.
         </p>

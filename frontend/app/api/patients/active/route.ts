@@ -10,6 +10,7 @@ import { prisma } from "@/lib/db";
 import { getUserWithRole } from "@/lib/access";
 import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
 import { медицинскаяОтрасль } from "@/lib/industry";
+import { словаОтрасли } from "@/lib/industryWords";
 import { составОтрасли } from "@/scripts/patients";
 
 export const runtime = "nodejs";
@@ -55,7 +56,10 @@ export async function GET(request: NextRequest) {
     });
 
     if (!patient) {
-      return NextResponse.json({ error: "Пациент не найден" }, { status: 404 });
+      return NextResponse.json(
+        { error: `${словаОтрасли(отрасль).Клиент} не найден` },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json(сНаложеннымСлучаем(patient));

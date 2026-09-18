@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { revokeToken, TOKEN_COOKIE } from "@/lib/auth";
+import { снятьОтрасль } from "@/lib/industryCookie";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
       path: "/",
       maxAge: 0,
     });
+    снятьОтрасль(response);
 
     return response;
   } catch (error) {

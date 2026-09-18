@@ -19,6 +19,8 @@ import { ключ } from "@/lib/caseStaleness";
 import { затронутыеСлучаи } from "@/lib/caseStaleness";
 import { ГЕНЕРАЦИЯ_ЗАКРЫТА, этоДемо } from "@/lib/demoAccess";
 import { медицинскаяОтрасль } from "@/lib/industry";
+import { поставитьОтрасль } from "@/lib/industryCookie";
+import { словаОтрасли } from "@/lib/industryWords";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -187,11 +189,20 @@ export async function PUT(request: NextRequest) {
     const name = body.name?.trim() ?? "";
     const city = body.city?.trim() ?? "";
     const industry = body.industry?.trim() ?? "";
+    // Отказы — словами той отрасли, что прислали: руководитель видит их
+    // под своей формой, а она уже говорит этими словами
+    const слова = словаОтрасли(industry);
     if (!name) {
-      return NextResponse.json({ error: "Укажите название клиники" }, { status: 400 });
+      return NextResponse.json(
+        { error: `Укажите ${слова.названиеОрганизации.toLowerCase()}` },
+        { status: 400 }
+      );
     }
     if (!city) {
-      return NextResponse.json({ error: "Укажите город клиники" }, { status: 400 });
+      return NextResponse.json(
+        { error: `Укажите город ${слова.организации}` },
+        { status: 400 }
+      );
     }
     if (!industry) {
       return NextResponse.json({ error: "Укажите отрасль" }, { status: 400 });
@@ -209,7 +220,7 @@ export async function PUT(request: NextRequest) {
 
     if (services.length > MAX_SERVICES) {
       return NextResponse.json(
-        { error: `Не больше ${MAX_SERVICES} услуг` },
+        { error: `Не больше ${MAX_SERVICES} ${слова.позиции[2]}` },
         { status: 400 }
       );
     }
@@ -218,7 +229,7 @@ export async function PUT(request: NextRequest) {
     const incomplete = services.findIndex((s) => !s.name || !s.price);
     if (incomplete >= 0) {
       return NextResponse.json(
-        { error: `В услуге №${incomplete + 1} нужны название и цена` },
+        { error: `${слова.вПозиции} №${incomplete + 1} нужны название и цена` },
         { status: 400 }
       );
     }
@@ -226,7 +237,7 @@ export async function PUT(request: NextRequest) {
     const повторУслуги = повторИмени(services.map((у) => у.name));
     if (повторУслуги) {
       return NextResponse.json(
-        { error: `Услуга «${повторУслуги}» есть в списке дважды — оставьте одну` },
+        { error: `${слова.Позиция} «${повторУслуги}» есть в списке дважды — оставьте одну` },
         { status: 400 }
       );
     }
@@ -245,8 +256,10 @@ export async function PUT(request: NextRequest) {
       );
     }
     // Хотя бы один диагноз обязателен: без списка генератор вернулся бы
-    // к сочинению болезней, ради отказа от которого всё и делается
-    if (diagnoses.length === 0) {
+    // к сочинению болезней, ради отказа от которого всё и делается.
+    // У немедицинской отрасли генератора нет, и раздела диагнозов в форме
+    // тоже: требовать их — значит не дать руководителю сохранить прайс
+    if (diagnoses.length === 0 && медицинскаяОтрасль(industry)) {
       return NextResponse.json(
         { error: "Добавьте хотя бы один диагноз" },
         { status: 400 }
@@ -391,7 +404,14 @@ export async function PUT(request: NextRequest) {
           casesUpdatedAt: new Date(),
         },
       });
-      return NextResponse.json({ ...(await organizationForForm(saved)), affected: 0 });
+      const ответ = NextResponse.json({
+        ...(await organizationForForm(saved)),
+        affected: 0,
+      });
+      // Отрасль могли поменять — cookie догоняет её сразу, а не со
+      // следующей страницей
+      поставитьОтрасль(ответ, industry);
+      return ответ;
     }
 
     // Сборка случаев идёт после ответа: держать HTTP-запрос открытым на
@@ -420,10 +440,12 @@ export async function PUT(request: NextRequest) {
       console.error("Сборка случаев не удалась:", error)
     );
 
-    return NextResponse.json({
+    const ответ = NextResponse.json({
       ...(await organizationForForm(saved)),
       affected: цели.length,
     });
+    поставитьОтрасль(ответ, industry);
+    return ответ;
   } catch (error) {
     console.error("Ошибка в PUT /api/organization:", error);
     return NextResponse.json(

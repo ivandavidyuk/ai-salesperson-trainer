@@ -10,6 +10,7 @@ import PatientInfoModal from "@/app/components/PatientInfoModal";
 import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import PatientAvatar from "@/app/components/PatientAvatar";
+import { useWords } from "@/app/components/IndustryProvider";
 import { plural } from "@/lib/format";
 import {
   DIFFICULTY,
@@ -29,8 +30,11 @@ const FILTERS: { key: "all" | DifficultyKey; label: string }[] = [
 ];
 
 export default function PatientsPage() {
+  const слова = useWords();
   const [patients, setPatients] = useState<WizardPatient[] | null>(null);
-  const [error, setError] = useState("");
+  // Флаг, а не текст: текст говорит словами отрасли, а она может уточниться
+  // уже после ответа (шапка узнаёт её из /api/auth/me)
+  const [error, setError] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | DifficultyKey>("all");
 
@@ -46,7 +50,7 @@ export default function PatientsPage() {
         const data = (await res.json()) as WizardPatient[];
         if (!cancelled) setPatients(data);
       } catch {
-        if (!cancelled) setError("Не удалось загрузить пациентов");
+        if (!cancelled) setError(true);
       }
     })();
     return () => {
@@ -69,16 +73,16 @@ export default function PatientsPage() {
   }, [patients, query, filter]);
 
   return (
-    <AppShell title="Пациенты">
+    <AppShell title={слова.Клиенты}>
       <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px]">
         <div className="mb-1.5 flex items-baseline justify-between gap-4">
           <h1 className="text-[22.5px] font-semibold tracking-[-.01em] text-ink">
-            Библиотека пациентов
+            Библиотека {слова.клиентов}
           </h1>
           {patients && (
             <div className="shrink-0 text-[14.5px] text-ink-subtle">
               {visible.length}{" "}
-              {plural(visible.length, "пациент", "пациента", "пациентов")}
+              {plural(visible.length, слова.клиент, слова.клиента, слова.клиентов)}
             </div>
           )}
         </div>
@@ -107,8 +111,8 @@ export default function PatientsPage() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Поиск по имени или анамнезу"
-              aria-label="Поиск пациента"
+              placeholder={слова.поискПоИмени}
+              aria-label={`Поиск ${слова.клиента}`}
               className="min-w-0 flex-1 bg-transparent text-[16px] text-ink outline-none placeholder:text-ink-placeholder"
             />
           </div>
@@ -149,7 +153,9 @@ export default function PatientsPage() {
         )}
 
         {error && (
-          <p className="py-16 text-center text-sm text-danger-text">{error}</p>
+          <p className="py-16 text-center text-sm text-danger-text">
+            Не удалось загрузить {слова.клиентов}
+          </p>
         )}
 
         {/* Три колонки на всех поддерживаемых ширинах: 365 / 419 / 525px.
@@ -258,6 +264,7 @@ function PatientCard({
   onOpenInfo,
   onStart,
 }: PatientCardProps) {
+  const слова = useWords();
   const { reason } = splitPatientSubtitle(patient.description);
   // Промпта ещё нет или клиент закрыт демо-доступом — тренировку
   // не начать, сервер всё равно откажет
@@ -293,7 +300,7 @@ function PatientCard({
           </div>
         )}
         <p className="mt-[7px] line-clamp-4 text-pretty text-[14.5px] leading-normal text-ink-muted">
-          {patient.anamnesis || "Анамнез пока не заполнен."}
+          {patient.anamnesis || слова.заявкаПуста}
         </p>
       </div>
 
@@ -307,7 +314,7 @@ function PatientCard({
         <button
           type="button"
           onClick={onOpenInfo}
-          title="Подробнее о пациенте"
+          title={`Подробнее ${слова.оКлиенте.toLowerCase()}`}
           className="flex flex-1 items-center justify-center gap-[7px] rounded-input border-[length:1.5px] border-brand bg-surface-accent px-2 py-3 text-sm font-semibold text-brand-hover transition-colors hover:bg-[#DCEDE9]"
         >
           <svg
@@ -335,7 +342,7 @@ function PatientCard({
           disabled={blocked}
           title={
             закрыт === "скоро"
-              ? "Для этого пациента ещё не готов промпт"
+              ? `Для этого ${слова.клиента} ещё не готов промпт`
               : закрыт === "демо"
                 ? "Откроется на полном доступе"
                 : undefined

@@ -13,6 +13,7 @@ import PatientInfoModal from "@/app/components/PatientInfoModal";
 import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import PatientAvatar from "@/app/components/PatientAvatar";
+import { useWords } from "@/app/components/IndustryProvider";
 import { formatDueDate, initials, isOverdue, plural } from "@/lib/format";
 import type { Assignment, DoneAssignment, WizardPatient } from "@/lib/training";
 
@@ -248,6 +249,7 @@ function AssignmentCard({
   onEdit,
   onDelete,
 }: AssignmentCardProps) {
+  const слова = useWords();
   const overdue = isOverdue(assignment.dueAt);
   const due = formatDueDate(assignment.dueAt);
   // Пациента или тип могли отключить после выдачи задания — запускать
@@ -309,7 +311,7 @@ function AssignmentCard({
             <button
               type="button"
               onClick={onOpenPatient}
-              title="О пациенте"
+              title={слова.оКлиенте}
               className="-ml-1 inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-2.5 text-sm text-ink-body transition-colors hover:bg-surface-bubble"
             >
               <PatientAvatar
@@ -384,7 +386,7 @@ function AssignmentCard({
             disabled={blocked}
             title={
               blocked
-                ? "Пациент или тип тренировки пока недоступен"
+                ? `${слова.Клиент} или тип тренировки пока недоступен`
                 : "Начать тренировку"
             }
             className={`shrink-0 self-stretch px-[34px] text-base font-semibold text-white transition-colors ${

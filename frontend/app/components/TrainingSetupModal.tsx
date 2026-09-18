@@ -18,6 +18,7 @@ import PatientInfoModal from "@/app/components/PatientInfoModal";
 import PatientAvatar from "@/app/components/PatientAvatar";
 import Loader from "@/app/components/Loader";
 import Spinner from "@/app/components/Spinner";
+import { useWords } from "@/app/components/IndustryProvider";
 import { formatDueDate, initials } from "@/lib/format";
 import {
   DIFFICULTY,
@@ -80,9 +81,13 @@ type StepKey = "assign" | "type" | "patient" | "review";
 const STEP_META: Record<StepKey, { label: string; hint: string }> = {
   assign: { label: "Кому", hint: "Выберите менеджера и опишите задание" },
   type: { label: "Тип", hint: "Выберите тип тренировки" },
+  // Подпись шага клиента — словом отрасли, см. шагиСловами в мастере
   patient: { label: "Пациент", hint: "Выберите пациента" },
   review: { label: "Обзор", hint: "Проверьте параметры и начните" },
 };
+
+/** Ошибка загрузки типов и клиентов: текст собирается при показе — словами отрасли */
+const ОШИБКА_ТИПОВ = "types";
 
 const FILTERS: { key: "all" | DifficultyKey; label: string }[] = [
   { key: "all", label: "Все" },
@@ -164,6 +169,11 @@ export default function TrainingSetupModal({
   onPick,
 }: TrainingSetupModalProps) {
   const router = useRouter();
+  const слова = useWords();
+  const шагиСловами: typeof STEP_META = {
+    ...STEP_META,
+    patient: { label: слова.Клиент, hint: `Выберите ${слова.клиента}` },
+  };
 
   // Проверка лимита живёт ЗДЕСЬ, а не в пяти местах, откуда мастер
   // открывается. Разложи её по кнопкам — и шестая точка входа, добавленная
@@ -231,6 +241,10 @@ export default function TrainingSetupModal({
   const [types, setTypes] = useState<WizardTrainingType[] | null>(null);
   const [patients, setPatients] = useState<WizardPatient[] | null>(null);
   const [loadError, setLoadError] = useState("");
+  const текстОшибки =
+    loadError === ОШИБКА_ТИПОВ
+      ? `Не удалось загрузить типы тренировки и ${слова.клиентов}`
+      : loadError;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | DifficultyKey>("all");
 
@@ -287,7 +301,7 @@ export default function TrainingSetupModal({
         }
       } catch {
         if (!cancelled) {
-          setLoadError("Не удалось загрузить типы тренировки и пациентов");
+          setLoadError(ОШИБКА_ТИПОВ);
         }
       }
     })();
@@ -474,7 +488,7 @@ export default function TrainingSetupModal({
               <div className="mt-[3px] text-pretty text-[15px] text-ink-muted">
                 {assignment
                   ? `Задание: ${assignment.title}`
-                  : `Шаг ${step + 1} из ${steps.length} · ${STEP_META[currentStep].hint}`}
+                  : `Шаг ${step + 1} из ${steps.length} · ${шагиСловами[currentStep].hint}`}
               </div>
             </div>
             <button
@@ -518,7 +532,7 @@ export default function TrainingSetupModal({
                           : "font-medium text-ink-placeholder"
                     }`}
                   >
-                    {STEP_META[key].label}
+                    {шагиСловами[key].label}
                   </span>
                   {!last && (
                     <span
@@ -648,7 +662,7 @@ export default function TrainingSetupModal({
           )}
 
           {currentStep === "type" && loadError && (
-            <p className="py-9 text-center text-sm text-danger-text">{loadError}</p>
+            <p className="py-9 text-center text-sm text-danger-text">{текстОшибки}</p>
           )}
 
           {currentStep === "type" && types && (
@@ -694,8 +708,8 @@ export default function TrainingSetupModal({
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Поиск по имени или анамнезу"
-                  aria-label="Поиск пациента"
+                  placeholder={слова.поискПоИмени}
+                  aria-label={`Поиск ${слова.клиента}`}
                   className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-placeholder"
                 />
               </div>
@@ -735,7 +749,7 @@ export default function TrainingSetupModal({
               )}
 
               {loadError && (
-                <p className="py-9 text-center text-sm text-danger-text">{loadError}</p>
+                <p className="py-9 text-center text-sm text-danger-text">{текстОшибки}</p>
               )}
 
               <div className="flex flex-col gap-2">
@@ -760,7 +774,7 @@ export default function TrainingSetupModal({
                           event.stopPropagation();
                           setInfoPatient(patient);
                         }}
-                        title="О пациенте"
+                        title={слова.оКлиенте}
                         // У выбранной строки фон тиловый, и серый ховер на нём
                         // почти не читается — берём тот же оттенок, что на «Обзоре»
                         className={`-ml-1 inline-flex min-w-0 items-center gap-2.5 rounded-full py-1 pl-1 pr-2.5 transition-colors ${
@@ -828,7 +842,7 @@ export default function TrainingSetupModal({
           )}
 
           {currentStep === "review" && loadError && (
-            <p className="py-9 text-center text-sm text-danger-text">{loadError}</p>
+            <p className="py-9 text-center text-sm text-danger-text">{текстОшибки}</p>
           )}
 
           {currentStep === "review" && selectedType && selectedPatient && (
@@ -868,14 +882,14 @@ export default function TrainingSetupModal({
 
               <div>
                 <div className="mb-2.5 font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
-                  Пациент
+                  {слова.Клиент}
                 </div>
                 <div className="rounded-xl border-[length:1.5px] border-line-accent bg-surface-accent px-4 py-[15px]">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setInfoPatient(selectedPatient)}
-                      title="О пациенте"
+                      title={слова.оКлиенте}
                       className="-ml-1 inline-flex min-w-0 items-center gap-3 rounded-full py-1.5 pl-1.5 pr-3 transition-colors hover:bg-[#DCEDE9]"
                     >
                       <PatientAvatar
