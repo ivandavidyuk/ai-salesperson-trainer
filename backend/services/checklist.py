@@ -466,6 +466,7 @@ def snapshot(
     stage_keys: Sequence[str],
     *,
     reason: Optional[str] = None,
+    industry: str = "",
 ) -> list[dict]:
     """Разбор по пунктам в том виде, в каком его хранит SessionReview.checklist.
 
@@ -476,6 +477,10 @@ def snapshot(
     `reason` — почему этап не измерен. Пишется только к неизмеренному:
     экран показывает эту строку вместо пяти «не выполнено», и без неё
     человек читает отсутствие отметок как обвинение.
+
+    `industry` — отрасль организации. Снимок пишется её словами той же
+    таблицей, что и рубрика оценщика: менеджер читает пункты, по которым
+    его оценили. У клиник перевод тождественный — снимок прежний до байта.
     """
     result = []
     for key in stage_keys:
@@ -486,12 +491,18 @@ def snapshot(
             mark = stage_marks[position] if stage_marks is not None else 0
             msg = stage_msgs[position] if position < len(stage_msgs) else None
             items.append(
-                {"n": item.n, "name": item.name, "full": item.full, "mark": mark, "msg": msg}
+                {
+                    "n": item.n,
+                    "name": по_отрасли(item.name, industry),
+                    "full": по_отрасли(item.full, industry),
+                    "mark": mark,
+                    "msg": msg,
+                }
             )
         измерен = stage_marks is not None
         строка = {"stage": key, "measured": измерен, "items": items}
         if not измерен and reason:
-            строка["reason"] = reason
+            строка["reason"] = по_отрасли(reason, industry)
         result.append(строка)
     return result
 

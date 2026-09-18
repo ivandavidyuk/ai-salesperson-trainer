@@ -524,7 +524,9 @@ async def review_conversation(
         strength=str(result.get("strength", "")).strip(),
         growth_point=str(result.get("growthPoint", "")).strip(),
         judge_notes=str(result.get("judgeNotes", "")).strip(),
-        checklist=checklist.snapshot(marks, msgs, checklist.STAGE_KEYS_ALL),
+        checklist=checklist.snapshot(
+            marks, msgs, checklist.STAGE_KEYS_ALL, industry=industry
+        ),
     )
 
 
@@ -676,6 +678,7 @@ async def _review_drill(
             msgs,
             (items_key,),
             reason=условие.reason if (не_измерено and условие) else None,
+            industry=industry,
         )
         if не_измерено and условие:
             logger.info("Упражнение %s не состоялось: %s", items_key, условие.reason)
