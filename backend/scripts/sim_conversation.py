@@ -49,7 +49,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.config import get_settings  # noqa: E402
 from services import checklist, llm, scoring  # noqa: E402
-from services.industry import pick_variant  # noqa: E402
+from services.industry import (  # noqa: E402
+    НЕДВИЖИМОСТЬ,
+    industry_key,
+    pick_variant,
+    translate as по_отрасли,
+)
 
 
 def load_lines(path: str) -> list[str]:
@@ -129,7 +134,8 @@ async def тип_тренировки(type_id: str, industry: str = "") -> dict:
     try:
         row = await pool.fetchrow(
             'SELECT "title", "description", "prompt", "promptByIndustry", "rubric", '
-            '"doneWhen", "stageKey", "scoresDeal" FROM "TrainingType" WHERE "id" = $1',
+            '"rubricByIndustry", "doneWhen", "doneWhenByIndustry", "stageKey", "scoresDeal" '
+            'FROM "TrainingType" WHERE "id" = $1',
             type_id,
         )
     finally:
@@ -138,6 +144,11 @@ async def тип_тренировки(type_id: str, industry: str = "") -> dict:
         raise SystemExit(f"типа тренировки «{type_id}» нет в базе")
     тип = dict(row)
     тип["prompt"] = pick_variant(тип["prompt"], тип.pop("promptByIndustry"), industry)
+    # Рубрика и критерий — тем же выбором, что у оценщика в бою
+    # (services/session.py): иначе прогон упражнения недвижимости мерил бы
+    # по клинической сцене «у стойки, по дороге в кабинет»
+    тип["rubric"] = pick_variant(тип["rubric"], тип.pop("rubricByIndustry"), industry)
+    тип["doneWhen"] = pick_variant(тип["doneWhen"], тип.pop("doneWhenByIndustry"), industry)
     return тип
 
 
@@ -152,16 +163,21 @@ async def тип_тренировки(type_id: str, industry: str = "") -> dict:
 _ХОДОВ_У_МОДЕЛИ = 11
 
 
-def промпт_менеджера(описание: str) -> str:
+def промпт_менеджера(описание: str, industry: str = "") -> str:
     """Роль менеджера для режима `llm`.
 
     Даём ровно то, что видит живой менеджер на карточке упражнения, —
     `description`. Ни рубрику, ни критерий: с ними прогон проверял бы
     не навык, а умение подогнать ответ под известную проверку.
     """
-    return (
-        "Ты — менеджер по продажам в частной клинике, разговариваешь "
-        "с пациентом.\n\n"
+    где = (
+        "Ты — менеджер отдела продаж застройщика, разговариваешь с покупателем "
+        "квартиры."
+        if industry_key(industry) == НЕДВИЖИМОСТЬ
+        else "Ты — менеджер по продажам в частной клинике, разговариваешь с пациентом."
+    )
+    return по_отрасли(
+        f"{где}\n\n"
         f"Сейчас ты отрабатываешь навык: {описание}\n\n"
         "Разговор идёт с середины: знакомство и рассказ о проблеме уже позади. "
         "Не здоровайся и не начинай сначала — продолжай с того, что говорит "
@@ -170,7 +186,8 @@ def промпт_менеджера(описание: str) -> str:
         "Говори как живой человек: коротко, одна мысль за реплику, без "
         "списков и заголовков. Отвечай на то, что пациент сказал прямо "
         "сейчас, а не по заготовленному плану.\n\n"
-        "В ответе — только твоя реплика, без пояснений и без кавычек."
+        "В ответе — только твоя реплика, без пояснений и без кавычек.",
+        industry,
     )
 
 
@@ -230,7 +247,7 @@ async def main() -> None:
     if менеджер_модель:
         if тип is None:
             raise SystemExit("режим llm без типа: менеджеру нечего отрабатывать")
-        роль_менеджера = промпт_менеджера(тип["description"])
+        роль_менеджера = промпт_менеджера(тип["description"], industry)
         print(f"менеджера играет модель | ходов: {ходов}")
         print(f"что он знает об упражнении: {тип['description']}\n")
     else:

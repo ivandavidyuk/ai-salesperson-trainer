@@ -11,6 +11,7 @@
 
 import { useEffect } from "react";
 import PatientAvatar from "@/app/components/PatientAvatar";
+import { useWords } from "@/app/components/IndustryProvider";
 import {
   DIFFICULTY,
   splitPatientSubtitle,
@@ -68,6 +69,7 @@ export default function PatientInfoModal({
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
 
+  const слова = useWords();
   const difficulty = DIFFICULTY[patient.difficulty];
   const { age, reason } = splitPatientSubtitle(patient.description);
 
@@ -77,7 +79,7 @@ export default function PatientInfoModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={`О пациенте: ${patient.name}`}
+      aria-label={`${слова.оКлиенте}: ${patient.name}`}
     >
       <div
         className="flex max-h-full w-[640px] max-w-full flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-[0_30px_80px_-30px_rgba(12,26,24,.7)]"
@@ -149,7 +151,7 @@ export default function PatientInfoModal({
                 reason ? "mt-3" : ""
               }`}
             >
-              {patient.anamnesis || "Анамнез пока не заполнен."}
+              {patient.anamnesis || слова.заявкаПуста}
             </p>
           </div>
 
@@ -229,7 +231,7 @@ export default function PatientInfoModal({
               title={
                 patient.isActive
                   ? undefined
-                  : "Этот пациент больше не доступен"
+                  : `Этот ${слова.клиент} больше не доступен`
               }
               className={`flex items-center gap-2 rounded-input px-[22px] py-[11px] text-[16.5px] font-semibold text-white transition-colors ${
                 patient.isActive

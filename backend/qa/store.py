@@ -14,6 +14,7 @@ from typing import Optional
 import asyncpg
 
 from core.config import get_settings
+from services.industry import МЕДИЦИНА, industry_key, pick_variant
 
 # Слаг пациента живёт в репозитории (frontend/scripts/patients/<слаг>.ts),
 # а в базе его нет — там только имя. Соответствие держим здесь явным списком:
@@ -23,23 +24,30 @@ from core.config import get_settings
 # проверка тихо станет неполной. Поэтому при расхождении инструмент ругается.
 СЛАГИ: dict[str, str] = {
     "Анжелика Сергеевна": "anzhelika-kravtsova",
+    "Артём Сергеевич": "artem-kovalev",
     "Борис Семёнович": "boris-kaplan",
     "Ван Хао": "van-hao",
     "Виталий Эдуардович": "vitaly-kuznetsov",
     "Галина Петровна": "galina-zaytseva",
     "Григорий Игоревич": "grigory-logvinov",
     "Гульсара Рустамовна": "gulsara-karimova",
+    "Дарья Олеговна": "darya-melnikova",
+    "Денис Александрович": "denis-vorontsov",
     "Джамшид Толибович": "dzhamshid-akhmedov",
     "Егор Алексеевич": "egor-borisov",
     "Елена Андреевна": "elena-voroshilova",
     "Игорь Владимирович": "igor-mitin",
+    "Кристина Вадимовна": "kristina-orlova",
     "Леонид Петрович": "leonid-gromov",
     "Мария Андреевна": "maria-slavnova",
     "Михаил Данилович": "mikhail-kravtsov",
     "Николай Васильевич": "nikolay-baranov",
     "Оксана Викторовна": "oksana-kuznetsova",
+    "Олег Викторович": "oleg-shestakov",
+    "Павел Андреевич": "pavel-klimov",
     "Роман Игоревич": "roman-savelyev",
     "Рустам Каримович": "rustam-aliev",
+    "Светлана Юрьевна": "svetlana-belova",
     "Станислав Геннадьевич": "stanislav-shvets",
     "Тамара Михайловна": "tamara-sokolova",
     "Юлия Андреевна": "yulia-tkachenko",
@@ -79,7 +87,10 @@ _КЛИНИКА = (
 )
 
 _ТИПЫ = (
-    'SELECT "id", "title", "description", "prompt", "rubric", "doneWhen", '
+    # Тексты типа — вместе с отраслевыми вариантами: сцену, рубрику
+    # и критерий выбираем по отрасли организации, как бой (services/session.py)
+    'SELECT "id", "title", "description", "prompt", "promptByIndustry", '
+    '"rubric", "rubricByIndustry", "doneWhen", "doneWhenByIndustry", '
     '"stageKey", "scoresDeal" '
     'FROM "TrainingType" WHERE "isActive" = true ORDER BY "position"'
 )
@@ -171,8 +182,16 @@ async def загрузить(
 
     замечания: list[str] = []
     пациенты: list[Пациент] = []
+    # У неклиники в базе все персонажи, а случай — только у состава её
+    # отрасли. Остальные без промпта по определению, и замечание на каждого
+    # утопило бы настоящие; считаем их одной строкой
+    отрасль = клиника.отрасль if клиника else ""
+    чужие = 0
     for строка in пациенты_строки:
         промпт = (строка["prompt"] or "").strip()
+        if not промпт and industry_key(отрасль) != МЕДИЦИНА:
+            чужие += 1
+            continue
         if not промпт:
             замечания.append(
                 f"у пациента «{строка['name']}» пустой промпт — в матрицу не берём"
@@ -194,14 +213,20 @@ async def загрузить(
             )
         )
 
+    if чужие:
+        замечания.append(
+            f"{чужие} персонажей без случая в организации «{отрасль}» — не из состава "
+            "отрасли, в матрицу не берём"
+        )
+
     типы = [
         ТипТренировки(
             слаг=строка["id"],
             название=строка["title"],
             описание=строка["description"],
-            промпт=строка["prompt"],
-            рубрика=строка["rubric"],
-            критерий=строка["doneWhen"],
+            промпт=pick_variant(строка["prompt"], строка["promptByIndustry"], отрасль),
+            рубрика=pick_variant(строка["rubric"], строка["rubricByIndustry"], отрасль),
+            критерий=pick_variant(строка["doneWhen"], строка["doneWhenByIndustry"], отрасль),
             ключ_этапа=строка["stageKey"],
             считает_сделку=строка["scoresDeal"],
         )

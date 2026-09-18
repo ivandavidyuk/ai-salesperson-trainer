@@ -28,6 +28,7 @@ import {
 } from "@/lib/transcript";
 import { formatDuration } from "@/lib/format";
 import Loader from "@/app/components/Loader";
+import { useWords } from "@/app/components/IndustryProvider";
 import {
   OUTCOME_LABELS,
   SCORE_WARN_BELOW,
@@ -439,6 +440,7 @@ function ChecklistItems({
 
 /** Этап, которого в разговоре не было: ни числа, ни полоски — пунктир и фраза */
 function UnmeasuredStage({ label }: { label: string }) {
+  const слова = useWords();
   return (
     <div className="border-t border-line-soft py-[13px]">
       <div className="flex items-baseline gap-2">
@@ -447,7 +449,7 @@ function UnmeasuredStage({ label }: { label: string }) {
       </div>
       <div className="mt-[11px] border-t border-dotted border-disabled" />
       <p className="mt-[9px] text-pretty text-[13px] leading-normal text-ink-subtle">
-        Пациент не возражал — этапа в этом разговоре не было. В общую оценку не входит.
+        {слова.Клиент} не возражал — этапа в этом разговоре не было. В общую оценку не входит.
       </p>
     </div>
   );

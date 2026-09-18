@@ -17,6 +17,7 @@ import CallAvatar from "@/app/components/CallAvatar";
 import CaseServiceBlock from "@/app/components/CaseServiceBlock";
 import CaseServiceToggle from "@/app/components/CaseServiceToggle";
 import DiagnosticsDocument from "@/app/components/DiagnosticsDocument";
+import { useIndustry, useWords } from "@/app/components/IndustryProvider";
 import Logo from "@/app/components/Logo";
 import SpeakerPill from "@/app/components/SpeakerPill";
 import Timer from "@/app/components/Timer";
@@ -103,6 +104,10 @@ export default function SessionPage() {
 function SessionScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const слова = useWords();
+  // Сценки диагностики нет у неклиник: покупатель квартиры «к врачу
+  // не ходит», и документ для него не собирается (см. sessions/start)
+  const естьДиагностика = useIndustry() === "медицина";
   // Параметры из мастера настройки. Их может не быть: на /session можно
   // зайти напрямую — тогда работает прежний путь с активным пациентом.
   const chosenPatientId = searchParams.get("patient");
@@ -712,7 +717,7 @@ function SessionScreen() {
           <>
             <CallAvatar name={patient?.name ?? null} state="idle" />
             <div className="mt-[18px] text-[23.5px] font-semibold text-ink">
-              {patient?.name ?? "Пациент"}
+              {patient?.name ?? слова.Клиент}
             </div>
             {patient?.description && (
               <div className="mt-1 text-sm text-ink-muted">
@@ -735,7 +740,7 @@ function SessionScreen() {
             {patient?.anamnesis && (
               <div className="mt-[22px] flex max-h-[50vh] w-full max-w-[440px] flex-col rounded-xl border border-line bg-surface px-[18px] py-4">
                 <div className="mb-1.5 shrink-0 text-[12.5px] font-semibold uppercase tracking-[.08em] text-ink-subtle">
-                  Анамнез
+                  {слова.Заявка}
                 </div>
                 <div className="min-h-0 overflow-y-auto text-sm leading-normal text-ink-label">
                   {patient.anamnesis}
@@ -862,7 +867,7 @@ function SessionScreen() {
               }
             />
             <div className="mt-[30px] text-[31px] font-semibold text-ink">
-              {patient?.name ?? "Пациент"}
+              {patient?.name ?? слова.Клиент}
             </div>
             {/* Название упражнения — моноширинной подписью, а не обычным
                 серым набором. Обычным оно читалось бы второй строкой
@@ -968,7 +973,7 @@ function SessionScreen() {
                   показа. Маркера «сценка отыграна» нет намеренно: менеджер
                   сам решает, когда пациент «сходил», — сценку он всё равно
                   отыгрывает голосом, кнопка лишь выдаёт документ */}
-              {fullConversation && !diagnostics && (
+              {fullConversation && естьДиагностика && !diagnostics && (
                 <button
                   type="button"
                   onClick={handleDiagnostics}

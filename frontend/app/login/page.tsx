@@ -13,9 +13,12 @@ import Alert from "@/app/components/Alert";
 import Button from "@/app/components/Button";
 import Field from "@/app/components/Field";
 import Logo from "@/app/components/Logo";
+import { useSetIndustry } from "@/app/components/IndustryProvider";
+import { ключИзСлага } from "@/lib/industryWords";
 
 export default function LoginPage() {
   const router = useRouter();
+  const задатьОтрасль = useSetIndustry();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,6 +39,11 @@ export default function LoginPage() {
       });
 
       if (res.ok) {
+        // Отрасль известна сразу: главная откроется словами своей отрасли,
+        // не дожидаясь, пока её узнает шапка. Переход клиентский, и layout
+        // с cookie до следующей полной загрузки не перерисовывается
+        const данные = (await res.json().catch(() => null)) as { industry?: string } | null;
+        задатьОтрасль(ключИзСлага(данные?.industry));
         // Успешный вход — переходим на главную
         router.push("/");
         return;

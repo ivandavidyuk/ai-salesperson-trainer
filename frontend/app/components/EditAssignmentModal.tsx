@@ -13,6 +13,7 @@ import Field from "@/app/components/Field";
 import PatientAvatar from "@/app/components/PatientAvatar";
 import Spinner from "@/app/components/Spinner";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
+import { useWords } from "@/app/components/IndustryProvider";
 import { initials } from "@/lib/format";
 import { splitPatientSubtitle } from "@/lib/training";
 import type {
@@ -53,6 +54,7 @@ export default function EditAssignmentModal({
   onClose,
   onSaved,
 }: EditAssignmentModalProps) {
+  const слова = useWords();
   const [черновик, setЧерновик] = useState<Черновик>({
     title: assignment.title,
     comment: assignment.comment,
@@ -173,7 +175,7 @@ export default function EditAssignmentModal({
               onChange={(event) =>
                 setЧерновик({ ...черновик, title: event.target.value })
               }
-              placeholder="Возражение по цене операции"
+              placeholder={слова.примерЗадания}
             />
 
             <div className="grid grid-cols-2 gap-4">
@@ -210,7 +212,7 @@ export default function EditAssignmentModal({
             />
 
             <ВыборСтрокой
-              метка="Пациент"
+              метка={слова.Клиент}
               заголовок={черновик.patientName}
               подпись={age}
               слева={

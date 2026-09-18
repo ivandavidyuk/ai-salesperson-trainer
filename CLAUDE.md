@@ -34,6 +34,8 @@ npm run seed:achievements             # достижения
 npm run seed:team                     # демо-менеджеры для статистики РОПа
 npm run seed:demo                     # демо-аккаунт и задания (после двух сидов выше)
 npm run create-user                   # интерактивно (ввод — за пользователем)
+npm run create-client -- --company "…" --industry недвижимость --head "почта=Имя" --manager "почта"
+                                      # клиент на полный доступ: РОП, менеджеры, копия пресета
 
 cd backend
 .\.venv\Scripts\Activate.ps1

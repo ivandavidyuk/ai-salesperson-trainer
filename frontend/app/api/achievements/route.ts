@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
+import { словомОтрасли } from "@/lib/industryWords";
+import { industryKey } from "@/scripts/industry-key";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,20 +20,29 @@ export async function GET(request: NextRequest) {
 
     // Одним запросом: все достижения плюс связь текущего пользователя.
     // where внутри include оставляет максимум одну строку на достижение.
-    const rows = await prisma.achievement.findMany({
-      orderBy: { position: "asc" },
-      include: {
-        users: {
-          where: { userId: user.sub },
-          select: { unlockedAt: true },
+    // Описания написаны для клиник («диалог с пациентом») — у другой
+    // отрасли они читаются её словами
+    const [rows, владелец] = await Promise.all([
+      prisma.achievement.findMany({
+        orderBy: { position: "asc" },
+        include: {
+          users: {
+            where: { userId: user.sub },
+            select: { unlockedAt: true },
+          },
         },
-      },
-    });
+      }),
+      prisma.user.findUnique({
+        where: { id: user.sub },
+        select: { organization: { select: { industry: true } } },
+      }),
+    ]);
+    const отрасль = industryKey(владелец?.organization?.industry ?? "");
 
     const items = rows.map((row) => ({
       id: row.id,
       name: row.name,
-      description: row.description,
+      description: словомОтрасли(row.description, отрасль),
       icon: row.icon,
       tone: row.tone,
       unlockedAt: row.users[0]?.unlockedAt.toISOString() ?? null,

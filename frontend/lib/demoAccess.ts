@@ -19,6 +19,7 @@
 // часов (lib/hours.ts): демо-организации он ставится в 3 часа при выдаче.
 
 import { prisma } from "@/lib/db";
+import { медицинскаяОтрасль } from "@/lib/industry";
 import { ЕСТЬ_РЕПЛИКА_МЕНЕДЖЕРА } from "@/lib/statsWindow";
 
 // Что именно открыто в демо — в lib/demoScope.ts: те константы нужны
@@ -31,6 +32,8 @@ const ХВОСТ_МС = 7 * СУТКИ_МС;
 
 export interface DemoStatus {
   organizationId: string;
+  /** Отрасль организации: от неё зависит, кто открыт в демо на разговоры */
+  industry: string;
   /** Чем меряется доступ */
   режим: "сутки" | "разговоры";
   /**
@@ -60,6 +63,7 @@ export async function демоСтатус(
       organization: {
         select: {
           id: true,
+          industry: true,
           isDemo: true,
           demoExpiresAt: true,
           demoTalksLimit: true,
@@ -77,6 +81,7 @@ export async function демоСтатус(
     const истекает = org.demoExpiresAt;
     return {
       organizationId: org.id,
+      industry: org.industry,
       режим: "сутки",
       expiresAt: истекает,
       осталось: null,
@@ -114,6 +119,7 @@ export async function демоСтатус(
 
   return {
     organizationId: org.id,
+    industry: org.industry,
     режим: "разговоры",
     expiresAt: исчерпано,
     осталось,
@@ -153,11 +159,22 @@ export async function демоНаРазговоры(
   return Boolean(org?.isDemo && org.demoTalksLimit !== null);
 }
 
-/** Текст отказа на попытку пересобрать случаи в демо — один на оба роута */
+/** Текст отказа на попытку пересобрать случаи в демо у клиники */
 export const ГЕНЕРАЦИЯ_ЗАКРЫТА =
   "В демо-режиме клиника и пациенты уже настроены — их набор менять нельзя. " +
   "На полном доступе вы сможете описать свои услуги и диагнозы, и пациенты " +
   "пересоберутся под них.";
+
+/**
+ * Тот же отказ словами отрасли: у офиса продаж нет ни диагнозов, ни
+ * пересборки — клиенты написаны заранее, а на полном доступе правят прайс
+ */
+export function генерацияЗакрыта(industry: string): string {
+  return медицинскаяОтрасль(industry)
+    ? ГЕНЕРАЦИЯ_ЗАКРЫТА
+    : "В демо-режиме компания и клиенты уже настроены — их набор менять нельзя. " +
+        "На полном доступе вы сможете описать свой прайс и условия.";
+}
 
 /**
  * Засекает первый разговор суточного демо: с этого момента сутки тикают.

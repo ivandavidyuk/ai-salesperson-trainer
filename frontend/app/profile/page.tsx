@@ -12,7 +12,10 @@ import Loader from "@/app/components/Loader";
 import { HoursCard } from "@/app/components/HoursCard";
 import { ResetStatsCard } from "@/app/components/ResetStatsCard";
 import { compressAvatar } from "@/lib/avatar";
+import { useIndustry, useSetIndustry } from "@/app/components/IndustryProvider";
 import { initials, plural } from "@/lib/format";
+import { словаДляКлюча, числоПозиций, type IndustryWords } from "@/lib/industryWords";
+import { industryKey } from "@/scripts/industry-key";
 
 interface Profile {
   id: string;
@@ -31,6 +34,10 @@ interface ServiceRow {
   name: string;
   price: string;
   description: string;
+  /** Сколько клиентов стоит на позиции — только у неклиник, с сервера.
+      Такую позицию нельзя удалить или переименовать: случаи ищут цену
+      по её точному названию */
+  clients?: number;
 }
 
 interface DiagnosisRow {
@@ -592,6 +599,8 @@ function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
 // у пациентов, поэтому от качества этих данных зависит, во что играет
 // тренажёр — карточка стоит первой в колонке.
 function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
+  const отрасльКонтекста = useIndustry();
+  const задатьОтрасль = useSetIndustry();
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState<Organization | null>(null);
   const [name, setName] = useState("");
@@ -653,6 +662,16 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
     return () => clearInterval(timer);
   }, [progress === null, load]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Слова и разделы — по отрасли в форме, а не по сохранённой: сервер
+  // проверяет присланную отрасль, и форма обязана требовать то же, что он.
+  // Пока отрасль не указана — по отрасли из cookie, как и весь интерфейс
+  const отрасль = industry.trim() ? industryKey(industry) : отрасльКонтекста;
+  const медицина = отрасль === "медицина";
+  // Отрасль неклиники меняем только мы, и поля у неё нет вовсе. Судим по
+  // сохранённой, а не по введённой: иначе у клиники поле исчезало бы прямо
+  // под пальцами, стоило набрать «недвижимость»
+  const отрасльЗакреплена = saved !== null && industryKey(saved.industry) !== "медицина";
+  const слова = словаДляКлюча(отрасль);
   const filled =
     name.trim() !== "" &&
     city.trim() !== "" &&
@@ -660,9 +679,11 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
     services.length > 0 &&
     services.every((s) => s.name.trim() && s.price.trim()) &&
     // Диагнозы обязательны наравне с услугами: без списка генератор вернулся
-    // бы к сочинению болезней, ради отказа от которого всё и делалось
-    diagnoses.length > 0 &&
-    diagnoses.every((d) => d.name.trim() && d.complaint.trim());
+    // бы к сочинению болезней, ради отказа от которого всё и делалось.
+    // У немедицинской отрасли генератора нет — нет и раздела диагнозов
+    (!медицина ||
+      (diagnoses.length > 0 &&
+        diagnoses.every((d) => d.name.trim() && d.complaint.trim())));
   const changed =
     !saved ||
     saved.name !== name ||
@@ -689,6 +710,8 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
       setSaved(data);
       setServices(data.services ?? []);
       setDiagnoses(data.diagnoses ?? []);
+      // Отрасль могли поменять — меню и соседние экраны говорят её словами
+      задатьОтрасль(industryKey(data.industry ?? ""));
       // Правка могла не задеть никого — например, поменяли только цену.
       // Тогда сборки нет, и окно ожидания над ней было бы обманом:
       // оно ждёт события, которого не будет
@@ -765,7 +788,9 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
   if (loading) {
     return (
       <div className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px]">
-        <div className="text-[17px] font-semibold text-ink">Клиника и услуги</div>
+        <div className="text-[17px] font-semibold text-ink">
+          {слова.карточкаОрганизации}
+        </div>
         <p className="mt-3 text-[15px] text-ink-muted">Загружаем…</p>
       </div>
     );
@@ -804,7 +829,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
             выглядит как проглоченное нажатие */}
         {outcome === "none" && (
           <div className="flex items-center gap-2.5 border-b border-line bg-surface-bubble px-6 py-[11px] text-[15px] font-medium text-ink-muted">
-            Сохранено. Пациентов пересобирать не пришлось — правка их не коснулась.
+            {слова.сохраненоБезСборки}
           </div>
         )}
         {/* Плашка говорит о состоянии, а не о нажатой кнопке: недособранная
@@ -834,11 +859,11 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
         <div className="px-6 pb-6 pt-[22px]">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-[17px] font-semibold text-ink">Клиника и услуги</div>
+              <div className="text-[17px] font-semibold text-ink">
+                {слова.карточкаОрганизации}
+              </div>
               <p className="mt-1 max-w-[520px] text-[14.5px] leading-normal text-ink-muted">
-                {editable
-                  ? "По этому описанию тренажёр собирает пациентов: с чем они приходят, что спрашивают и о чём торгуются."
-                  : "Услуги, цены и диагнозы клиники — то, с чем приходят пациенты и что вы им предлагаете. Задаёт руководитель."}
+                {editable ? слова.описаниеРуководителю : слова.описаниеМенеджеру}
               </p>
             </div>
             {editable && (
@@ -853,11 +878,11 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
           {editable ? (
             <div className="mt-[18px] grid grid-cols-[1fr_232px] items-start gap-x-4 gap-y-3.5">
               <div>
-                <FieldLabel>Название клиники</FieldLabel>
+                <FieldLabel>{слова.названиеОрганизации}</FieldLabel>
                 <TextInput
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Как называется клиника"
+                  placeholder={слова.какНазывается}
                 />
               </div>
               <div>
@@ -868,45 +893,48 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                   placeholder="Например: Казань"
                 />
               </div>
-              <div className="col-span-2">
-                <FieldLabel>Специализация клиники</FieldLabel>
-                <TextInput
-                  value={industry}
-                  onChange={(e) => setIndustry(e.target.value)}
-                  placeholder="Например: стоматология — терапия и имплантация"
-                />
-                <p className="mt-1.5 text-[13px] leading-snug text-ink-muted">
-                  Укажите точную отрасль вашей компании. От этого зависит качество
-                  генерации карточек пациентов
-                </p>
-              </div>
+              {!отрасльЗакреплена && (
+                <div className="col-span-2">
+                  <FieldLabel>{слова.специализация}</FieldLabel>
+                  <TextInput
+                    value={industry}
+                    onChange={(e) => setIndustry(e.target.value)}
+                    placeholder={слова.специализацияПример}
+                  />
+                  <p className="mt-1.5 text-[13px] leading-snug text-ink-muted">
+                    {слова.специализацияПодсказка}
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             /* Те же три поля, но текстом: поле ввода без права ввода
                читается как поломка, а не как правило */
             <div className="mt-[18px] grid grid-cols-[1fr_232px] items-start gap-x-4 gap-y-3.5">
               <div>
-                <FieldLabel>Название клиники</FieldLabel>
+                <FieldLabel>{слова.названиеОрганизации}</FieldLabel>
                 <div className="text-[16px] text-ink">{name || "—"}</div>
               </div>
               <div>
                 <FieldLabel>Город</FieldLabel>
                 <div className="text-[16px] text-ink">{city || "—"}</div>
               </div>
-              <div className="col-span-2">
-                <FieldLabel>Специализация клиники</FieldLabel>
-                <div className="text-[16px] text-ink">{industry || "—"}</div>
-              </div>
+              {!отрасльЗакреплена && (
+                <div className="col-span-2">
+                  <FieldLabel>{слова.специализация}</FieldLabel>
+                  <div className="text-[16px] text-ink">{industry || "—"}</div>
+                </div>
+              )}
             </div>
           )}
 
           <div className="mt-5">
-            <FieldLabel>Услуги</FieldLabel>
+            <FieldLabel>{слова.Услуги}</FieldLabel>
             {services.length > 0 ? (
               <div className="flex items-center gap-4 rounded-xl border border-line-soft bg-surface px-4 py-3.5">
                 <div className="min-w-0 flex-1">
                   <div className="text-[16px] font-semibold text-ink">
-                    {pluralServices(services.length)}
+                    {числоПозиций(services.length, слова)}
                   </div>
                   <div className="mt-0.5 truncate text-[14px] text-ink-muted">
                     {services.map((s) => s.name || "Без названия").join(" · ")}
@@ -917,19 +945,17 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                   onClick={() => setModalOpen(true)}
                   className="shrink-0 whitespace-nowrap rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
                 >
-                  Показать все услуги
+                  {слова.показатьВсеУслуги}
                 </button>
               </div>
             ) : (
               <div className="flex items-center gap-4 rounded-xl border-[1.5px] border-dashed border-line-accent bg-surface px-4 py-4">
                 <div className="min-w-0 flex-1">
                   <div className="text-[16px] font-semibold text-ink">
-                    Пока ни одной услуги
+                    {слова.нетУслуг}
                   </div>
                   <div className="mt-0.5 text-[14px] leading-snug text-ink-muted">
-                    {editable
-                      ? "Добавьте услуги, которые оказывает ваша клиника. Это напрямую влияет на карточки пациентов"
-                      : "Руководитель ещё не заполнил прайс клиники"}
+                    {editable ? слова.добавьтеУслуги : слова.прайсНеЗаполнен}
                   </div>
                 </div>
                 {editable && !demo && (
@@ -941,7 +967,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                     }}
                     className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover"
                   >
-                    Добавить первую услугу
+                    {слова.добавитьПервуюУслугу}
                   </button>
                 )}
               </div>
@@ -950,62 +976,66 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
 
           {/* Диагнозы — вторая опора карточки, а не дополнительное поле:
               от них зависит, чем болеют пациенты. Поэтому вид тот же,
-              что у услуг, и вес читается одинаковым */}
-          <div className="mt-3.5">
-            <FieldLabel>Диагнозы и частые жалобы</FieldLabel>
-            {diagnoses.length > 0 ? (
-              <div className="flex items-center gap-4 rounded-xl border border-line-soft bg-surface px-4 py-3.5">
-                <div className="min-w-0 flex-1">
-                  <div className="text-[16px] font-semibold text-ink">
-                    {pluralDiagnoses(diagnoses.length)}
-                    {/* Диагноз без пациентов — молчаливый брак прайса: его
-                        нечем лечить, и генератор такие пары отбраковывает.
-                        Руководителю об этом говорим здесь, менеджеру не за чем */}
-                    {editable && безПациентов > 0 && (
-                      <span className="ml-2 text-[14px] font-medium text-warn">
-                        {безПациентов} без пациентов
-                      </span>
-                    )}
+              что у услуг, и вес читается одинаковым. У немедицинской
+              отрасли раздела нет: её клиенты написаны заранее, а не
+              собираются из диагнозов */}
+          {медицина && (
+            <div className="mt-3.5">
+              <FieldLabel>Диагнозы и частые жалобы</FieldLabel>
+              {diagnoses.length > 0 ? (
+                <div className="flex items-center gap-4 rounded-xl border border-line-soft bg-surface px-4 py-3.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[16px] font-semibold text-ink">
+                      {pluralDiagnoses(diagnoses.length)}
+                      {/* Диагноз без пациентов — молчаливый брак прайса: его
+                          нечем лечить, и генератор такие пары отбраковывает.
+                          Руководителю об этом говорим здесь, менеджеру не за чем */}
+                      {editable && безПациентов > 0 && (
+                        <span className="ml-2 text-[14px] font-medium text-warn">
+                          {безПациентов} без пациентов
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 truncate text-[14px] text-ink-muted">
+                      {diagnoses.map((d) => d.name || "Без названия").join(" · ")}
+                    </div>
                   </div>
-                  <div className="mt-0.5 truncate text-[14px] text-ink-muted">
-                    {diagnoses.map((d) => d.name || "Без названия").join(" · ")}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDiagsOpen(true)}
-                  className="shrink-0 whitespace-nowrap rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
-                >
-                  Показать все диагнозы
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-4 rounded-xl border-[1.5px] border-dashed border-line-accent bg-surface px-4 py-4">
-                <div className="min-w-0 flex-1">
-                  <div className="text-[16px] font-semibold text-ink">
-                    Пока ни одного диагноза
-                  </div>
-                  <div className="mt-0.5 text-[14px] leading-snug text-ink-muted">
-                    {editable
-                      ? "Диагноз и жалоба, с которой с ним приходят. Без этого диагнозы придумывает модель — и придумывает одинаковые"
-                      : "Руководитель ещё не заполнил диагнозы клиники"}
-                  </div>
-                </div>
-                {editable && !demo && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setDiagnoses([{ name: "", complaint: "" }]);
-                      setDiagsOpen(true);
-                    }}
-                    className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover"
+                    onClick={() => setDiagsOpen(true)}
+                    className="shrink-0 whitespace-nowrap rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
                   >
-                    Добавить первый диагноз
+                    Показать все диагнозы
                   </button>
-                )}
-              </div>
-            )}
-          </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-4 rounded-xl border-[1.5px] border-dashed border-line-accent bg-surface px-4 py-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[16px] font-semibold text-ink">
+                      Пока ни одного диагноза
+                    </div>
+                    <div className="mt-0.5 text-[14px] leading-snug text-ink-muted">
+                      {editable
+                        ? "Диагноз и жалоба, с которой с ним приходят. Без этого диагнозы придумывает модель — и придумывает одинаковые"
+                        : "Руководитель ещё не заполнил диагнозы клиники"}
+                    </div>
+                  </div>
+                  {editable && !demo && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiagnoses([{ name: "", complaint: "" }]);
+                        setDiagsOpen(true);
+                      }}
+                      className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover"
+                    >
+                      Добавить первый диагноз
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {error && <Alert className="mt-4">{error}</Alert>}
 
@@ -1024,20 +1054,17 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
           ) : demo ? (
             <div className="mt-5 border-t border-line-soft pt-[18px]">
               <p className="max-w-[560px] text-[14px] leading-normal text-ink-muted">
-                Клиника и пациенты в демо уже настроены под вашу специализацию —
-                можно посмотреть, с чем они приходят. На полном доступе здесь
-                описывают свои услуги и диагнозы, и пациенты пересобираются
-                под них.
+                {слова.демоПодвал}
               </p>
             </div>
           ) : (
             <div className="mt-5 flex items-center justify-between gap-5 border-t border-line-soft pt-[18px]">
               <p className="max-w-[520px] text-[14px] leading-normal text-ink-muted">
                 {!filled
-                  ? "Чтобы сохранить, заполните название, город и специализацию клиники, в каждой услуге — название и цену, в каждом диагнозе — и диагноз, и жалобу."
+                  ? слова.заполнитеВсё
                   : !changed
-                    ? "Изменений нет — пациенты уже собраны по этим данным."
-                    : "После сохранения тренажёр пересоберёт только затронутых пациентов: смена специализации или города касается всех, удалённая услуга или диагноз — тех, кто на них стоял. Правка цены не пересобирает никого. Страницу можно закрыть, сборка не прервётся."}
+                    ? слова.измененийНет
+                    : слова.послеСохранения}
               </p>
               <Button
                 type="button"
@@ -1055,7 +1082,9 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
               добавленная услуга не делает ни один случай неверным, значит
               выборочная пересборка её не заметит, и пациенты под новую
               услугу не появятся сами никогда */}
-          {editable && !demo && saved && !progress && (
+          {/* У немедицинской отрасли пересобирать нечего: сервер откажет,
+              и ссылка обещала бы то, чего не будет */}
+          {editable && !demo && saved && !progress && медицина && (
             <p className="mt-3 text-[13.5px] leading-normal text-ink-muted">
               Добавили услугу или диагноз и хотите, чтобы пациенты приходили
               и с ними?{" "}
@@ -1091,9 +1120,10 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
           onChange={setServices}
           onClose={() => setModalOpen(false)}
           readOnly={demo || !editable}
+          слова={слова}
         />
       )}
-      {diagsOpen && (
+      {diagsOpen && медицина && (
         <DiagnosesModal
           diagnoses={diagnoses}
           patientsByName={пациентовУ}
@@ -1129,14 +1159,6 @@ function pluralDiagnoses(n: number): string {
   return `${n} ${plural(n, "диагноз", "диагноза", "диагнозов")}`;
 }
 
-function pluralServices(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${n} услуга`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} услуги`;
-  return `${n} услуг`;
-}
-
 // Модальное окно со списком услуг.
 //
 // Список вынесен из карточки в окно намеренно: три поля разной длины в сетку
@@ -1147,12 +1169,15 @@ function ServicesModal({
   onChange,
   onClose,
   readOnly = false,
+  слова,
 }: {
   services: ServiceRow[];
   onChange: (rows: ServiceRow[]) => void;
   onClose: () => void;
   /** Демо: список показываем, но правки бессмысленны — сохранить их некуда */
   readOnly?: boolean;
+  /** Слова отрасли из формы: окно говорит так же, как карточка под ним */
+  слова: IndustryWords;
 }) {
   // Удаление без подтверждения: подтверждать каждую строку — издевательство,
   // а случайно снесённая строка это потерянная работа. Поэтому «Вернуть»
@@ -1167,11 +1192,9 @@ function ServicesModal({
       <div className="flex max-h-full w-[760px] flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-2xl">
         <div className="flex shrink-0 items-start gap-4 border-b border-line-soft px-7 pb-[18px] pt-6">
           <div className="min-w-0 flex-1">
-            <div className="text-[19.5px] font-semibold text-ink">Услуги клиники</div>
+            <div className="text-[19.5px] font-semibold text-ink">{слова.услугиОрганизации}</div>
             <p className="mt-1 text-[14.5px] leading-normal text-ink-muted">
-              {readOnly
-                ? "Что клиника предлагает и сколько это стоит — так и называйте в разговоре."
-                : "Добавьте услуги, которые оказывает ваша клиника. Это напрямую влияет на карточки пациентов"}
+              {readOnly ? слова.прайсЧтение : слова.добавьтеУслуги}
             </p>
           </div>
           <button
@@ -1185,59 +1208,76 @@ function ServicesModal({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-7 pb-1 pt-4">
-          {services.map((service, index) => (
-            <div
-              key={index}
-              className="group shrink-0 rounded-xl border border-line-soft p-3 transition-colors hover:border-line-strong"
-            >
-              <div className="flex items-start gap-2.5">
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <div className="flex items-center gap-2.5">
+          {services.map((service, index) => {
+            // На позиции стоят клиенты: название и удаление закрыты, цена
+            // и описание — нет. Сервер такую правку всё равно не пустит
+            const клиентов = service.clients ?? 0;
+            const занята = клиентов > 0;
+            return (
+              <div
+                key={index}
+                className="group shrink-0 rounded-xl border border-line-soft p-3 transition-colors hover:border-line-strong"
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        value={service.name}
+                        onChange={(e) => update(index, { name: e.target.value })}
+                        readOnly={readOnly || занята}
+                        placeholder={слова.названиеУслуги}
+                        className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[16px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                      />
+                      <input
+                        value={service.price}
+                        onChange={(e) => update(index, { price: e.target.value })}
+                        readOnly={readOnly}
+                        placeholder="Цена"
+                        className="w-[236px] shrink-0 rounded-[9px] border border-line-strong px-3 py-2 text-right font-mono text-[14.5px] text-brand-hover outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                      />
+                    </div>
                     <input
-                      value={service.name}
-                      onChange={(e) => update(index, { name: e.target.value })}
+                      value={service.description}
+                      onChange={(e) => update(index, { description: e.target.value })}
                       readOnly={readOnly}
-                      placeholder="Название услуги"
-                      className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[16px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                      placeholder={слова.описаниеПозиции}
+                      className="rounded-[9px] border border-line-strong px-3 py-2 text-[14.5px] text-ink-muted outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
                     />
-                    <input
-                      value={service.price}
-                      onChange={(e) => update(index, { price: e.target.value })}
-                      readOnly={readOnly}
-                      placeholder="Цена"
-                      className="w-[236px] shrink-0 rounded-[9px] border border-line-strong px-3 py-2 text-right font-mono text-[14.5px] text-brand-hover outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
-                    />
+                    {занята && !readOnly && (
+                      <p className="px-1 text-[13px] leading-snug text-ink-muted">
+                        В заявках у {клиентов} {plural(клиентов, "клиента", "клиентов", "клиентов")}:
+                        название не меняется, цену и описание править можно
+                      </p>
+                    )}
                   </div>
-                  <input
-                    value={service.description}
-                    onChange={(e) => update(index, { description: e.target.value })}
-                      readOnly={readOnly}
-                    placeholder="Что входит: сколько визитов, что включено"
-                    className="rounded-[9px] border border-line-strong px-3 py-2 text-[14.5px] text-ink-muted outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
-                  />
+                  {!readOnly && !занята && (
+                    <button
+                      type="button"
+                      title={слова.удалитьУслугу}
+                      onClick={() => {
+                        setRemoved({ row: service, at: index });
+                        onChange(services.filter((_, i) => i !== index));
+                      }}
+                      className="mt-1 h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
+                    >
+                      ✕
+                    </button>
+                  )}
+                  {/* Место крестика держим и у закрытой строки: иначе её цена
+                      уезжает вправо от цен соседних строк */}
+                  {!readOnly && занята && (
+                    <span aria-hidden className="mt-1 h-[30px] w-[30px] shrink-0" />
+                  )}
                 </div>
-                {!readOnly && (
-                  <button
-                    type="button"
-                    title="Удалить услугу"
-                    onClick={() => {
-                      setRemoved({ row: service, at: index });
-                      onChange(services.filter((_, i) => i !== index));
-                    }}
-                    className="mt-1 h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {services.length === 0 && (
             <div className="shrink-0 rounded-xl border-[1.5px] border-dashed border-line-accent bg-surface p-6 text-center">
               <div className="text-[15.5px] font-semibold text-ink">Список пуст</div>
               <div className="mt-1 text-[14.5px] text-ink-muted">
-                Хватит и одной услуги, чтобы попробовать.
+                {слова.хватитОдной}
               </div>
             </div>
           )}
@@ -1248,7 +1288,7 @@ function ServicesModal({
               onClick={() => onChange([...services, { name: "", price: "", description: "" }])}
               className="mt-0.5 shrink-0 self-start rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
             >
-              + Добавить услугу
+              {слова.добавитьУслугу}
             </button>
           )}
         </div>
@@ -1257,7 +1297,7 @@ function ServicesModal({
           {removed ? (
             <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-[10px] border border-line bg-surface-bubble px-3 py-2.5">
               <span className="truncate text-[15px] text-ink-body">
-                Удалили «{removed.row.name || "новая услуга"}»
+                Удалили «{removed.row.name || слова.новаяУслуга}»
               </span>
               <button
                 type="button"
@@ -1275,7 +1315,7 @@ function ServicesModal({
           ) : (
             <p className="min-w-0 flex-1 text-[14px] leading-snug text-ink-muted">
               {readOnly
-                ? "Цены — как в прайсе клиники."
+                ? слова.прайсЦены
                 : "Изменения попадут в тренажёр после «Сохранить» в профиле."}
             </p>
           )}

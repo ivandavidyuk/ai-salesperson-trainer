@@ -1,4 +1,10 @@
+"use client";
+
 // Блок «Услуга по диагнозу» рядом с документом диагностики.
+//
+// У офиса продаж тот же блок зовётся «Предложение по заявке»: подписи —
+// словами отрасли (lib/industryWords.ts). Виден он там только в упражнениях,
+// по кнопке «Показать предложение»: документа диагностики у неклиник нет.
 //
 // Услуга живёт ОТДЕЛЬНО от текста документа, и это принцип, а не вёрстка:
 // документ — находки врача, голые цифры, и он намеренно не знает прайса
@@ -10,7 +16,8 @@
 // как указание. Строка «из прайса клиники» снимает последнее: это выписка
 // из прайса, а не решение за менеджера.
 
-import { SERVICE_NOT_MATCHED, type CaseService } from "@/lib/caseService";
+import type { CaseService } from "@/lib/caseService";
+import { useWords } from "@/app/components/IndustryProvider";
 
 interface CaseServiceBlockProps {
   service: CaseService | null;
@@ -26,17 +33,18 @@ interface CaseServiceBlockProps {
 }
 
 export default function CaseServiceBlock({ service, variant }: CaseServiceBlockProps) {
+  const слова = useWords();
   if (variant === "line") {
     return (
       <p className="mb-3 text-xs leading-snug text-ink-label">
-        Услуга по диагнозу:{" "}
+        {слова.услугаПоЗаявке}:{" "}
         {service ? (
           <>
             <span className="font-semibold text-ink">{service.name}</span>,{" "}
-            <span className="font-mono text-xs">{service.price}</span> — из прайса клиники.
+            <span className="font-mono text-xs">{service.price}</span> — {слова.изПрайса}.
           </>
         ) : (
-          <span>{SERVICE_NOT_MATCHED.replace(/\.$/, "").toLowerCase()}.</span>
+          <span>{слова.нетПодходящей.replace(/\.$/, "").toLowerCase()}.</span>
         )}
       </p>
     );
@@ -51,10 +59,10 @@ export default function CaseServiceBlock({ service, variant }: CaseServiceBlockP
       <div className="rounded-[10px] border border-dashed border-line-strong bg-surface px-[15px] py-[13px]">
         {withLabel && (
           <div className="mb-1.5 text-xs font-medium uppercase tracking-[.1em] text-ink-subtle">
-            Услуга по диагнозу
+            {слова.услугаПоЗаявке}
           </div>
         )}
-        <div className="text-sm leading-snug text-ink-label">{SERVICE_NOT_MATCHED}</div>
+        <div className="text-sm leading-snug text-ink-label">{слова.нетПодходящей}</div>
       </div>
     );
   }
@@ -63,14 +71,14 @@ export default function CaseServiceBlock({ service, variant }: CaseServiceBlockP
     <div className="rounded-[10px] border border-line-accent bg-brand-on-muted px-[15px] py-[13px]">
       {withLabel && (
         <div className="mb-1.5 text-xs font-semibold uppercase tracking-[.1em] text-brand-hover">
-          Услуга по диагнозу
+          {слова.услугаПоЗаявке}
         </div>
       )}
       <div className="text-lg font-semibold leading-tight tracking-[-.01em] text-ink">
         {service.name}
       </div>
       <div className="mt-1.5 font-mono text-base font-medium text-brand-score">{service.price}</div>
-      <div className="mt-1.5 text-xs text-ink-subtle">из прайса клиники</div>
+      <div className="mt-1.5 text-xs text-ink-subtle">{слова.изПрайса}</div>
     </div>
   );
 }

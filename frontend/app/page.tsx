@@ -14,6 +14,7 @@ import DemoExpiredModal from "@/app/components/DemoExpiredModal";
 import Loader from "@/app/components/Loader";
 import ProgressPanel from "@/app/components/ProgressPanel";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
+import { useWords } from "@/app/components/IndustryProvider";
 import type { HomeData } from "@/lib/home";
 import { formatDuration, greeting } from "@/lib/format";
 import { formatDealsRate } from "@/lib/score";
@@ -149,6 +150,7 @@ function StatCard({
 }
 
 export default function HomePage() {
+  const слова = useWords();
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState("");
   const [allOpen, setAllOpen] = useState(false);
@@ -282,7 +284,7 @@ export default function HomePage() {
                   </div>
                   <div className="mt-[7px] text-[15px] leading-normal text-brand-panel-text">
                     Нажмите кнопку «Начать тренировку», а затем выберите тип
-                    тренировки и пациента.
+                    тренировки и {слова.клиента}.
                   </div>
                 </div>
                 <button

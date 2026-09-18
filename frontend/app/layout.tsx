@@ -3,8 +3,11 @@
 // self-hosted: без обращений к Google в рантайме и без сдвига макета).
 
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Manrope } from "next/font/google";
 import AchievementToasts from "@/app/components/AchievementToasts";
+import IndustryProvider from "@/app/components/IndustryProvider";
+import { ОТРАСЛЬ_COOKIE, ключИзСлага } from "@/lib/industryWords";
 import "./globals.css";
 
 // Основной шрифт интерфейса
@@ -41,17 +44,25 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Отрасль организации из cookie: страница с первой отрисовки говорит
+  // словами своей отрасли — «Клиенты» у офиса продаж, «Пациенты» у клиники.
+  // Без cookie (до входа, вход до 18.09) — клиника, как было; дальше её
+  // поставит /api/auth/me. Чтение cookie делает страницы динамическими —
+  // они и так все за входом и собирают данные на лету
+  const отрасль = ключИзСлага(cookies().get(ОТРАСЛЬ_COOKIE)?.value);
   return (
     <html
       lang="ru"
       className={`${plexSans.variable} ${plexMono.variable} ${manrope.variable}`}
     >
       <body>
-        {children}
-        {/* Плашка о полученном бейдже — здесь, а не в AppShell: главный
-            экран для неё, /transcript/[id], живёт вне оболочки. Молчание
-            на входе и на звонке она обеспечивает сама */}
-        <AchievementToasts />
+        <IndustryProvider initial={отрасль}>
+          {children}
+          {/* Плашка о полученном бейдже — здесь, а не в AppShell: главный
+              экран для неё, /transcript/[id], живёт вне оболочки. Молчание
+              на входе и на звонке она обеспечивает сама */}
+          <AchievementToasts />
+        </IndustryProvider>
       </body>
     </html>
   );

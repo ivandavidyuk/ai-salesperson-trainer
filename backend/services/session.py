@@ -37,6 +37,13 @@ def _ws_token_key(ws_token: str) -> str:
     return f"ws_token:{ws_token}"
 
 
+def _по_отрасли_или_нет(base: Optional[str], variants: object, industry: str) -> Optional[str]:
+    """Текст типа тренировки словами отрасли; у типа без текста — None, как было."""
+    if base is None:
+        return None
+    return pick_variant(base, variants, industry)
+
+
 def _status_key(session_id: str) -> str:
     return f"session:{session_id}:status"
 
@@ -65,6 +72,13 @@ _PATIENT_PROMPT_SQL = (
     # Рубрика, критерий и способ оценки — оценщику, а не роли: знай роль,
     # по каким признакам судят собеседника, она начала бы подыгрывать
     't."rubric" AS type_rubric, t."doneWhen" AS type_done_when, '
+    # Они же словами отрасли. Через to_jsonb, а не прямым обращением:
+    # колонки добавляет миграция фронтенда, а backend на DE при деплое
+    # перезапускается параллельно с ним. Прямое обращение к колонке, которой
+    # ещё нет, уронило бы этот запрос, а с ним и старт разговора; так до
+    # миграции придёт NULL и сработает перевод базового текста
+    'to_jsonb(t) -> \'rubricByIndustry\' AS type_rubrics, '
+    'to_jsonb(t) -> \'doneWhenByIndustry\' AS type_done_whens, '
     't."stageKey" AS type_stage_key, '
     # У сессий, начатых до мастера настройки, типа нет вовсе — это были
     # полные разговоры, поэтому COALESCE на true
@@ -539,15 +553,22 @@ class SessionStore:
         prompt = (row["patient_prompt"] or "").strip()
         if not prompt:
             return None
+        industry = row["industry"] or ""
         return {
             "patient_prompt": prompt,
-            "rubric": row["type_rubric"],
-            "done_when": row["type_done_when"],
+            # Рубрика и критерий написаны под клинику: «у стойки, по дороге
+            # в кабинет», «анамнез и диоптрии». Оценщик офиса продаж судил бы
+            # упражнение по сцене, которой не было. Своя версия отрасли — если
+            # есть, иначе базовый текст её словами; у клиник текст прежний
+            "rubric": _по_отрасли_или_нет(row["type_rubric"], row["type_rubrics"], industry),
+            "done_when": _по_отрасли_или_нет(
+                row["type_done_when"], row["type_done_whens"], industry
+            ),
             "stage_key": row["type_stage_key"],
             "scores_deal": bool(row["type_scores_deal"]),
             "type_id": row["type_id"],
             "type_title": row["type_title"],
-            "industry": row["industry"] or "",
+            "industry": industry,
         }
 
     async def get_industry(self, session_id: str) -> str:

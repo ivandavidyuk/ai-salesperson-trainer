@@ -19,6 +19,7 @@
 
 import { useEffect, useState } from "react";
 import CaseServiceBlock from "@/app/components/CaseServiceBlock";
+import { useWords } from "@/app/components/IndustryProvider";
 import type { CaseService } from "@/lib/caseService";
 
 interface CaseServiceToggleProps {
@@ -27,6 +28,7 @@ interface CaseServiceToggleProps {
 }
 
 export default function CaseServiceToggle({ service }: CaseServiceToggleProps) {
+  const слова = useWords();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -49,12 +51,12 @@ export default function CaseServiceToggle({ service }: CaseServiceToggleProps) {
                 service ? "text-brand-hover" : "text-ink-subtle"
               }`}
             >
-              Услуга по диагнозу
+              {слова.услугаПоЗаявке}
             </div>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              aria-label="Скрыть услугу"
+              aria-label={слова.скрытьУслугу}
               className="flex shrink-0 text-ink-subtle transition-colors hover:text-ink"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -95,7 +97,7 @@ export default function CaseServiceToggle({ service }: CaseServiceToggleProps) {
           <path d="M5 4h11l3 3v13H5z" />
           <path d="M9 12h6M9 16h4" />
         </svg>
-        {open ? "Скрыть услугу" : "Показать услугу"}
+        {open ? слова.скрытьУслугу : слова.показатьУслугу}
       </button>
     </div>
   );

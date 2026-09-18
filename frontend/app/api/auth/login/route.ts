@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { signToken, storeToken, TOKEN_COOKIE } from "@/lib/auth";
+import { поставитьОтрасль, слагДляОрганизации } from "@/lib/industryCookie";
 
 // Этот роут работает в Node-рантайме (нужны bcrypt, Prisma и Redis)
 export const runtime = "nodejs";
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
       include: {
-        organization: { select: { isDemo: true, demoExpiresAt: true } },
+        organization: { select: { isDemo: true, demoExpiresAt: true, industry: true } },
       },
     });
 
@@ -83,6 +84,7 @@ export async function POST(request: Request) {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
+      industry: слагДляОрганизации(org?.industry),
     });
 
     response.cookies.set({
@@ -93,6 +95,8 @@ export async function POST(request: Request) {
       sameSite: "lax",
       path: "/",
     });
+    // Отрасль — чтобы первая страница после входа уже говорила своими словами
+    поставитьОтрасль(response, org?.industry);
 
     return response;
   } catch (error) {

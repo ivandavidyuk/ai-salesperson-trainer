@@ -8,6 +8,8 @@ import { DailyContentKind, DealOutcome } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ЕСТЬ_РЕПЛИКА_МЕНЕДЖЕРА, завершённые } from "@/lib/statsWindow";
 import { STAGE_METRICS } from "@/lib/score";
+import { медицинскаяОтрасль } from "@/lib/industry";
+import { медицинскийТекст } from "@/lib/industryWords";
 
 /**
  * Начало «недели» в статистике — семь суток назад от переданной даты.
@@ -145,13 +147,21 @@ export async function listConversations(
   }));
 }
 
-// Берёт элемент дня из списка: список крутится по кругу по номеру дня
-async function pickDaily(kind: DailyContentKind, day: number): Promise<string | null> {
-  const items = await prisma.dailyContent.findMany({
+// Берёт элемент дня из списка: список крутится по кругу по номеру дня.
+// Тексты написаны для клиник, и часть из них — прямо про медицину: «план
+// лечения», «часть медицинской команды». Немедицинской организации такие
+// не показываем: круг у неё короче, но каждый текст — про её работу
+async function pickDaily(
+  kind: DailyContentKind,
+  day: number,
+  медицина: boolean
+): Promise<string | null> {
+  const все = await prisma.dailyContent.findMany({
     where: { kind, isActive: true },
     orderBy: { position: "asc" },
     select: { text: true },
   });
+  const items = медицина ? все : все.filter((i) => !медицинскийТекст(i.text));
   if (items.length === 0) return null;
   // Остаток берём с поправкой на отрицательные значения
   const index = ((day % items.length) + items.length) % items.length;
@@ -210,6 +220,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
       jobTitle: true,
       statsResetAt: true,
       organizationId: true,
+      organization: { select: { industry: true } },
     },
   });
   if (!user) return null;
@@ -274,9 +285,10 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
     prisma.session.count({ where: withDeal }),
   ]);
 
+  const медицина = медицинскаяОтрасль(user.organization?.industry ?? "");
   const [tip, motivation] = await Promise.all([
-    pickDaily(DailyContentKind.tip, day),
-    pickDaily(DailyContentKind.motivation, day),
+    pickDaily(DailyContentKind.tip, day, медицина),
+    pickDaily(DailyContentKind.motivation, day, медицина),
   ]);
 
   const metrics: ProgressMetric[] = PROGRESS_METRICS.map(({ key, label }) => {

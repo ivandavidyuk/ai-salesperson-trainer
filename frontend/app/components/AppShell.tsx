@@ -9,6 +9,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import Logo from "@/app/components/Logo";
+import { useSetIndustry, useWords } from "@/app/components/IndustryProvider";
+import { ключИзСлага } from "@/lib/industryWords";
 
 // Ширины меню из макета. Макеты перерисованы под рамку 1440×900 — размер
 // реального ноутбука, поэтому рейка и шапка стали крупнее: по элементам
@@ -38,6 +40,8 @@ interface ShellUser {
   lastName: string;
   role: string;
   avatarUpdatedAt: string | null;
+  /** Слаг отрасли организации: по нему экраны берут слова */
+  industry?: string;
 }
 
 /**
@@ -169,6 +173,8 @@ interface AppShellProps {
 export default function AppShell({ title, children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const слова = useWords();
+  const задатьОтрасль = useSetIndustry();
 
   // Меню по умолчанию свёрнуто: оно разворачивается поверх контента,
   // и открытое на старте перекрывало бы страницу при каждом заходе
@@ -197,7 +203,11 @@ export default function AppShell({ title, children }: AppShellProps) {
         if (!res.ok) return;
         const data = (await res.json()) as ShellUser;
         cachedUser = data;
-        if (!cancelled) setUser(data);
+        if (!cancelled) {
+          setUser(data);
+          // Отрасль из ответа точнее cookie: её могли поменять в профиле
+          задатьОтрасль(ключИзСлага(data.industry));
+        }
       } catch {
         // молча: топбар не критичен для работы страницы
       }
@@ -209,7 +219,8 @@ export default function AppShell({ title, children }: AppShellProps) {
       cancelled = true;
       window.removeEventListener(PROFILE_UPDATED_EVENT, load);
     };
-  }, [pathname]);
+    // Сеттер отрасли стабилен (это setState провайдера) и перезапусков не даёт
+  }, [pathname, задатьОтрасль]);
 
   // Бейдж заданий: pathname в зависимостях — после запуска задания со
   // страницы «Задания» счётчик должен обновиться
@@ -336,7 +347,10 @@ export default function AppShell({ title, children }: AppShellProps) {
           // Пока роль не загружена, пункт руководителя не показываем:
           // мелькнуть и исчезнуть хуже, чем появиться с задержкой
           (item) => !item.headOnly || user?.role === "head"
-        ).map((item) => {
+        ).map((пункт) => {
+          // Подпись раздела клиентов — словом отрасли
+          const item =
+            пункт.href === "/patients" ? { ...пункт, label: слова.Клиенты } : пункт;
           const active = pathname === item.href;
           // null — счётчика нет вовсе: нулевой бейдж не рисуем
           const счёт =

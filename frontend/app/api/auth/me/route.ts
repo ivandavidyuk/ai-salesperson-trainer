@@ -9,6 +9,7 @@ import {
   TOKEN_COOKIE,
   verifyToken,
 } from "@/lib/auth";
+import { поставитьОтрасль, слагДляОрганизации } from "@/lib/industryCookie";
 
 export const runtime = "nodejs";
 // Роут читает cookie запроса — рендерится только динамически
@@ -58,6 +59,7 @@ export async function GET(request: NextRequest) {
         jobTitle: true,
         clinic: true,
         avatarUpdatedAt: true,
+        organization: { select: { industry: true } },
       },
     });
 
@@ -68,10 +70,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
-      ...user,
+    const { organization, ...поля } = user;
+    const industry = слагДляОрганизации(organization?.industry);
+    const response = NextResponse.json({
+      ...поля,
       avatarUpdatedAt: user.avatarUpdatedAt?.toISOString() ?? null,
+      // Слаг отрасли: экраны берут по нему слова
+      industry,
     });
+    // Cookie заодно догоняет правку отрасли в профиле: роут зовёт каждая
+    // страница, и следующая полная загрузка уже рисуется верными словами
+    поставитьОтрасль(response, organization?.industry);
+    return response;
   } catch (error) {
     console.error("Ошибка в /api/auth/me:", error);
     return NextResponse.json(

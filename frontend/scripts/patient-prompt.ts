@@ -243,17 +243,10 @@ export function industryRules(industry: string): IndustryRules {
   return industryKey(industry) === "недвижимость" ? НЕДВИЖИМОСТЬ : МЕДИЦИНА;
 }
 
-/** Ключ отрасли: по нему выбираются правила, состав персонажей и пресет */
-export type IndustryKey = "медицина" | "недвижимость";
-
-/**
- * Ключ по названию отрасли организации. Тот же разбор, что на backend
- * (services/industry.py, `industry_key`): разойдутся — роль заговорит
- * словами одной отрасли, а оценщик будет судить словами другой.
- */
-export function industryKey(industry: string): IndustryKey {
-  return /недвиж|застройщ|офис продаж/i.test(industry) ? "недвижимость" : "медицина";
-}
+// Разборщик отрасли живёт отдельным крошечным модулем: его берут и экраны
+// (слова интерфейса), а тащить в браузер весь текст промптов незачем
+import { industryKey } from "./industry-key";
+export { industryKey, type IndustryKey } from "./industry-key";
 
 
 const PROHIBITIONS = `ЧЕГО НЕ ДЕЛАТЬ:
