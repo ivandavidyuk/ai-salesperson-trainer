@@ -116,6 +116,7 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
   ]);
   console.log(`услуг ${clinic.services.length}, диагнозов ${clinic.diagnoses.length}`);
 
+  let залито = 0;
   for (const пресетныйСлучай of cases) {
     const личность = ЛИЧНОСТИ.get(пресетныйСлучай.patientName);
     if (!личность) {
@@ -200,9 +201,10 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
     console.log(
       `  ${пресетныйСлучай.patientName.padEnd(22)} ${строка.diagnosisName}`,
     );
+    залито += 1;
   }
 
-  console.log(`случаев залито: ${cases.length}`);
+  console.log(`случаев залито: ${залито} из ${cases.length}`);
 }
 
 async function main() {
