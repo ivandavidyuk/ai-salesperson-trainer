@@ -21,11 +21,17 @@ import { СЛУЧАЙ as ВАН_ХАО } from "./van-hao";
 import { СЛУЧАЙ as НИКОЛАЙ } from "./nikolay-baranov";
 import { СЛУЧАЙ as ИГОРЬ } from "./igor-mitin";
 import { СЛУЧАЙ as ЕЛЕНА } from "./elena-voroshilova";
+import { СЛУЧАЙ as СТАНИСЛАВ } from "./stanislav-shvets";
+import { СЛУЧАЙ as ДЖАМШИД } from "./dzhamshid-akhmedov";
+import { СЛУЧАЙ as ЛЕОНИД } from "./leonid-gromov";
+import { СЛУЧАЙ as ЕГОР } from "./egor-borisov";
+import { СЛУЧАЙ as МИХАИЛ } from "./mikhail-kravtsov";
 
 export const ПРЕСЕТ: Preset = {
   clinic: КЛИНИКА,
   cases: [
     ТАМАРА, ДАРЬЯ, ПАВЕЛ, АРТЁМ, ОЛЕГ, СВЕТЛАНА, ДЕНИС, КРИСТИНА,
     ЮЛИЯ, ВИТАЛИЙ, РУСТАМ, ВАН_ХАО, НИКОЛАЙ, ИГОРЬ, ЕЛЕНА,
+    СТАНИСЛАВ, ДЖАМШИД, ЛЕОНИД, ЕГОР, МИХАИЛ,
   ],
 };
