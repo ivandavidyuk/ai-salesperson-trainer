@@ -18,7 +18,7 @@
 //    который целиком пересылается Диме.
 
 import { PrismaClient } from "@prisma/client";
-import { ДЕМО_КЛИЕНТЫ } from "../lib/demoScope";
+import { демоКлиенты } from "../lib/demoScope";
 import { скопироватьПресет } from "./demo-clinic";
 import { plural } from "../lib/format";
 import bcrypt from "bcryptjs";
@@ -175,7 +175,7 @@ async function main() {
 Откройте в Chrome, говорить лучше в наушниках.
 
 В доступе ${разговоров} ${разговорОв(разговоров)} с клиентами:
-${ДЕМО_КЛИЕНТЫ.join(", ")}.
+${демоКлиенты(организация.industry).join(", ")}.
 После каждого остаётся разбор — его можно перечитать
 и показать коллегам.
 -------------------------------------------------------`);

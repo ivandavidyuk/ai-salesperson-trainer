@@ -31,6 +31,8 @@ const ХВОСТ_МС = 7 * СУТКИ_МС;
 
 export interface DemoStatus {
   organizationId: string;
+  /** Отрасль организации: от неё зависит, кто открыт в демо на разговоры */
+  industry: string;
   /** Чем меряется доступ */
   режим: "сутки" | "разговоры";
   /**
@@ -60,6 +62,7 @@ export async function демоСтатус(
       organization: {
         select: {
           id: true,
+          industry: true,
           isDemo: true,
           demoExpiresAt: true,
           demoTalksLimit: true,
@@ -77,6 +80,7 @@ export async function демоСтатус(
     const истекает = org.demoExpiresAt;
     return {
       organizationId: org.id,
+      industry: org.industry,
       режим: "сутки",
       expiresAt: истекает,
       осталось: null,
@@ -114,6 +118,7 @@ export async function демоСтатус(
 
   return {
     organizationId: org.id,
+    industry: org.industry,
     режим: "разговоры",
     expiresAt: исчерпано,
     осталось,

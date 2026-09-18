@@ -9,7 +9,7 @@ import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getUserWithRole } from "@/lib/access";
 import { демоНаРазговоры } from "@/lib/demoAccess";
-import { ДЕМО_КЛИЕНТЫ } from "@/lib/demoScope";
+import { демоКлиенты } from "@/lib/demoScope";
 import { медицинскаяОтрасль } from "@/lib/industry";
 import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
 import { составОтрасли } from "@/scripts/patients";
@@ -63,6 +63,8 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // Тройка демо своя у каждой отрасли (lib/demoScope.ts)
+    const открытыВДемо = демоКлиенты(отрасль);
     const строки = patients.map((patient) => ({
       ...сНаложеннымСлучаем(patient),
       // У набора, который ещё пишется, случай есть не у всех: такой клиент
@@ -72,7 +74,7 @@ export async function GET(request: NextRequest) {
       isActive:
         patient.isActive &&
         (клиника || ((patient as { cases?: unknown[] }).cases?.length ?? 0) > 0),
-      demoLocked: демо && !ДЕМО_КЛИЕНТЫ.includes(patient.name),
+      demoLocked: демо && !открытыВДемо.includes(patient.name),
     }));
 
     // Закрытые демо-доступом — вниз, к неготовым. Иначе открытая тройка

@@ -32,6 +32,7 @@ import { join } from "path";
 
 import { PROFILES, составОтрасли } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
+import { демоКлиенты } from "../lib/demoScope";
 import { проверитьНабор, проверитьСлучай } from "./presets/validate";
 import {
   MECHANIC_BLOCKS,
@@ -391,6 +392,27 @@ function containsStem(text: string, stem: string): boolean {
  * ни одного офтальмологического слова: это ровно та проверка подстановки,
  * что стоит у Тамары, только на настоящих данных, а не на образце.
  */
+// Демо-тройка своя у каждой отрасли (lib/demoScope.ts). Демо-организация
+// копирует случаи пресета, поэтому каждый из тройки обязан входить в состав
+// отрасли и иметь в её пресете случай — иначе собственник увидит в демо
+// клиента, с которым нельзя начать разговор
+function checkDemoTrio(): void {
+  for (const пресет of ПРЕСЕТЫ) {
+    const отрасль = пресет.clinic.industry;
+    const состав = new Set(составОтрасли(отрасль).map((p) => p.name));
+    const соСлучаем = new Set(пресет.cases.map((с) => с.patientName));
+    const тройка = демоКлиенты(отрасль);
+    if (тройка.length !== 3) {
+      fail(`демо ${отрасль}: в тройке ${тройка.length}, а нужно 3`);
+    }
+    for (const имя of тройка) {
+      if (!состав.has(имя)) fail(`демо ${отрасль}: «${имя}» нет в составе отрасли`);
+      else if (!соСлучаем.has(имя)) fail(`демо ${отрасль}: у «${имя}» нет случая в пресете`);
+    }
+  }
+  console.log(`Демо-тройки: проверены у ${ПРЕСЕТЫ.length} отраслей`);
+}
+
 function checkPresets(): void {
   const личности = new Map(PROFILES.map((p) => [p.name, p.personality]));
 
@@ -522,6 +544,7 @@ function main(): void {
 
   // 6. Отраслевые пресеты
   checkPresets();
+  checkDemoTrio();
 
   // 7. Личность без клиники и проба недвижимости
   checkNoClinicWords();

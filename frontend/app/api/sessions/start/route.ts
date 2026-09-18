@@ -12,7 +12,7 @@ import { prisma } from "@/lib/db";
 import { getAuthUser, signToken } from "@/lib/auth";
 import { расходЧасовПользователя } from "@/lib/hours";
 import { демоСтатус, засечьПервыйРазговор } from "@/lib/demoAccess";
-import { ВЫБОР_ЗАКРЫТ, ДЕМО_КЛИЕНТЫ, ДЕМО_ТИП } from "@/lib/demoScope";
+import { ВЫБОР_ЗАКРЫТ, ДЕМО_ТИП, демоКлиенты } from "@/lib/demoScope";
 import { backendUrl } from "@/lib/cases";
 import type { CaseService } from "@/lib/caseService";
 import { caseService } from "@/lib/caseServiceQuery";
@@ -150,7 +150,10 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (демо?.режим === "разговоры" && !ДЕМО_КЛИЕНТЫ.includes(chosen.name)) {
+      if (
+        демо?.режим === "разговоры" &&
+        !демоКлиенты(демо.industry).includes(chosen.name)
+      ) {
         return NextResponse.json({ error: ВЫБОР_ЗАКРЫТ }, { status: 403 });
       }
       const случай = await prisma.patientCase.findFirst({
@@ -171,7 +174,7 @@ export async function POST(request: NextRequest) {
           isActive: true,
           ...соСлучаем,
           ...(демо?.режим === "разговоры"
-            ? { name: { in: ДЕМО_КЛИЕНТЫ } }
+            ? { name: { in: демоКлиенты(демо.industry) } }
             : {}),
         },
         orderBy: { createdAt: "asc" },
