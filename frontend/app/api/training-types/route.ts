@@ -13,7 +13,7 @@ import { getUserWithRole } from "@/lib/access";
 import { демоНаРазговоры } from "@/lib/demoAccess";
 import { ДЕМО_ТИП } from "@/lib/demoScope";
 import { описаниеУпражнения } from "@/lib/industryWords";
-import { industryKey } from "@/scripts/industry-key";
+import { ключОтрасли } from "@/scripts/industry-key";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,10 +31,10 @@ export async function GET(request: NextRequest) {
     const организация = user.organizationId
       ? await prisma.organization.findUnique({
           where: { id: user.organizationId },
-          select: { industry: true },
+          select: { industryKey: true },
         })
       : null;
-    const отрасль = industryKey(организация?.industry ?? "");
+    const отрасль = ключОтрасли(организация?.industryKey);
 
     const types = await prisma.trainingType.findMany({
       orderBy: { position: "asc" },

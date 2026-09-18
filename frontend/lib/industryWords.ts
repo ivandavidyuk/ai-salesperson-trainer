@@ -11,7 +11,7 @@
 // относительным путём: так словарь открывается и из скриптов под ts-node,
 // и в браузерный бандл не едет текст промптов.
 
-import { industryKey, type IndustryKey } from "../scripts/industry-key";
+import type { IndustryKey } from "../scripts/industry-key";
 
 export type { IndustryKey };
 
@@ -259,11 +259,6 @@ const СЛОВА: Record<IndustryKey, IndustryWords> = {
 
 export function словаДляКлюча(ключ: IndustryKey): IndustryWords {
   return СЛОВА[ключ];
-}
-
-/** Слова по отрасли в том виде, в каком её записала организация */
-export function словаОтрасли(industry: string | null | undefined): IndustryWords {
-  return СЛОВА[industryKey(industry ?? "")];
 }
 
 /** «3 услуги» / «3 позиции» */

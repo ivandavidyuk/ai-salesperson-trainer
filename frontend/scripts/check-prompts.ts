@@ -45,6 +45,7 @@ import {
   НЕДВИЖИМОСТЬ,
   industryRules,
   mechanicBlocks,
+  ключОтрасли,
 } from "./patient-prompt";
 
 // Эталон Тамары. История: 4451 / ba3d2d9c… — снят с прода 30.07.2026;
@@ -225,20 +226,23 @@ function checkNoClinicWords(): void {
   );
 }
 
+// Ключ отрасли читается из базы (`Organization.industryKey`): известный —
+// как есть, пустой и незнакомый — медицина, как вела себя организация
+// до отраслей. По ключу выбираются правила промпта
 function checkIndustryResolver(): void {
-  const ожидания: Array<[string, IndustryRules, string]> = [
-    ["офтальмология", МЕДИЦИНА, "медицина"],
-    ["стоматология: терапия и имплантация", МЕДИЦИНА, "медицина"],
+  const ожидания: Array<[string | null, IndustryRules, string]> = [
+    ["медицина", МЕДИЦИНА, "медицина"],
+    ["недвижимость", НЕДВИЖИМОСТЬ, "недвижимость"],
     ["", МЕДИЦИНА, "медицина"],
-    ["Недвижимость: офис продаж застройщика", НЕДВИЖИМОСТЬ, "недвижимость"],
-    ["застройщик", НЕДВИЖИМОСТЬ, "недвижимость"],
+    [null, МЕДИЦИНА, "медицина"],
+    ["стоматология", МЕДИЦИНА, "медицина"],
   ];
-  for (const [industry, rules, имя] of ожидания) {
-    if (industryRules(industry) !== rules) {
-      fail(`разборщик отрасли: «${industry}» должен давать ${имя}`);
+  for (const [значение, rules, имя] of ожидания) {
+    if (industryRules(ключОтрасли(значение)) !== rules) {
+      fail(`ключ отрасли: «${значение}» должен давать ${имя}`);
     }
   }
-  console.log(`Разборщик отрасли: ${ожидания.length} названий разобраны верно`);
+  console.log(`Ключ отрасли: ${ожидания.length} значений разобраны верно`);
 }
 
 function checkRealtyProbe(): void {
@@ -399,9 +403,9 @@ function containsStem(text: string, stem: string): boolean {
 function checkDemoTrio(): void {
   for (const пресет of ПРЕСЕТЫ) {
     const отрасль = пресет.clinic.industry;
-    const состав = new Set(составОтрасли(отрасль).map((p) => p.name));
+    const состав = new Set(составОтрасли(пресет.clinic.отрасль).map((p) => p.name));
     const соСлучаем = new Set(пресет.cases.map((с) => с.patientName));
-    const тройка = демоКлиенты(отрасль);
+    const тройка = демоКлиенты(пресет.clinic.отрасль);
     if (тройка.length !== 3) {
       fail(`демо ${отрасль}: в тройке ${тройка.length}, а нужно 3`);
     }
@@ -431,7 +435,7 @@ function checkPresets(): void {
     const отрасль = пресет.clinic.industry;
 
     // Полнота и «лишние» считаются по составу отрасли, а не по всей библиотеке
-    const именаПациентов = составОтрасли(отрасль).map((p) => p.name);
+    const именаПациентов = составОтрасли(пресет.clinic.отрасль).map((p) => p.name);
     for (const беда of проверитьНабор(пресет.cases, пресет.clinic, именаПациентов)) {
       fail(беда);
     }
@@ -444,7 +448,7 @@ function checkPresets(): void {
       }
       const метка = `${случай.patientName} · ${отрасль}`;
       const роль: PatientRole = { personality: личность, case: случай.case };
-      const правила = industryRules(отрасль);
+      const правила = industryRules(пресет.clinic.отрасль);
       const prompt = buildRolePrompt(роль, правила);
 
       checkMechanicLayer(метка, prompt, правила);

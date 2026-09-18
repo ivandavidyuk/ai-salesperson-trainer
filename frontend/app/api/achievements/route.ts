@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
 import { словомОтрасли } from "@/lib/industryWords";
-import { industryKey } from "@/scripts/industry-key";
+import { ключОтрасли } from "@/scripts/industry-key";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,10 +34,10 @@ export async function GET(request: NextRequest) {
       }),
       prisma.user.findUnique({
         where: { id: user.sub },
-        select: { organization: { select: { industry: true } } },
+        select: { organization: { select: { industryKey: true } } },
       }),
     ]);
-    const отрасль = industryKey(владелец?.organization?.industry ?? "");
+    const отрасль = ключОтрасли(владелец?.organization?.industryKey);
 
     const items = rows.map((row) => ({
       id: row.id,

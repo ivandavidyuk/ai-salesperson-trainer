@@ -20,6 +20,7 @@ import { requireHead } from "@/lib/access";
 import { rebuildCases, идётСборка, целиПересборки } from "@/lib/cases";
 import { ГЕНЕРАЦИЯ_ЗАКРЫТА, этоДемо } from "@/lib/demoAccess";
 import { ГЕНЕРАЦИЯ_НЕ_ДЛЯ_ОТРАСЛИ, медицинскаяОтрасль } from "@/lib/industry";
+import { ключОтрасли } from "@/scripts/industry-key";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,9 +44,9 @@ export async function POST(request: NextRequest) {
     // а не текст про клинику и диагнозы
     const организация = await prisma.organization.findUnique({
       where: { id: head.organizationId },
-      select: { industry: true },
+      select: { industryKey: true },
     });
-    if (организация && !медицинскаяОтрасль(организация.industry)) {
+    if (организация && !медицинскаяОтрасль(ключОтрасли(организация.industryKey))) {
       return NextResponse.json({ error: ГЕНЕРАЦИЯ_НЕ_ДЛЯ_ОТРАСЛИ }, { status: 403 });
     }
 

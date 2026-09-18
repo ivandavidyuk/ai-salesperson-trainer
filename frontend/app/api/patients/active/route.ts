@@ -10,7 +10,8 @@ import { prisma } from "@/lib/db";
 import { getUserWithRole } from "@/lib/access";
 import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
 import { медицинскаяОтрасль } from "@/lib/industry";
-import { словаОтрасли } from "@/lib/industryWords";
+import { словаДляКлюча } from "@/lib/industryWords";
+import { ключОтрасли } from "@/scripts/industry-key";
 import { составОтрасли } from "@/scripts/patients";
 
 export const runtime = "nodejs";
@@ -30,10 +31,10 @@ export async function GET(request: NextRequest) {
     const организация = user.organizationId
       ? await prisma.organization.findUnique({
           where: { id: user.organizationId },
-          select: { industry: true },
+          select: { industryKey: true },
         })
       : null;
-    const отрасль = организация?.industry ?? "";
+    const отрасль = ключОтрасли(организация?.industryKey);
     const соСлучаем =
       медицинскаяОтрасль(отрасль) || !user.organizationId
         ? {}
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
 
     if (!patient) {
       return NextResponse.json(
-        { error: `${словаОтрасли(отрасль).Клиент} не найден` },
+        { error: `${словаДляКлюча(отрасль).Клиент} не найден` },
         { status: 404 }
       );
     }

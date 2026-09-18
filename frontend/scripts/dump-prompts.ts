@@ -27,7 +27,7 @@ for (const пресет of ПРЕСЕТЫ) {
     if (!профиль) continue;
     const промпт = buildRolePrompt(
       { personality: профиль.personality, case: случай.case },
-      industryRules(пресет.clinic.industry),
+      industryRules(пресет.clinic.отрасль),
     );
     writeFileSync(join(каталог, `${случай.patientName}.txt`), промпт, "utf8");
     записано += 1;

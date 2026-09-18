@@ -32,7 +32,7 @@ import { profile as galina } from "./galina-zaytseva";
 import { profile as roman } from "./roman-savelyev";
 import { profile as grigory } from "./grigory-logvinov";
 import { profile as maria } from "./maria-slavnova";
-import { industryKey } from "../patient-prompt";
+import type { IndustryKey } from "../industry-key";
 import type { PatientProfile } from "./types";
 
 export type { PatientProfile } from "./types";
@@ -82,13 +82,12 @@ export const PROFILES: PatientProfile[] = [
 /** Досье для руководителя словами отрасли организации: только перекрытые поля */
 export function досьеОтрасли(
   name: string,
-  industry: string
+  ключ: IndustryKey
 ): Partial<Pick<PatientProfile, "character" | "decisionMaker" | "approach">> {
   const профиль = PROFILES.find((p) => p.name === name);
-  return профиль?.досьеПоОтрасли?.[industryKey(industry)] ?? {};
+  return профиль?.досьеПоОтрасли?.[ключ] ?? {};
 }
 
-export function составОтрасли(industry: string): PatientProfile[] {
-  const ключ = industryKey(industry);
+export function составОтрасли(ключ: IndustryKey): PatientProfile[] {
   return PROFILES.filter((p) => !p.industries || p.industries.includes(ключ));
 }

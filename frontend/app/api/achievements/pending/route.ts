@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthUser } from "@/lib/auth";
 import { словомОтрасли } from "@/lib/industryWords";
-import { industryKey } from "@/scripts/industry-key";
+import { ключОтрасли } from "@/scripts/industry-key";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
         select: {
           achievementsSeenAt: true,
           // Описания написаны для клиник — у другой отрасли своими словами
-          organization: { select: { industry: true } },
+          organization: { select: { industryKey: true } },
         },
       }),
       prisma.userAchievement.findMany({
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     const виделДо = профиль?.achievementsSeenAt ?? null;
-    const отрасль = industryKey(профиль?.organization?.industry ?? "");
+    const отрасль = ключОтрасли(профиль?.organization?.industryKey);
 
     // Счётчик и плашки считаются по разным отметкам намеренно: закрытая
     // плашка не гасит счётчик, иначе «Скрыть все» съедало бы новость

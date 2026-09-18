@@ -37,11 +37,11 @@ const ЛИЧНОСТИ = new Map(PROFILES.map((p) => [p.name, p.personality]));
  * на один регистр — пресет молча перестанет находиться, и create-demo
  * откажет: без случаев разговоры не начнутся.
  */
-const ключОтрасли = (industry: string) => industry.toLowerCase().trim();
+const названиеОтрасли = (industry: string) => industry.toLowerCase().trim();
 
 async function залитьОтрасль(пресет: Preset): Promise<void> {
   const { clinic, cases } = пресет;
-  const industry = ключОтрасли(clinic.industry);
+  const industry = названиеОтрасли(clinic.industry);
 
   console.log(`\n=== ${clinic.orgName} ===\n`);
 
@@ -55,7 +55,7 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
   // признак ввели в проверку формы, а сюда не донесли
   const покрыты = new Set(cases.map((с) => с.patientName));
   // Полнота считается по составу отрасли, а не по всей библиотеке
-  const состав = составОтрасли(clinic.industry);
+  const состав = составОтрасли(clinic.отрасль);
   const непокрытые = состав.filter((p) => !покрыты.has(p.name));
   if (непокрытые.length > 0 && !clinic.inProgress) {
     throw new Error(
@@ -79,6 +79,8 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
   const данные = {
     name: clinic.orgName,
     industry,
+    // Ключ отрасли пресета: его унаследует организация, заведённая из него
+    industryKey: clinic.отрасль,
     isPreset: true,
     // Людей у пресета нет, разговоров тоже — лимит часов здесь ничего
     // не значит и стоит просто ненулевым
@@ -149,7 +151,7 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
 
     const prompt = buildRolePrompt(
       { personality: личность, case: пресетныйСлучай.case },
-      industryRules(clinic.industry),
+      industryRules(clinic.отрасль),
     );
     const строка = {
       prompt,

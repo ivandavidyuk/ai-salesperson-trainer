@@ -17,6 +17,7 @@ import {
 } from "@/lib/assignments";
 import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
 import { досьеОтрасли } from "@/scripts/patients";
+import { ключОтрасли } from "@/scripts/industry-key";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,15 +35,16 @@ export async function GET(request: NextRequest) {
 
     const isHead = user.role === UserRole.head;
     // Досье руководителю — словами отрасли его организации
-    const отрасль =
+    const отрасль = ключОтрасли(
       isHead && user.organizationId
-        ? ((
+        ? (
             await prisma.organization.findUnique({
               where: { id: user.organizationId },
-              select: { industry: true },
+              select: { industryKey: true },
             })
-          )?.industry ?? "")
-        : "";
+          )?.industryKey
+        : null
+    );
     // Руководитель видит выданные им, менеджер — полученные
     const чьи = isHead ? { createdById: user.id } : { userId: user.id };
 

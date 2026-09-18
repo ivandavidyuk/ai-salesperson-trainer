@@ -164,7 +164,7 @@ function отчётОфиса(пресет: Preset): string {
 }
 
 function отчёт(пресет: Preset): string {
-  if (пресет.clinic.kind !== "клиника") return отчётОфиса(пресет);
+  if (пресет.clinic.отрасль !== "медицина") return отчётОфиса(пресет);
   const { clinic, cases } = пресет;
   const куски: string[] = [
     `# Случаи пациентов: ${clinic.industryLabel}`,

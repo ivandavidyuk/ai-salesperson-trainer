@@ -20,7 +20,8 @@ import { затронутыеСлучаи } from "@/lib/caseStaleness";
 import { генерацияЗакрыта, этоДемо } from "@/lib/demoAccess";
 import { медицинскаяОтрасль } from "@/lib/industry";
 import { поставитьОтрасль } from "@/lib/industryCookie";
-import { словаОтрасли } from "@/lib/industryWords";
+import { словаДляКлюча } from "@/lib/industryWords";
+import { ключОтрасли } from "@/scripts/industry-key";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,6 +93,8 @@ async function organizationForForm(id: string) {
       industry: true,
       // Демо-клинике форма показывается только на чтение: сохранение
       // запускает платную пересборку, и оно ей закрыто
+      // Ключ отрасли — форма берёт по нему слова и разделы
+      industryKey: true,
       isDemo: true,
       casesTotal: true,
       casesReady: true,
@@ -132,7 +135,7 @@ async function organizationForForm(id: string) {
   // (lib/caseServiceQuery.ts): переименуй её РОП, и в упражнениях у этих
   // клиентов пропала бы цена. Форма по этому числу закрывает название
   // и удаление, а PUT не пускает такую правку
-  const клиентовНа = медицинскаяОтрасль(organization.industry)
+  const клиентовНа = медицинскаяОтрасль(ключОтрасли(organization.industryKey))
     ? null
     : await клиентыНаПозициях(id);
 
@@ -192,10 +195,10 @@ export async function PUT(request: NextRequest) {
     if (head.organizationId && (await этоДемо(head.organizationId))) {
       const демо = await prisma.organization.findUnique({
         where: { id: head.organizationId },
-        select: { industry: true },
+        select: { industryKey: true },
       });
       return NextResponse.json(
-        { error: генерацияЗакрыта(демо?.industry ?? "") },
+        { error: генерацияЗакрыта(ключОтрасли(демо?.industryKey)) },
         { status: 403 }
       );
     }
@@ -219,24 +222,27 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
     }
 
-    // Отрасль неклиники меняем только мы: поле в форме у неё скрыто, а одна
-    // правка текста перевела бы офис продаж на медицинский конвейер — платная
-    // сборка диагнозов, результат диагностики на каждом разговоре. Клиентов
-    // недвижимости заводим вручную (scripts/create-client.ts), с отраслью
+    // Ключ отрасли формой не меняется: у существующей организации — её ключ,
+    // новая, заведённая формой, — клиника. Неклиники заводим мы
+    // (scripts/create-client.ts), и текст отрасли у них тоже не правится:
+    // поле в форме скрыто. До ключа отрасль угадывалась по этому тексту,
+    // и одна правка переводила офис продаж на медицинский конвейер
     const прежняя = head.organizationId
       ? await prisma.organization.findUnique({
           where: { id: head.organizationId },
-          select: { industry: true },
+          select: { industry: true, industryKey: true },
         })
       : null;
-    const отрасльЗакреплена = прежняя !== null && !медицинскаяОтрасль(прежняя.industry);
+    const отрасль = прежняя ? ключОтрасли(прежняя.industryKey) : "медицина";
+    const медицина = медицинскаяОтрасль(отрасль);
+    const отрасльЗакреплена = прежняя !== null && !медицина;
 
     const name = body.name?.trim() ?? "";
     const city = body.city?.trim() ?? "";
     const industry = отрасльЗакреплена ? прежняя.industry : body.industry?.trim() ?? "";
-    // Отказы — словами той отрасли, что прислали: руководитель видит их
-    // под своей формой, а она уже говорит этими словами
-    const слова = словаОтрасли(industry);
+    // Отказы — словами отрасли организации: руководитель видит их под своей
+    // формой, а она говорит этими же словами
+    const слова = словаДляКлюча(отрасль);
     if (!name) {
       return NextResponse.json(
         { error: `Укажите ${слова.названиеОрганизации.toLowerCase()}` },
@@ -324,7 +330,7 @@ export async function PUT(request: NextRequest) {
     // к сочинению болезней, ради отказа от которого всё и делается.
     // У немедицинской отрасли генератора нет, и раздела диагнозов в форме
     // тоже: требовать их — значит не дать руководителю сохранить прайс
-    if (diagnoses.length === 0 && медицинскаяОтрасль(industry)) {
+    if (diagnoses.length === 0 && медицина) {
       return NextResponse.json(
         { error: "Добавьте хотя бы один диагноз" },
         { status: 400 }
@@ -432,7 +438,7 @@ export async function PUT(request: NextRequest) {
       // отметками, и пересборка взялась бы не за тех
       // У немедицинской отрасли устаревших случаев не бывает: пересобирать
       // их нечем, цены называет менеджер вслух, а случай о них не знает
-      const затронуты = было && медицинскаяОтрасль(industry)
+      const затронуты = было && медицина
         ? затронутыеСлучаи(было, { city, industry, services, diagnoses }, прежниеСлучаи)
         : [];
       if (затронуты.length > 0) {
@@ -452,7 +458,7 @@ export async function PUT(request: NextRequest) {
     // Немедицинской отрасли сборка закрыта: её случаи — из пресета, и даже
     // пациенты без случая не собираются (набор пишется по одному). Значит
     // цели пусты по определению, и спрашивать их незачем
-    const { цели } = медицинскаяОтрасль(industry)
+    const { цели } = медицина
       ? await целиПересборки(saved)
       : { цели: [] as string[] };
 
@@ -475,7 +481,7 @@ export async function PUT(request: NextRequest) {
       });
       // Отрасль могли поменять — cookie догоняет её сразу, а не со
       // следующей страницей
-      поставитьОтрасль(ответ, industry);
+      поставитьОтрасль(ответ, отрасль);
       return ответ;
     }
 
@@ -509,7 +515,7 @@ export async function PUT(request: NextRequest) {
       ...(await organizationForForm(saved)),
       affected: цели.length,
     });
-    поставитьОтрасль(ответ, industry);
+    поставитьОтрасль(ответ, отрасль);
     return ответ;
   } catch (error) {
     console.error("Ошибка в PUT /api/organization:", error);

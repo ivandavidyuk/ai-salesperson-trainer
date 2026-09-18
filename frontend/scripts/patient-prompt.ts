@@ -234,19 +234,17 @@ export const НЕДВИЖИМОСТЬ: IndustryRules = {
 };
 
 /**
- * Правила по отрасли организации. Отрасль — свободный текст из формы
- * руководителя («офтальмология», «стоматология: терапия и имплантация»,
- * «недвижимость: офис продаж»), поэтому не таблица, а разборщик по корню:
- * всё, где нет недвижимости, — клиника, как было до отраслей.
+ * Правила по ключу отрасли организации (`Organization.industryKey`).
+ * Медицина — база: её блоки эталонные, остальные отрасли — свои варианты.
  */
-export function industryRules(industry: string): IndustryRules {
-  return industryKey(industry) === "недвижимость" ? НЕДВИЖИМОСТЬ : МЕДИЦИНА;
+export function industryRules(ключ: IndustryKey): IndustryRules {
+  return ключ === "недвижимость" ? НЕДВИЖИМОСТЬ : МЕДИЦИНА;
 }
 
-// Разборщик отрасли живёт отдельным крошечным модулем: его берут и экраны
+// Ключ отрасли живёт отдельным крошечным модулем: его берут и экраны
 // (слова интерфейса), а тащить в браузер весь текст промптов незачем
-import { industryKey } from "./industry-key";
-export { industryKey, type IndustryKey } from "./industry-key";
+import type { IndustryKey } from "./industry-key";
+export { ОТРАСЛИ, ключОтрасли, type IndustryKey } from "./industry-key";
 
 
 const PROHIBITIONS = `ЧЕГО НЕ ДЕЛАТЬ:

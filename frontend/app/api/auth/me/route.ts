@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
         jobTitle: true,
         clinic: true,
         avatarUpdatedAt: true,
-        organization: { select: { industry: true } },
+        organization: { select: { industryKey: true } },
       },
     });
 
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { organization, ...поля } = user;
-    const industry = слагДляОрганизации(organization?.industry);
+    const industry = слагДляОрганизации(organization?.industryKey);
     const response = NextResponse.json({
       ...поля,
       avatarUpdatedAt: user.avatarUpdatedAt?.toISOString() ?? null,
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     });
     // Cookie заодно догоняет правку отрасли в профиле: роут зовёт каждая
     // страница, и следующая полная загрузка уже рисуется верными словами
-    поставитьОтрасль(response, organization?.industry);
+    поставитьОтрасль(response, organization?.industryKey);
     return response;
   } catch (error) {
     console.error("Ошибка в /api/auth/me:", error);
