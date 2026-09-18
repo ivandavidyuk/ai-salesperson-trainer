@@ -46,7 +46,11 @@ import {
   industryRules,
   mechanicBlocks,
   ключОтрасли,
+  ОТРАСЛИ,
+  type НемедицинскаяОтрасль,
 } from "./patient-prompt";
+import { TRAINING_TYPES } from "./training-types";
+import { описаниеУпражнения } from "../lib/industryWords";
 
 // Эталон Тамары. История: 4451 / ba3d2d9c… — снят с прода 30.07.2026;
 // 4452 / c0f86b17… — после разреза личность ↔ случай; этот — после того, как
@@ -245,22 +249,85 @@ function checkIndustryResolver(): void {
   console.log(`Ключ отрасли: ${ожидания.length} значений разобраны верно`);
 }
 
+// Случай-проба у каждой немедицинской отрасли. Таблица: новая отрасль
+// не соберётся, пока ей не написан случай, на котором проверяется сборка
+const ПРОБЫ: Record<НемедицинскаяОтрасль, PatientCase> = {
+  недвижимость: REALTY_CASE,
+};
+
 function checkRealtyProbe(): void {
   const роли = PROFILES.map((p) => [p.name, { personality: p.personality }] as const);
-  let символов = 0;
-  for (const [name, role] of роли) {
-    const роль: PatientRole = { personality: role.personality, case: REALTY_CASE };
-    const prompt = buildRolePrompt(роль, НЕДВИЖИМОСТЬ);
-    const остались = clinicWordsIn(name, prompt);
-    if (остались.length > 0) {
-      fail(`проба недвижимости: у ${name} остались клинические слова — ${остались.join(", ")}`);
+  for (const [отрасль, проба] of Object.entries(ПРОБЫ) as [НемедицинскаяОтрасль, PatientCase][]) {
+    let символов = 0;
+    for (const [name, role] of роли) {
+      const роль: PatientRole = { personality: role.personality, case: проба };
+      const prompt = buildRolePrompt(роль, industryRules(отрасль));
+      const остались = clinicWordsIn(name, prompt);
+      if (остались.length > 0) {
+        fail(`проба ${отрасль}: у ${name} остались клинические слова — ${остались.join(", ")}`);
+      }
+      символов += prompt.length;
     }
-    символов += prompt.length;
+    console.log(
+      `Проба ${отрасль}: ${роли.length} личностей собраны с её правилами ` +
+        `(${символов} символов), клиники не осталось`,
+    );
   }
-  console.log(
-    `Проба недвижимости: ${роли.length} личностей собраны с офисом продаж ` +
-      `(${символов} символов), клиники не осталось`,
-  );
+}
+
+// Слова сцены клиники, которых таблица замен backend не переводит: их
+// у неклиники убирает только свой вариант текста
+const СЦЕНА_КЛИНИКИ = ["стойк", "кабинет", "коридор", "кресл", "анамнез", "диоптри", "симптом", "жалоб"];
+
+// Упражнения у неклиники. Сцена роли, рубрика и критерий оценщика берутся
+// своим вариантом отрасли, а без него — базовым текстом, который backend
+// переводит таблицей замен (services/industry.py). Таблица переводит
+// «пациента», но не сцену: «у стойки», «анамнез и диоптрии» остались бы.
+// Поэтому свой вариант обязан быть чистым целиком, а базовый текст без
+// варианта — чистым от всего, кроме «пациента». Описание упражнения
+// на экране переводит фронт (описаниеУпражнения) — его проверяем целиком
+function checkDrillTexts(): void {
+  const клиника = [...КЛИНИЧЕСКИЕ_СЛОВА, ...СЦЕНА_КЛИНИКИ];
+  const найти = (текст: string, корни: string[]) => корни.filter((к) => containsStem(текст, к));
+  let проверено = 0;
+  for (const отрасль of ОТРАСЛИ) {
+    if (отрасль === "медицина") continue;
+    for (const тип of TRAINING_TYPES) {
+      const поля = [
+        ["сцена", тип.prompt, тип.prompts?.[отрасль]],
+        ["рубрика", тип.rubric, тип.rubrics?.[отрасль]],
+        ["критерий", тип.doneWhen, тип.doneWhens?.[отрасль]],
+      ] as const;
+      for (const [поле, база, свой] of поля) {
+        const остались = свой
+          ? найти(свой, клиника)
+          : найти(база, клиника.filter((к) => к !== "пациент"));
+        if (остались.length > 0) {
+          fail(
+            `упражнение ${тип.id} · ${отрасль}: ${поле} ${свой ? "(свой вариант)" : "без своего варианта"} ` +
+              `говорит словами клиники — ${остались.join(", ")}`,
+          );
+        }
+        проверено += 1;
+      }
+      const описание = найти(описаниеУпражнения(тип.id, тип.description, отрасль), клиника);
+      if (описание.length > 0) {
+        fail(`упражнение ${тип.id} · ${отрасль}: описание на экране — ${описание.join(", ")}`);
+      }
+    }
+  }
+  console.log(`Упражнения неклиник: ${проверено} текстов без клиники`);
+}
+
+// У каждой отрасли — пресет: из него заводится организация (create-client,
+// create-demo), и без него ей нечем говорить
+function checkEveryIndustryHasPreset(): void {
+  for (const отрасль of ОТРАСЛИ) {
+    if (!ПРЕСЕТЫ.some((п) => п.clinic.отрасль === отрасль)) {
+      fail(`отрасль «${отрасль}»: нет пресета в scripts/presets/index.ts`);
+    }
+  }
+  console.log(`Пресеты отраслей: у всех ${ОТРАСЛИ.length}`);
 }
 
 // Эталонный набор — пресет офтальмологии: на нём отлаживался механизм,
@@ -554,6 +621,8 @@ function main(): void {
   checkNoClinicWords();
   checkIndustryResolver();
   checkRealtyProbe();
+  checkDrillTexts();
+  checkEveryIndustryHasPreset();
 
   console.log(`\nЭталонный набор: ${layered} из ${PROFILES.length} пациентов`);
 

@@ -72,20 +72,16 @@ _PATIENT_PROMPT_SQL = (
     # Рубрика, критерий и способ оценки — оценщику, а не роли: знай роль,
     # по каким признакам судят собеседника, она начала бы подыгрывать
     't."rubric" AS type_rubric, t."doneWhen" AS type_done_when, '
-    # Они же словами отрасли. Через to_jsonb, а не прямым обращением:
-    # колонки добавляет миграция фронтенда, а backend на DE при деплое
-    # перезапускается параллельно с ним. Прямое обращение к колонке, которой
-    # ещё нет, уронило бы этот запрос, а с ним и старт разговора; так до
-    # миграции придёт NULL и сработает перевод базового текста
-    'to_jsonb(t) -> \'rubricByIndustry\' AS type_rubrics, '
-    'to_jsonb(t) -> \'doneWhenByIndustry\' AS type_done_whens, '
+    # Они же словами отрасли: {"недвижимость": "…"}; нет варианта —
+    # базовый текст словами отрасли (services/industry.py)
+    't."rubricByIndustry" AS type_rubrics, t."doneWhenByIndustry" AS type_done_whens, '
     't."stageKey" AS type_stage_key, '
     # У сессий, начатых до мастера настройки, типа нет вовсе — это были
     # полные разговоры, поэтому COALESCE на true
     'COALESCE(t."scoresDeal", true) AS type_scores_deal, '
-    # Отрасль организации — оценщику и строке доверия: слова у них свои
-    # на отрасль (services/industry.py), рубрика одна
-    'o."industry" AS industry '
+    # Ключ отрасли организации — оценщику и строке доверия: слова у них
+    # свои на отрасль (services/industry.py), рубрика одна
+    'o."industryKey" AS industry '
     'FROM "Session" s '
     'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
     'LEFT JOIN "TrainingType" t ON t."id" = s."trainingTypeId" '
@@ -403,7 +399,9 @@ class SessionStore:
             'COALESCE(pc."anamnesis", p."anamnesis") AS anamnesis, '
             'COALESCE(pc."description", p."description") AS description, '
             'pc."diagnosticsPreset" AS preset_document, '
-            'o."industry" AS industry, '
+            # Текст отрасли — генератору документа («офтальмология»), ключ —
+            # замку: документ бывает только у клиник
+            'o."industry" AS industry, o."industryKey" AS industry_key, '
             # Прайс — только для проверки готового документа: назвавший
             # услугу документ отдаёт менеджеру готовый ответ. В промпт
             # генератора список не идёт, там он навредил бы
@@ -572,15 +570,15 @@ class SessionStore:
         }
 
     async def get_industry(self, session_id: str) -> str:
-        """Отрасль организации менеджера — для строки доверия и фонового оценщика.
+        """Ключ отрасли организации менеджера — для строки доверия и фонового оценщика.
 
         Отдельным коротким запросом при подключении, как `get_scores_deal`:
         промпт роли собирается лениво и живёт в Redis, а отрасль нужна
-        менеджеру ходов сразу. Пустая строка — медицина, как было до отраслей.
+        менеджеру ходов сразу. Пустая строка — медицина (services/industry.py).
         """
         assert self._pool is not None
         row = await self._pool.fetchrow(
-            'SELECT o."industry" AS industry FROM "Session" s '
+            'SELECT o."industryKey" AS industry FROM "Session" s '
             'LEFT JOIN "User" u ON u."id" = s."userId" '
             'LEFT JOIN "Organization" o ON o."id" = u."organizationId" '
             'WHERE s."id" = $1',

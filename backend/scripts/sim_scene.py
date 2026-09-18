@@ -50,6 +50,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.config import get_settings  # noqa: E402
 from services import llm  # noqa: E402
+from services.industry import ОТРАСЛИ  # noqa: E402
 
 # Сколько ждать между попытками, когда провайдер молчит. В бою потерянный ход —
 # событие, которое надо видеть; здесь он только портит замер, поэтому
@@ -145,9 +146,12 @@ def parse_args(argv: list[str]) -> tuple[str, int, str, bool]:
             i += 1
             scene_path = rest[i]
         elif arg == "--отрасль":
-            # Слова строки доверия по отрасли, как в бою; без него — медицина
+            # Ключ отрасли: слова строки доверия, как в бою; без него — медицина.
+            # Незнакомый ключ — отказ, а не молчаливая медицина
             i += 1
             industry = rest[i]
+            if industry not in ОТРАСЛИ:
+                raise SystemExit(f"--отрасль: нет отрасли «{industry}», есть: {', '.join(ОТРАСЛИ)}")
         elif arg == "--сухой":
             dry = True
         else:

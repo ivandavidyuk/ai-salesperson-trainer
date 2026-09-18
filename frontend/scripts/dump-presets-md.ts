@@ -17,6 +17,7 @@ import { PATIENT_PORTRAITS } from "../lib/patientAvatars";
 import { PROFILES } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
 import { клиническая, type Preset } from "./presets/types";
+import type { НемедицинскаяОтрасль } from "./industry-key";
 
 function аргумент(имя: string): string | null {
   const i = process.argv.indexOf(`--${имя}`);
@@ -163,8 +164,18 @@ function отчётОфиса(пресет: Preset): string {
   return куски.join("\n");
 }
 
+/**
+ * Отчёт эксперту у каждой немедицинской отрасли свой: читает его человек
+ * из этой отрасли, и просим мы проверить её предмет — повод, деньги, страхи.
+ * Таблица, а не развилка: новая отрасль без своего отчёта не соберётся
+ */
+const ОТЧЁТЫ: Record<НемедицинскаяОтрасль, (пресет: Preset) => string> = {
+  недвижимость: отчётОфиса,
+};
+
 function отчёт(пресет: Preset): string {
-  if (пресет.clinic.отрасль !== "медицина") return отчётОфиса(пресет);
+  const отрасль = пресет.clinic.отрасль;
+  if (отрасль !== "медицина") return ОТЧЁТЫ[отрасль](пресет);
   const { clinic, cases } = пресет;
   const куски: string[] = [
     `# Случаи пациентов: ${clinic.industryLabel}`,

@@ -19,7 +19,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from core.auth import verify_token
 from core.config import get_settings
 from services import achievements, case_generator, diagnostics, llm, scoring, tts
-from services.industry import МЕДИЦИНА, industry_key, есть_диагностика
+from services.industry import есть_диагностика, медицинская_отрасль
 from services.industry import translate as по_отрасли
 from services.text import strip_for_speech
 from services.session import (
@@ -259,8 +259,9 @@ async def generate_case_endpoint(request: Request):
         raise HTTPException(status_code=400, detail="Нужны personality и clinic")
     # Второй замок после Node (lib/cases.ts, роуты организации): клинический
     # конвейер собрал бы офису продаж диагноз и «услугу под диагноз» за наши
-    # деньги. Случаи немедицинских отраслей пишутся заранее в пресете
-    if industry_key(str(clinic.get("industry") or "")) != МЕДИЦИНА:
+    # деньги. Случаи немедицинских отраслей пишутся заранее в пресете.
+    # Ключ отрасли присылает Node (lib/cases.ts, ClinicPayload)
+    if not медицинская_отрасль(clinic.get("industryKey")):
         raise HTTPException(
             status_code=409, detail="Для этой отрасли случаи не собираются"
         )
@@ -312,7 +313,7 @@ async def generate_diagnostics_endpoint(request: Request):
         # Этапная тренировка: сценка диагностики туда не помещается,
         # и кнопки на фронте нет. Генерировать впустую не будем
         return {"status": "skipped"}
-    if not есть_диагностика(контекст["industry"]):
+    if not есть_диагностика(контекст["industry_key"]):
         # Второй замок после /api/sessions/start: Node такие сессии сюда
         # не шлёт, но вызов мимо него сгенерировал бы офису продаж
         # медицинский осмотр за наши деньги

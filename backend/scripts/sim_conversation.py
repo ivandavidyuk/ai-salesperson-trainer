@@ -50,11 +50,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.config import get_settings  # noqa: E402
 from services import checklist, llm, scoring  # noqa: E402
 from services.industry import (  # noqa: E402
-    НЕДВИЖИМОСТЬ,
-    industry_key,
+    ОТРАСЛИ,
     pick_variant,
     translate as по_отрасли,
 )
+from services.industry import отрасль as настройки_отрасли  # noqa: E402
 
 
 def load_lines(path: str) -> list[str]:
@@ -170,12 +170,7 @@ def промпт_менеджера(описание: str, industry: str = "") -
     `description`. Ни рубрику, ни критерий: с ними прогон проверял бы
     не навык, а умение подогнать ответ под известную проверку.
     """
-    где = (
-        "Ты — менеджер отдела продаж застройщика, разговариваешь с покупателем "
-        "квартиры."
-        if industry_key(industry) == НЕДВИЖИМОСТЬ
-        else "Ты — менеджер по продажам в частной клинике, разговариваешь с пациентом."
-    )
+    где = настройки_отрасли(industry).менеджер.представление
     return по_отрасли(
         f"{где}\n\n"
         f"Сейчас ты отрабатываешь навык: {описание}\n\n"
@@ -204,13 +199,16 @@ async def реплика_менеджера(history: list[dict], prompt: str) ->
 
 async def main() -> None:
     argv = sys.argv[1:]
-    # `--отрасль недвижимость` — слова строки доверия и оценщика по отрасли,
-    # как в бою у организации этой отрасли. Без него — медицина
+    # `--отрасль недвижимость` — ключ отрасли, как у организации в бою:
+    # сцена, строка доверия, оценщик и менеджер-модель её словами.
+    # Без него — медицина. Незнакомый ключ — отказ, а не молчаливая медицина
     industry = ""
     if "--отрасль" in argv:
         at = argv.index("--отрасль")
         industry = argv[at + 1]
         del argv[at : at + 2]
+        if industry not in ОТРАСЛИ:
+            raise SystemExit(f"--отрасль: нет отрасли «{industry}», есть: {', '.join(ОТРАСЛИ)}")
     role_path, lines_path = argv[0], argv[1]
     # Третий аргумент — слаг типа тренировки. Без него прогон идёт как раньше:
     # полный разговор со сделкой
