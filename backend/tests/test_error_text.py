@@ -40,7 +40,7 @@ def test_неизвестный_сбой_показывает_тип_а_не_п�
 def test_таймаут_словами_отрасли():
     # Офис продаж видит это при каждой задержке провайдера — «пациент»
     # на экране покупателя квартиры выбивается из разговора
-    assert _user_message(asyncio.TimeoutError(), "Недвижимость: офис продаж").startswith("Клиент")
+    assert _user_message(asyncio.TimeoutError(), "недвижимость").startswith("Клиент")
     assert _user_message(asyncio.TimeoutError(), "офтальмология") == _user_message(
         asyncio.TimeoutError()
     )

@@ -24,6 +24,9 @@ interface ClinicPayload {
   // Nullable в базе, потому что миграция накатывалась на живую организацию
   city: string | null;
   industry: string;
+  // Ключ отрасли — по нему backend закрывает сборку неклиникам вторым
+  // замком (main.py, /cases/generate); текст выше — для генератора
+  industryKey: IndustryKey;
   services: { name: string; price: string; description: string | null }[];
   // Закрытый список: генератор берёт диагноз отсюда и не добавляет своего
   diagnoses: { name: string; complaint: string }[];
@@ -291,6 +294,7 @@ export async function rebuildCases(organizationId: string, headId: string): Prom
     name: organization.name,
     city: organization.city,
     industry: organization.industry,
+    industryKey: отрасль,
     services: organization.services,
     diagnoses: organization.diagnoses,
   };

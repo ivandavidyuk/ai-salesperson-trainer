@@ -14,7 +14,7 @@ from typing import Optional
 import asyncpg
 
 from core.config import get_settings
-from services.industry import МЕДИЦИНА, industry_key, pick_variant
+from services.industry import ключ_отрасли, медицинская_отрасль, pick_variant
 
 # Слаг пациента живёт в репозитории (frontend/scripts/patients/<слаг>.ts),
 # а в базе его нет — там только имя. Соответствие держим здесь явным списком:
@@ -76,14 +76,14 @@ _ПАЦИЕНТЫ = (
 # коррекцию за 45 000, тогда как в его случае подбор очков от 3 500, и снять
 # страх «как линзы выдержат пыль на стройке» было нечем в принципе
 _КЛИНИКА = (
-    'SELECT o."name", o."industry", '
+    'SELECT o."name", o."industry", o."industryKey", '
     '  COALESCE(json_agg(json_build_object('
     '    \'name\', s."name", \'price\', s."price", \'description\', s."description"'
     '  ) ORDER BY s."position") FILTER (WHERE s."id" IS NOT NULL), \'[]\') AS services '
     'FROM "Organization" o '
     'LEFT JOIN "Service" s ON s."organizationId" = o."id" '
     'WHERE o."id" = $1 '
-    'GROUP BY o."id", o."name", o."industry"'
+    'GROUP BY o."id", o."name", o."industry", o."industryKey"'
 )
 
 _ТИПЫ = (
@@ -112,8 +112,12 @@ class Пациент:
 @dataclass
 class Клиника:
     название: str
+    # Отрасль словами — в представление менеджера-модели («офтальмология»)
     отрасль: str
     услуги: list[dict]
+    # Ключ отрасли организации — по нему сцены, рубрики, оценщик и слова
+    # менеджера-модели (services/industry.py)
+    ключ: str = "медицина"
 
     def прайс(self) -> str:
         """Услуги строками — как менеджер держит их в голове."""
@@ -175,6 +179,7 @@ async def загрузить(
             название=строка_клиники["name"],
             отрасль=строка_клиники["industry"],
             услуги=json.loads(строка_клиники["services"]),
+            ключ=ключ_отрасли(строка_клиники["industryKey"]),
         )
         if строка_клиники
         else None
@@ -185,11 +190,11 @@ async def загрузить(
     # У неклиники в базе все персонажи, а случай — только у состава её
     # отрасли. Остальные без промпта по определению, и замечание на каждого
     # утопило бы настоящие; считаем их одной строкой
-    отрасль = клиника.отрасль if клиника else ""
+    отрасль = клиника.ключ if клиника else ""
     чужие = 0
     for строка in пациенты_строки:
         промпт = (строка["prompt"] or "").strip()
-        if not промпт and industry_key(отрасль) != МЕДИЦИНА:
+        if not промпт and not медицинская_отрасль(отрасль):
             чужие += 1
             continue
         if not промпт:
