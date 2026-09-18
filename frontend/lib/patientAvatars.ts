@@ -21,6 +21,7 @@ export const PATIENT_PORTRAITS: Record<string, string> = {
   "Павел Андреевич": "pavel-klimov",
   "Артём Сергеевич": "artem-kovalev",
   "Олег Викторович": "oleg-shestakov",
+  "Светлана Юрьевна": "svetlana-belova",
   "Юлия Андреевна": "yulia-tkachenko",
   "Виталий Эдуардович": "vitaly-kuznetsov",
   "Рустам Каримович": "rustam-aliev",
