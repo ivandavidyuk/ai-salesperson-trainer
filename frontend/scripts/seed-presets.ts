@@ -129,6 +129,17 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
       select: { id: true },
     });
     if (!пациент) {
+      // Новый персонаж попадает в базу только через seed:patients, а он
+      // гоняется руками. У набора в работе это штатная ситуация между мержем
+      // и ручным сидом: случай пропускаем и говорим, что сделать, — иначе
+      // старт контейнера заканчивался бы «ЗАЛИВКА ПРЕСЕТОВ НЕ УДАЛАСЬ»
+      if (clinic.inProgress) {
+        console.log(
+          `  ${пресетныйСлучай.patientName.padEnd(22)} пациента нет в базе — случай пропущен: ` +
+            `npm run seed:patients, затем npm run seed:presets`,
+        );
+        continue;
+      }
       throw new Error(
         `${clinic.orgName}: пациента «${пресетныйСлучай.patientName}» нет в базе — ` +
           `сначала npm run seed:patients`,
