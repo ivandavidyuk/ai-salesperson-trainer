@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
       include: {
-        organization: { select: { isDemo: true, demoExpiresAt: true, industry: true } },
+        organization: { select: { isDemo: true, demoExpiresAt: true, industryKey: true } },
       },
     });
 
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      industry: слагДляОрганизации(org?.industry),
+      industry: слагДляОрганизации(org?.industryKey),
     });
 
     response.cookies.set({
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
       path: "/",
     });
     // Отрасль — чтобы первая страница после входа уже говорила своими словами
-    поставитьОтрасль(response, org?.industry);
+    поставитьОтрасль(response, org?.industryKey);
 
     return response;
   } catch (error) {

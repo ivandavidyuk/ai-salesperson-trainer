@@ -6,7 +6,8 @@
 
 import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { словаОтрасли } from "@/lib/industryWords";
+import { словаДляКлюча } from "@/lib/industryWords";
+import { ключОтрасли } from "@/scripts/industry-key";
 
 /** Сколько дней держим выполненные задания в списке */
 export const ОКНО_ВЫПОЛНЕННЫХ_ДНЕЙ = 30;
@@ -60,10 +61,10 @@ async function клиентОрганизации(организация: string
   const орг = организация
     ? await prisma.organization.findUnique({
         where: { id: организация },
-        select: { industry: true },
+        select: { industryKey: true },
       })
     : null;
-  return словаОтрасли(орг?.industry).клиент;
+  return словаДляКлюча(ключОтрасли(орг?.industryKey)).клиент;
 }
 
 export async function разобратьЗадание(

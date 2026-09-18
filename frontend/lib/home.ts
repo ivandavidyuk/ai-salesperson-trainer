@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { ЕСТЬ_РЕПЛИКА_МЕНЕДЖЕРА, завершённые } from "@/lib/statsWindow";
 import { STAGE_METRICS } from "@/lib/score";
 import { медицинскаяОтрасль } from "@/lib/industry";
+import { ключОтрасли } from "@/scripts/industry-key";
 import { медицинскийТекст } from "@/lib/industryWords";
 
 /**
@@ -220,7 +221,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
       jobTitle: true,
       statsResetAt: true,
       organizationId: true,
-      organization: { select: { industry: true } },
+      organization: { select: { industryKey: true } },
     },
   });
   if (!user) return null;
@@ -285,7 +286,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
     prisma.session.count({ where: withDeal }),
   ]);
 
-  const медицина = медицинскаяОтрасль(user.organization?.industry ?? "");
+  const медицина = медицинскаяОтрасль(ключОтрасли(user.organization?.industryKey));
   const [tip, motivation] = await Promise.all([
     pickDaily(DailyContentKind.tip, day, медицина),
     pickDaily(DailyContentKind.motivation, day, медицина),

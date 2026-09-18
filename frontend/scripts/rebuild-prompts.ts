@@ -22,7 +22,7 @@
 // Поэтому источник истины для них один: репозиторий.
 
 import { Prisma, PrismaClient } from "@prisma/client";
-import { buildRolePrompt, industryRules, type PatientCase } from "./patient-prompt";
+import { buildRolePrompt, industryRules, ключОтрасли, type PatientCase } from "./patient-prompt";
 import { PROFILES } from "./patients";
 import { пресетныйСлучай } from "./presets";
 
@@ -78,7 +78,7 @@ async function пересобратьКлиентские(): Promise<Итог> {
       prompt: true,
       caseData: true,
       patient: { select: { name: true } },
-      organization: { select: { industry: true } },
+      organization: { select: { industry: true, industryKey: true } },
     },
   });
 
@@ -105,7 +105,7 @@ async function пересобратьКлиентские(): Promise<Итог> {
     const дополненный = дополнитьИзПресета(строка.caseData, отрасль, имя);
     const свежий = buildRolePrompt(
       { personality: личность, case: дополненный ?? строка.caseData },
-      industryRules(отрасль),
+      industryRules(ключОтрасли(строка.organization.industryKey)),
     );
     if (строка.prompt === свежий && !дополненный) {
       итог.бездела += 1;

@@ -14,6 +14,7 @@ import { prisma } from "@/lib/db";
 import { signToken } from "@/lib/auth";
 import { buildRolePrompt, industryRules, type PatientCase } from "@/scripts/patient-prompt";
 import { медицинскаяОтрасль } from "@/lib/industry";
+import { ключОтрасли, type IndustryKey } from "@/scripts/industry-key";
 import { PROFILES, составОтрасли } from "@/scripts/patients";
 import { пресетныйСлучай } from "@/scripts/presets";
 
@@ -169,9 +170,9 @@ export async function целиПересборки(organizationId: string): Prom
   // под недвижимость, клинике не собирается
   const организация = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { industry: true },
+    select: { industryKey: true },
   });
-  const состав = составОтрасли(организация?.industry ?? "").map((p) => p.name);
+  const состав = составОтрасли(ключОтрасли(организация?.industryKey)).map((p) => p.name);
   const all = await prisma.patient.findMany({
     where: { name: { in: состав } },
     select: {
@@ -235,6 +236,7 @@ export async function rebuildCases(organizationId: string, headId: string): Prom
       name: true,
       city: true,
       industry: true,
+      industryKey: true,
       services: {
         orderBy: { position: "asc" },
         select: { name: true, price: true, description: true },
@@ -253,7 +255,8 @@ export async function rebuildCases(organizationId: string, headId: string): Prom
   // Медицинский конвейер — только клиникам: офису продаж он собрал бы
   // диагнозы. Роуты это уже отсекли, но сборка платная и необратимая —
   // второй замок здесь, на самом входе
-  if (!медицинскаяОтрасль(organization.industry)) {
+  const отрасль = ключОтрасли(organization.industryKey);
+  if (!медицинскаяОтрасль(отрасль)) {
     console.warn(
       `Сборка случаев для отрасли «${organization.industry}» закрыта: случаи из пресета`
     );
@@ -300,7 +303,7 @@ export async function rebuildCases(organizationId: string, headId: string): Prom
 
   const остановитьПульс = запуститьПульс(organizationId);
   try {
-    await generateAll(цели, organizationId, clinic, token, занятые);
+    await generateAll(цели, organizationId, clinic, отрасль, token, занятые);
   } finally {
     // Гасим ДО снятия флага: живой таймер после этого двигал бы пульс
     // у сборки, которой уже нет
@@ -317,6 +320,7 @@ async function generateAll(
   patients: { id: string; name: string }[],
   organizationId: string,
   clinic: ClinicPayload,
+  отрасль: IndustryKey,
   token: string,
   занятые: string[]
 ): Promise<number> {
@@ -364,7 +368,7 @@ async function generateAll(
       };
       const prompt = buildRolePrompt(
         { personality: role.personality, case: patientCase },
-        industryRules(clinic.industry),
+        industryRules(отрасль),
       );
 
       await prisma.patientCase.upsert({

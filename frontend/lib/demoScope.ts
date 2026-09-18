@@ -6,7 +6,7 @@
 // через ts-node, где алиас «@/» не разрешается. По той же причине разборщик
 // отрасли подключён относительным путём.
 
-import { industryKey, type IndustryKey } from "../scripts/patient-prompt";
+import type { IndustryKey } from "../scripts/industry-key";
 
 /**
  * Кого показываем собственнику: средний, лёгкий и сложный. Три разных
@@ -35,8 +35,8 @@ const ДЕМО_КЛИЕНТЫ_ПО_ОТРАСЛИ: Record<IndustryKey, string[]>
 };
 
 /** Кто открыт в демо на разговоры у организации этой отрасли */
-export function демоКлиенты(industry: string): string[] {
-  return ДЕМО_КЛИЕНТЫ_ПО_ОТРАСЛИ[industryKey(industry)];
+export function демоКлиенты(ключ: IndustryKey): string[] {
+  return ДЕМО_КЛИЕНТЫ_ПО_ОТРАСЛИ[ключ];
 }
 
 /** Только полный разговор: этапные тренировки собственнику не открываем */

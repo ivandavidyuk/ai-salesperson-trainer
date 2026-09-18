@@ -17,7 +17,8 @@ import { backendUrl } from "@/lib/cases";
 import type { CaseService } from "@/lib/caseService";
 import { caseService } from "@/lib/caseServiceQuery";
 import { медицинскаяОтрасль } from "@/lib/industry";
-import { словаОтрасли } from "@/lib/industryWords";
+import { словаДляКлюча } from "@/lib/industryWords";
+import { ключОтрасли } from "@/scripts/industry-key";
 
 // Организация без собранных случаев: пресет не налит и генерация не запускалась
 const СЛУЧАЙ_НЕ_СОБРАН =
@@ -129,11 +130,11 @@ export async function POST(request: NextRequest) {
       where: { id: user.sub },
       select: {
         organizationId: true,
-        organization: { select: { industry: true } },
+        organization: { select: { industryKey: true } },
       },
     });
     const organizationId = владелец?.organizationId ?? null;
-    const отрасль = владелец?.organization?.industry ?? "";
+    const отрасль = ключОтрасли(владелец?.organization?.industryKey);
     if (!organizationId) {
       return NextResponse.json({ error: СЛУЧАЙ_НЕ_СОБРАН }, { status: 400 });
     }
@@ -152,13 +153,13 @@ export async function POST(request: NextRequest) {
       });
       if (!chosen || !chosen.isActive) {
         return NextResponse.json(
-          { error: `Этот ${словаОтрасли(отрасль).клиент} пока недоступен` },
+          { error: `Этот ${словаДляКлюча(отрасль).клиент} пока недоступен` },
           { status: 400 }
         );
       }
       if (
         демо?.режим === "разговоры" &&
-        !демоКлиенты(демо.industry).includes(chosen.name)
+        !демоКлиенты(демо.industryKey).includes(chosen.name)
       ) {
         return NextResponse.json({ error: ВЫБОР_ЗАКРЫТ }, { status: 403 });
       }
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest) {
           isActive: true,
           ...соСлучаем,
           ...(демо?.режим === "разговоры"
-            ? { name: { in: демоКлиенты(демо.industry) } }
+            ? { name: { in: демоКлиенты(демо.industryKey) } }
             : {}),
         },
         orderBy: { createdAt: "asc" },

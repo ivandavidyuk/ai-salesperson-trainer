@@ -7,24 +7,24 @@
 // читать её браузеру незачем.
 
 import type { NextResponse } from "next/server";
-import { industryKey } from "@/scripts/industry-key";
+import { ключОтрасли } from "@/scripts/industry-key";
 import { ОТРАСЛЬ_COOKIE, слагОтрасли } from "@/lib/industryWords";
 
 const ГОД_СЕК = 365 * 24 * 60 * 60;
 
-/** Слаг отрасли по её названию у организации: «medicine» или «realty» */
-export function слагДляОрганизации(industry: string | null | undefined): string {
-  return слагОтрасли(industryKey(industry ?? ""));
+/** Слаг отрасли по ключу организации (`industryKey`): «medicine» или «realty» */
+export function слагДляОрганизации(industryKey: string | null | undefined): string {
+  return слагОтрасли(ключОтрасли(industryKey));
 }
 
 /** Кладёт в ответ cookie с отраслью организации */
 export function поставитьОтрасль(
   response: NextResponse,
-  industry: string | null | undefined
+  industryKey: string | null | undefined
 ): void {
   response.cookies.set({
     name: ОТРАСЛЬ_COOKIE,
-    value: слагДляОрганизации(industry),
+    value: слагДляОрганизации(industryKey),
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

@@ -11,6 +11,7 @@ import { getUserWithRole } from "@/lib/access";
 import { демоНаРазговоры } from "@/lib/demoAccess";
 import { демоКлиенты } from "@/lib/demoScope";
 import { медицинскаяОтрасль } from "@/lib/industry";
+import { ключОтрасли } from "@/scripts/industry-key";
 import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
 import { досьеОтрасли, составОтрасли } from "@/scripts/patients";
 
@@ -36,10 +37,10 @@ export async function GET(request: NextRequest) {
     const организация = user.organizationId
       ? await prisma.organization.findUnique({
           where: { id: user.organizationId },
-          select: { industry: true },
+          select: { industryKey: true },
         })
       : null;
-    const отрасль = организация?.industry ?? "";
+    const отрасль = ключОтрасли(организация?.industryKey);
     const клиника = медицинскаяОтрасль(отрасль);
 
     const patients = await prisma.patient.findMany({

@@ -15,7 +15,7 @@ import { compressAvatar } from "@/lib/avatar";
 import { useIndustry, useSetIndustry } from "@/app/components/IndustryProvider";
 import { initials, plural } from "@/lib/format";
 import { словаДляКлюча, числоПозиций, type IndustryWords } from "@/lib/industryWords";
-import { industryKey } from "@/scripts/industry-key";
+import { ключОтрасли } from "@/scripts/industry-key";
 
 interface Profile {
   id: string;
@@ -53,6 +53,8 @@ interface Organization {
   name: string;
   city: string | null;
   industry: string;
+  /** Ключ отрасли (`Organization.industryKey`): по нему слова и разделы формы */
+  industryKey: string;
   services: ServiceRow[];
   diagnoses: DiagnosisRow[];
   /** Демо-клиника: данные видны, но менять их нельзя — сохранение
@@ -662,15 +664,13 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
     return () => clearInterval(timer);
   }, [progress === null, load]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Слова и разделы — по отрасли в форме, а не по сохранённой: сервер
-  // проверяет присланную отрасль, и форма обязана требовать то же, что он.
-  // Пока отрасль не указана — по отрасли из cookie, как и весь интерфейс
-  const отрасль = industry.trim() ? industryKey(industry) : отрасльКонтекста;
+  // Слова и разделы — по ключу отрасли организации: форма его не меняет,
+  // и сервер проверяет по нему же. Организации ещё нет — по отрасли из
+  // cookie, как и весь интерфейс (новая организация из формы — клиника)
+  const отрасль = saved ? ключОтрасли(saved.industryKey) : отрасльКонтекста;
   const медицина = отрасль === "медицина";
-  // Отрасль неклиники меняем только мы, и поля у неё нет вовсе. Судим по
-  // сохранённой, а не по введённой: иначе у клиники поле исчезало бы прямо
-  // под пальцами, стоило набрать «недвижимость»
-  const отрасльЗакреплена = saved !== null && industryKey(saved.industry) !== "медицина";
+  // Текст отрасли неклиники меняем только мы, и поля у неё нет вовсе
+  const отрасльЗакреплена = saved !== null && !медицина;
   const слова = словаДляКлюча(отрасль);
   const filled =
     name.trim() !== "" &&
@@ -711,7 +711,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
       setServices(data.services ?? []);
       setDiagnoses(data.diagnoses ?? []);
       // Отрасль могли поменять — меню и соседние экраны говорят её словами
-      задатьОтрасль(industryKey(data.industry ?? ""));
+      задатьОтрасль(ключОтрасли(data.industryKey));
       // Правка могла не задеть никого — например, поменяли только цену.
       // Тогда сборки нет, и окно ожидания над ней было бы обманом:
       // оно ждёт события, которого не будет

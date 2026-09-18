@@ -7,6 +7,7 @@
 // у пациента больше нет, и пользователь без организации не заговорит.
 
 import { Prisma, PrismaClient } from "@prisma/client";
+import { ключОтрасли, type IndustryKey } from "./industry-key";
 
 export const ДЕМО_КЛИНИКА = "Демо-клиника";
 const ОТРАСЛЬ_ДЕМО_КЛИНИКИ = "офтальмология";
@@ -16,11 +17,16 @@ export interface КопияПресета {
   случаев: number;
   услуг: number;
   диагнозов: number;
+  /** Ключ отрасли пресета — его получила организация */
+  отрасль: IndustryKey;
 }
 
 /**
  * Копирует прайс, диагнозы и случаи пресета отрасли в организацию.
  * Пресета нет — null, и что с этим делать, решает вызывающий.
+ *
+ * Ключ отрасли организация получает от пресета: случаи написаны под его
+ * отрасль, и правила промпта, слова и закрытые функции обязаны совпасть.
  *
  * Прайс и диагнозы копируются вместе со случаями. Разговору они не нужны —
  * цены звучат из уст менеджера, — но руководитель первым делом открывает
@@ -34,9 +40,14 @@ export async function скопироватьПресет(
 ): Promise<КопияПресета | null> {
   const пресет = await prisma.organization.findFirst({
     where: { isPreset: true, industry },
-    select: { id: true, name: true },
+    select: { id: true, name: true, industryKey: true },
   });
   if (!пресет) return null;
+  const отрасль = ключОтрасли(пресет.industryKey);
+  await prisma.organization.update({
+    where: { id: organizationId },
+    data: { industryKey: отрасль },
+  });
 
   const услуги = await prisma.service.findMany({
     where: { organizationId: пресет.id },
@@ -94,6 +105,7 @@ export async function скопироватьПресет(
     случаев: случаи.length,
     услуг: услуги.length,
     диагнозов: диагнозы.length,
+    отрасль,
   };
 }
 

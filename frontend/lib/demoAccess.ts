@@ -20,6 +20,7 @@
 
 import { prisma } from "@/lib/db";
 import { медицинскаяОтрасль } from "@/lib/industry";
+import { ключОтрасли, type IndustryKey } from "@/scripts/industry-key";
 import { ЕСТЬ_РЕПЛИКА_МЕНЕДЖЕРА } from "@/lib/statsWindow";
 
 // Что именно открыто в демо — в lib/demoScope.ts: те константы нужны
@@ -32,8 +33,8 @@ const ХВОСТ_МС = 7 * СУТКИ_МС;
 
 export interface DemoStatus {
   organizationId: string;
-  /** Отрасль организации: от неё зависит, кто открыт в демо на разговоры */
-  industry: string;
+  /** Ключ отрасли организации: от него зависит, кто открыт в демо на разговоры */
+  industryKey: IndustryKey;
   /** Чем меряется доступ */
   режим: "сутки" | "разговоры";
   /**
@@ -63,7 +64,7 @@ export async function демоСтатус(
       organization: {
         select: {
           id: true,
-          industry: true,
+          industryKey: true,
           isDemo: true,
           demoExpiresAt: true,
           demoTalksLimit: true,
@@ -81,7 +82,7 @@ export async function демоСтатус(
     const истекает = org.demoExpiresAt;
     return {
       organizationId: org.id,
-      industry: org.industry,
+      industryKey: ключОтрасли(org.industryKey),
       режим: "сутки",
       expiresAt: истекает,
       осталось: null,
@@ -119,7 +120,7 @@ export async function демоСтатус(
 
   return {
     organizationId: org.id,
-    industry: org.industry,
+    industryKey: ключОтрасли(org.industryKey),
     режим: "разговоры",
     expiresAt: исчерпано,
     осталось,
@@ -169,8 +170,8 @@ export const ГЕНЕРАЦИЯ_ЗАКРЫТА =
  * Тот же отказ словами отрасли: у офиса продаж нет ни диагнозов, ни
  * пересборки — клиенты написаны заранее, а на полном доступе правят прайс
  */
-export function генерацияЗакрыта(industry: string): string {
-  return медицинскаяОтрасль(industry)
+export function генерацияЗакрыта(ключ: IndustryKey): string {
+  return медицинскаяОтрасль(ключ)
     ? ГЕНЕРАЦИЯ_ЗАКРЫТА
     : "В демо-режиме компания и клиенты уже настроены — их набор менять нельзя. " +
         "На полном доступе вы сможете описать свой прайс и условия.";
