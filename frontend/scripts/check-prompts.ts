@@ -201,7 +201,10 @@ const REALTY_CASE: PatientCase = {
 };
 
 function checkNoClinicWords(): void {
-  const роли = Object.entries(ЭТАЛОННЫЕ_РОЛИ);
+  // По всем профилям, а не по эталонному набору: персонаж, написанный под
+  // одну отрасль, в офтальмологическом пресете не участвует, а личность
+  // у него обязана быть такой же чистой
+  const роли = PROFILES.map((p) => [p.name, { personality: p.personality }] as const);
   for (const [name, role] of роли) {
     const text = personalityText(role.personality);
     const найдено = clinicWordsIn(name, text);
@@ -238,7 +241,7 @@ function checkIndustryResolver(): void {
 }
 
 function checkRealtyProbe(): void {
-  const роли = Object.entries(ЭТАЛОННЫЕ_РОЛИ);
+  const роли = PROFILES.map((p) => [p.name, { personality: p.personality }] as const);
   let символов = 0;
   for (const [name, role] of роли) {
     const роль: PatientRole = { personality: role.personality, case: REALTY_CASE };

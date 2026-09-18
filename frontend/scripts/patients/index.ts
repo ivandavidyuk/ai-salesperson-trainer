@@ -1,9 +1,11 @@
 // Все пациенты тренажёра. Порядок здесь — порядок в мастере настройки.
 //
-// Двадцать из двадцати одного написаны Димой (файл «Аватары 20 штук ФИНАЛ»),
+// Дарья Олеговна (18.09) — первая, написанная нами с нуля по CHARACTERS.md.
+// Двадцать из двадцати одного библиотечных написаны Димой (файл «Аватары 20 штук ФИНАЛ»),
 // Тамара — наша, на ней отлаживался механизм сделки.
 
 import { profile as tamara } from "./tamara-sokolova";
+import { profile as darya } from "./darya-melnikova";
 import { profile as yulia } from "./yulia-tkachenko";
 import { profile as vitaly } from "./vitaly-kuznetsov";
 import { profile as rustam } from "./rustam-aliev";
@@ -31,6 +33,8 @@ export type { PatientProfile } from "./types";
 
 export const PROFILES: PatientProfile[] = [
   tamara,
+  // Написана под недвижимость (18.09); у клиник в состав не входит
+  darya,
   yulia,
   vitaly,
   rustam,

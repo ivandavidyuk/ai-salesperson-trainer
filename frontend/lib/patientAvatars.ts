@@ -17,6 +17,7 @@
 /** Порядок — как в scripts/patients/index.ts, чтобы сверять глазами */
 export const PATIENT_PORTRAITS: Record<string, string> = {
   "Тамара Михайловна": "tamara-sokolova",
+  "Дарья Олеговна": "darya-melnikova",
   "Юлия Андреевна": "yulia-tkachenko",
   "Виталий Эдуардович": "vitaly-kuznetsov",
   "Рустам Каримович": "rustam-aliev",
