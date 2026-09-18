@@ -116,6 +116,12 @@ from core.config import get_settings  # noqa: E402
         "with a few grey strands, light discreet makeup, composed attentive "
         "face, polite reserved half-smile, observant eyes. Plain light blouse "
         "under a simple dark cardigan.",
+    "denis-vorontsov":
+        "A 38-year-old Russian man, lead automation engineer, married father "
+        "of two, recently relocated for work. Dark brown slightly wavy hair, "
+        "short neat full beard, thin-rimmed rectangular glasses, open friendly "
+        "face with an easy warm closed-mouth smile. Plain light-blue oxford "
+        "shirt, no tie, top button open.",
     "yulia-tkachenko":
         "A 34-year-old Russian woman, head of a sales department, working "
         "twelve-hour days and raising a teenage daughter alone. Dark hair "
