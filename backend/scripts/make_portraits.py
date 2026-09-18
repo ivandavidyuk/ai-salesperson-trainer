@@ -105,6 +105,11 @@ from core.config import get_settings  # noqa: E402
         "home. Short dark hair slightly tousled, light stubble, slim face, "
         "alert slightly ironic eyes, a hint of a smile. Plain grey hoodie "
         "over a dark T-shirt.",
+    "oleg-shestakov":
+        "A 45-year-old Russian man, drilling crew foreman working rotational "
+        "shifts in the Far North. Short greying hair, weathered face with "
+        "wind-roughened skin, short stubble, calm steady reserved look. "
+        "Plain dark fleece jacket zipped over a T-shirt.",
     "yulia-tkachenko":
         "A 34-year-old Russian woman, head of a sales department, working "
         "twelve-hour days and raising a teenage daughter alone. Dark hair "

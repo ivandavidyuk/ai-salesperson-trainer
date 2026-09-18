@@ -10,8 +10,9 @@ import { СЛУЧАЙ as ТАМАРА } from "./tamara-sokolova";
 import { СЛУЧАЙ as ДАРЬЯ } from "./darya-melnikova";
 import { СЛУЧАЙ as ПАВЕЛ } from "./pavel-klimov";
 import { СЛУЧАЙ as АРТЁМ } from "./artem-kovalev";
+import { СЛУЧАЙ as ОЛЕГ } from "./oleg-shestakov";
 
 export const ПРЕСЕТ: Preset = {
   clinic: КЛИНИКА,
-  cases: [ТАМАРА, ДАРЬЯ, ПАВЕЛ, АРТЁМ],
+  cases: [ТАМАРА, ДАРЬЯ, ПАВЕЛ, АРТЁМ, ОЛЕГ],
 };
