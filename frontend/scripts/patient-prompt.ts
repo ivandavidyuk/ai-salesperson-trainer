@@ -240,7 +240,19 @@ export const НЕДВИЖИМОСТЬ: IndustryRules = {
  * всё, где нет недвижимости, — клиника, как было до отраслей.
  */
 export function industryRules(industry: string): IndustryRules {
-  return /недвиж|застройщ|офис продаж/i.test(industry) ? НЕДВИЖИМОСТЬ : МЕДИЦИНА;
+  return industryKey(industry) === "недвижимость" ? НЕДВИЖИМОСТЬ : МЕДИЦИНА;
+}
+
+/** Ключ отрасли: по нему выбираются правила, состав персонажей и пресет */
+export type IndustryKey = "медицина" | "недвижимость";
+
+/**
+ * Ключ по названию отрасли организации. Тот же разбор, что на backend
+ * (services/industry.py, `industry_key`): разойдутся — роль заговорит
+ * словами одной отрасли, а оценщик будет судить словами другой.
+ */
+export function industryKey(industry: string): IndustryKey {
+  return /недвиж|застройщ|офис продаж/i.test(industry) ? "недвижимость" : "медицина";
 }
 
 

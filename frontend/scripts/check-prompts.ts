@@ -30,7 +30,7 @@ import { writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-import { PROFILES } from "./patients";
+import { PROFILES, составОтрасли } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
 import { проверитьНабор, проверитьСлучай } from "./presets/validate";
 import {
@@ -201,7 +201,10 @@ const REALTY_CASE: PatientCase = {
 };
 
 function checkNoClinicWords(): void {
-  const роли = Object.entries(ЭТАЛОННЫЕ_РОЛИ);
+  // По всем профилям, а не по эталонному набору: персонаж, написанный под
+  // одну отрасль, в офтальмологическом пресете не участвует, а личность
+  // у него обязана быть такой же чистой
+  const роли = PROFILES.map((p) => [p.name, { personality: p.personality }] as const);
   for (const [name, role] of роли) {
     const text = personalityText(role.personality);
     const найдено = clinicWordsIn(name, text);
@@ -238,7 +241,7 @@ function checkIndustryResolver(): void {
 }
 
 function checkRealtyProbe(): void {
-  const роли = Object.entries(ЭТАЛОННЫЕ_РОЛИ);
+  const роли = PROFILES.map((p) => [p.name, { personality: p.personality }] as const);
   let символов = 0;
   for (const [name, role] of роли) {
     const роль: PatientRole = { personality: role.personality, case: REALTY_CASE };
@@ -390,7 +393,6 @@ function containsStem(text: string, stem: string): boolean {
  */
 function checkPresets(): void {
   const личности = new Map(PROFILES.map((p) => [p.name, p.personality]));
-  const именаПациентов = PROFILES.map((p) => p.name);
 
   // Словари всех отраслей по пациенту — по ним ищется протечка чужой отрасли
   const словариПоПациенту = new Map<string, Map<string, string[]>>();
@@ -406,6 +408,8 @@ function checkPresets(): void {
   for (const пресет of ПРЕСЕТЫ) {
     const отрасль = пресет.clinic.industry;
 
+    // Полнота и «лишние» считаются по составу отрасли, а не по всей библиотеке
+    const именаПациентов = составОтрасли(отрасль).map((p) => p.name);
     for (const беда of проверитьНабор(пресет.cases, пресет.clinic, именаПациентов)) {
       fail(беда);
     }

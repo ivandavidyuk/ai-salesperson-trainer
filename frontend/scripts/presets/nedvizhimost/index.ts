@@ -7,8 +7,9 @@
 import type { Preset } from "../types";
 import { КЛИНИКА } from "./clinic";
 import { СЛУЧАЙ as ТАМАРА } from "./tamara-sokolova";
+import { СЛУЧАЙ as ДАРЬЯ } from "./darya-melnikova";
 
 export const ПРЕСЕТ: Preset = {
   clinic: КЛИНИКА,
-  cases: [ТАМАРА],
+  cases: [ТАМАРА, ДАРЬЯ],
 };

@@ -88,6 +88,12 @@ from core.config import get_settings  # noqa: E402
         "and grandmother. Short greying hair, soft rounded face, gentle and "
         "slightly anxious expression, watchful eyes. Simple knitted cardigan "
         "over a plain blouse.",
+    "darya-melnikova":
+        "A 30-year-old Russian woman on maternity leave with a two-year-old "
+        "son, formerly a logistics coordinator. Light brown hair in a quick "
+        "practical ponytail, open lively face with almost no makeup, warm "
+        "ready-to-smile expression, a trace of tiredness. Plain soft "
+        "sweatshirt over a T-shirt.",
     "yulia-tkachenko":
         "A 34-year-old Russian woman, head of a sales department, working "
         "twelve-hour days and raising a teenage daughter alone. Dark hair "

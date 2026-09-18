@@ -9,6 +9,9 @@ import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
   name: "Борис Семёнович",
+  // В недвижимость не идёт: покупателей 70+ в офисе продаж закрывают Тамара, Николай, Михаил и Леонид
+  // (docs/Каркас недвижимости.md, состав, решение 17.09)
+  industries: ["медицина"],
   // Требует протоколы и статистику, но преград к сделке нет,
   // бюджет с запасом, решает сам.
   difficulty: PatientDifficulty.mid,

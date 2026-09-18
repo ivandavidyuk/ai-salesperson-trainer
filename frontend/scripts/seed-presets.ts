@@ -17,7 +17,7 @@
 
 import { PrismaClient, Prisma } from "@prisma/client";
 import { buildRolePrompt, industryRules } from "./patient-prompt";
-import { PROFILES } from "./patients";
+import { PROFILES, составОтрасли } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
 import { клиническая, type Preset } from "./presets/types";
 
@@ -54,7 +54,9 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
   // в тестовой организации. 18.09 эта проверка молча не пустила недвижимость:
   // признак ввели в проверку формы, а сюда не донесли
   const покрыты = new Set(cases.map((с) => с.patientName));
-  const непокрытые = PROFILES.filter((p) => !покрыты.has(p.name));
+  // Полнота считается по составу отрасли, а не по всей библиотеке
+  const состав = составОтрасли(clinic.industry);
+  const непокрытые = состав.filter((p) => !покрыты.has(p.name));
   if (непокрытые.length > 0 && !clinic.inProgress) {
     throw new Error(
       `${clinic.orgName}: нет случаев для ${непокрытые.map((p) => p.name).join(", ")}. ` +
@@ -64,7 +66,7 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
   }
   if (непокрытые.length > 0) {
     console.log(
-      `набор в работе: случаев ${cases.length} из ${PROFILES.length}, ` +
+      `набор в работе: случаев ${cases.length} из ${состав.length}, ` +
         `без случая — ${непокрытые.map((p) => p.name).join(", ")}`,
     );
   }
@@ -114,6 +116,7 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
   ]);
   console.log(`услуг ${clinic.services.length}, диагнозов ${clinic.diagnoses.length}`);
 
+  let залито = 0;
   for (const пресетныйСлучай of cases) {
     const личность = ЛИЧНОСТИ.get(пресетныйСлучай.patientName);
     if (!личность) {
@@ -127,6 +130,17 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
       select: { id: true },
     });
     if (!пациент) {
+      // Новый персонаж попадает в базу только через seed:patients, а он
+      // гоняется руками. У набора в работе это штатная ситуация между мержем
+      // и ручным сидом: случай пропускаем и говорим, что сделать, — иначе
+      // старт контейнера заканчивался бы «ЗАЛИВКА ПРЕСЕТОВ НЕ УДАЛАСЬ»
+      if (clinic.inProgress) {
+        console.log(
+          `  ${пресетныйСлучай.patientName.padEnd(22)} пациента нет в базе — случай пропущен: ` +
+            `npm run seed:patients, затем npm run seed:presets`,
+        );
+        continue;
+      }
       throw new Error(
         `${clinic.orgName}: пациента «${пресетныйСлучай.patientName}» нет в базе — ` +
           `сначала npm run seed:patients`,
@@ -187,9 +201,10 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
     console.log(
       `  ${пресетныйСлучай.patientName.padEnd(22)} ${строка.diagnosisName}`,
     );
+    залито += 1;
   }
 
-  console.log(`случаев залито: ${cases.length}`);
+  console.log(`случаев залито: ${залито} из ${cases.length}`);
 }
 
 async function main() {

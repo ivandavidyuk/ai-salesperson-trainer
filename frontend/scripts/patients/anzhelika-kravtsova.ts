@@ -5,6 +5,9 @@ import type { PatientProfile } from "./types";
 
 export const profile: PatientProfile = {
   name: "Анжелика Сергеевна",
+  // В недвижимость не идёт: покупка втайне от мужа невозможна — ипотека и ДДУ требуют согласия супруга
+  // (docs/Каркас недвижимости.md, состав, решение 17.09)
+  industries: ["медицина"],
   difficulty: PatientDifficulty.hard,
   // Голос подобран 24.08 под возраст и манеру персонажа: Arina
   voice: "ELWVgJ5Mo9lF5Tha9ahW",

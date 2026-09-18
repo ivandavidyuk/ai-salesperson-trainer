@@ -1,9 +1,11 @@
 // Все пациенты тренажёра. Порядок здесь — порядок в мастере настройки.
 //
-// Двадцать из двадцати одного написаны Димой (файл «Аватары 20 штук ФИНАЛ»),
+// Дарья Олеговна (18.09) — первая, написанная нами с нуля по CHARACTERS.md.
+// Двадцать из двадцати одного библиотечных написаны Димой (файл «Аватары 20 штук ФИНАЛ»),
 // Тамара — наша, на ней отлаживался механизм сделки.
 
 import { profile as tamara } from "./tamara-sokolova";
+import { profile as darya } from "./darya-melnikova";
 import { profile as yulia } from "./yulia-tkachenko";
 import { profile as vitaly } from "./vitaly-kuznetsov";
 import { profile as rustam } from "./rustam-aliev";
@@ -24,12 +26,15 @@ import { profile as galina } from "./galina-zaytseva";
 import { profile as roman } from "./roman-savelyev";
 import { profile as grigory } from "./grigory-logvinov";
 import { profile as maria } from "./maria-slavnova";
+import { industryKey } from "../patient-prompt";
 import type { PatientProfile } from "./types";
 
 export type { PatientProfile } from "./types";
 
 export const PROFILES: PatientProfile[] = [
   tamara,
+  // Написана под недвижимость (18.09); у клиник в состав не входит
+  darya,
   yulia,
   vitaly,
   rustam,
@@ -51,3 +56,18 @@ export const PROFILES: PatientProfile[] = [
   grigory,
   maria,
 ];
+
+/**
+ * Состав отрасли — персонажи, которые в ней участвуют, в порядке мастера.
+ *
+ * Библиотека общая, но не всякий персонаж годится всякой отрасли, а новые
+ * пишутся под одну. Состав — свойство репозитория, а не базы: от него
+ * зависят список клиентов организации (api/patients), цели пересборки
+ * у клиник (lib/cases) и полнота пресета (seed-presets, check-prompts).
+ * Без него новый персонаж недвижимости появился бы в списках клиник,
+ * и первая же пересборка собрала бы ему диагноз.
+ */
+export function составОтрасли(industry: string): PatientProfile[] {
+  const ключ = industryKey(industry);
+  return PROFILES.filter((p) => !p.industries || p.industries.includes(ключ));
+}

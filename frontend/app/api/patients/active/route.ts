@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getUserWithRole } from "@/lib/access";
 import { сНаложеннымСлучаем, случайДляОрганизации } from "@/lib/patientCase";
+import { медицинскаяОтрасль } from "@/lib/industry";
+import { составОтрасли } from "@/scripts/patients";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,8 +23,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
     }
 
+    // Тот же состав по отрасли, что в списке: клиент по умолчанию не должен
+    // оказаться персонажем другой отрасли, а у набора в работе — клиентом
+    // без случая
+    const организация = user.organizationId
+      ? await prisma.organization.findUnique({
+          where: { id: user.organizationId },
+          select: { industry: true },
+        })
+      : null;
+    const отрасль = организация?.industry ?? "";
+    const соСлучаем =
+      медицинскаяОтрасль(отрасль) || !user.organizationId
+        ? {}
+        : { cases: { some: { organizationId: user.organizationId } } };
+
     const patient = await prisma.patient.findFirst({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        name: { in: составОтрасли(отрасль).map((p) => p.name) },
+        ...соСлучаем,
+      },
       orderBy: { createdAt: "asc" },
       select: {
         id: true,
