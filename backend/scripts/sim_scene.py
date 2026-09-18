@@ -136,6 +136,7 @@ def parse_args(argv: list[str]) -> tuple[str, int, str, bool]:
     scene_path = _DEFAULT_SCENE
     dry = False
     runs = 5
+    industry = ""
     rest = argv[1:]
     i = 0
     while i < len(rest):
@@ -143,23 +144,27 @@ def parse_args(argv: list[str]) -> tuple[str, int, str, bool]:
         if arg == "--сцена":
             i += 1
             scene_path = rest[i]
+        elif arg == "--отрасль":
+            # Слова строки доверия по отрасли, как в бою; без него — медицина
+            i += 1
+            industry = rest[i]
         elif arg == "--сухой":
             dry = True
         else:
             runs = int(arg)
         i += 1
-    return prompt_path, runs, scene_path, dry
+    return prompt_path, runs, scene_path, dry, industry
 
 
 async def main() -> None:
-    prompt_path, runs, scene_path, dry = parse_args(sys.argv[1:])
+    prompt_path, runs, scene_path, dry, industry = parse_args(sys.argv[1:])
 
     with open(prompt_path, encoding="utf-8") as fh:
         role = fh.read()
     fixture = load_fixture(scene_path)
 
     # Порог взят: обязательные условия в фикстуре отработаны
-    prompt = f"{role}\n\n{llm.trust_instruction(True)}"
+    prompt = f"{role}\n\n{llm.trust_instruction(True, industry)}"
 
     print(f"промпт:  {len(role)} символов — {prompt_path}")
     print(f"фикстура: {fixture.title} — {os.path.basename(fixture.path)}")

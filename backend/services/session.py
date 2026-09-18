@@ -23,6 +23,7 @@ import redis.asyncio as aioredis
 
 from core.config import get_settings
 from services import diagnostics, llm
+from services.industry import pick_variant
 
 logger = logging.getLogger(__name__)
 
@@ -58,17 +59,24 @@ _PATIENT_PROMPT_SQL = (
     'p."name" AS patient_name, '
     '(pc."prompt" IS NOT NULL) AS case_generated, '
     't."id" AS type_id, t."prompt" AS type_prompt, t."title" AS type_title, '
+    # Сцена упражнения словами отрасли: {"недвижимость": "…"}; выбор — при
+    # сборке промпта по отрасли организации (services/industry.py)
+    't."promptByIndustry" AS type_prompts, '
     # Рубрика, критерий и способ оценки — оценщику, а не роли: знай роль,
     # по каким признакам судят собеседника, она начала бы подыгрывать
     't."rubric" AS type_rubric, t."doneWhen" AS type_done_when, '
     't."stageKey" AS type_stage_key, '
     # У сессий, начатых до мастера настройки, типа нет вовсе — это были
     # полные разговоры, поэтому COALESCE на true
-    'COALESCE(t."scoresDeal", true) AS type_scores_deal '
+    'COALESCE(t."scoresDeal", true) AS type_scores_deal, '
+    # Отрасль организации — оценщику и строке доверия: слова у них свои
+    # на отрасль (services/industry.py), рубрика одна
+    'o."industry" AS industry '
     'FROM "Session" s '
     'LEFT JOIN "Patient" p ON p."id" = s."patientId" '
     'LEFT JOIN "TrainingType" t ON t."id" = s."trainingTypeId" '
     'LEFT JOIN "User" u ON u."id" = s."userId" '
+    'LEFT JOIN "Organization" o ON o."id" = u."organizationId" '
     'LEFT JOIN "PatientCase" pc ON pc."patientId" = s."patientId" '
     '  AND pc."organizationId" = u."organizationId" '
     'WHERE s."id" = $1'
@@ -339,7 +347,10 @@ class SessionStore:
             )
             return None
 
-        prompt = llm.build_system_prompt(row["patient_prompt"], row["type_prompt"])
+        # Тип тренировки один на все организации, а сцена у него — по отрасли:
+        # «ждёшь у стойки» в офисе продаж не годится
+        type_prompt = pick_variant(row["type_prompt"], row["type_prompts"], row["industry"])
+        prompt = llm.build_system_prompt(row["patient_prompt"], type_prompt)
 
         logger.info(
             "Сессия %s: промпт собран — пациент «%s», тип «%s», случай %s, "
@@ -536,7 +547,25 @@ class SessionStore:
             "scores_deal": bool(row["type_scores_deal"]),
             "type_id": row["type_id"],
             "type_title": row["type_title"],
+            "industry": row["industry"] or "",
         }
+
+    async def get_industry(self, session_id: str) -> str:
+        """Отрасль организации менеджера — для строки доверия и фонового оценщика.
+
+        Отдельным коротким запросом при подключении, как `get_scores_deal`:
+        промпт роли собирается лениво и живёт в Redis, а отрасль нужна
+        менеджеру ходов сразу. Пустая строка — медицина, как было до отраслей.
+        """
+        assert self._pool is not None
+        row = await self._pool.fetchrow(
+            'SELECT o."industry" AS industry FROM "Session" s '
+            'LEFT JOIN "User" u ON u."id" = s."userId" '
+            'LEFT JOIN "Organization" o ON o."id" = u."organizationId" '
+            'WHERE s."id" = $1',
+            session_id,
+        )
+        return (row["industry"] or "") if row else ""
 
     async def save_review(self, session_id: str, review: dict) -> None:
         """Записывает разбор разговора. Существующий перезаписывает.

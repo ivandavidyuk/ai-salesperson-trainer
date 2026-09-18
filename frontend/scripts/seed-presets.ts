@@ -16,10 +16,10 @@
 // случаи кладёт upsert-ом по составному ключу.
 
 import { PrismaClient, Prisma } from "@prisma/client";
-import { buildRolePrompt } from "./patient-prompt";
+import { buildRolePrompt, industryRules } from "./patient-prompt";
 import { PROFILES } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
-import type { Preset } from "./presets/types";
+import { клиническая, type Preset } from "./presets/types";
 
 const prisma = new PrismaClient();
 
@@ -122,7 +122,10 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
       );
     }
 
-    const prompt = buildRolePrompt({ personality: личность, case: пресетныйСлучай.case });
+    const prompt = buildRolePrompt(
+      { personality: личность, case: пресетныйСлучай.case },
+      industryRules(clinic.industry),
+    );
     const строка = {
       prompt,
       // Слоты — источник правды: rebuild-prompts пересоберёт из них promt
@@ -143,7 +146,13 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
       // происхождения, а такой считается затронутым любой правкой формы. Первая
       // же правка цены пересобрала бы всех двадцать одного — то есть стёрла
       // вычитанные врачом тексты ради строки, которой в них нет.
-      diagnosisName: пресетныйСлучай.picture.diagnosis,
+      // У офиса продаж на месте диагноза — повод. Проверка устаревания
+      // (lib/caseStaleness.ts) сверяет его со списком диагнозов организации,
+      // которого у офиса продаж нет, — для немедицинских отраслей она
+      // переписывается вместе с закрытием генерации (каркас, п. 8)
+      diagnosisName: клиническая(пресетныйСлучай.picture)
+        ? пресетныйСлучай.picture.diagnosis
+        : пресетныйСлучай.picture.reason,
       serviceName: пресетныйСлучай.service,
       // Залитый из репозитория случай отвечает прайсу, который лежит рядом
       // в том же пресете, — устаревшим он быть не может по построению
@@ -165,7 +174,7 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
       },
     });
     console.log(
-      `  ${пресетныйСлучай.patientName.padEnd(22)} ${пресетныйСлучай.picture.diagnosis}`,
+      `  ${пресетныйСлучай.patientName.padEnd(22)} ${строка.diagnosisName}`,
     );
   }
 

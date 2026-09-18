@@ -16,7 +16,7 @@ ai-salesperson-trainer/
 ├── docker-compose.yml        # PostgreSQL + Redis (локально)
 ├── docker-compose.prod.yml   # RU-продакшен (Caddy, frontend, PostgreSQL)
 ├── CLAUDE.md                 # шпаргалка по проекту
-└── DEPLOY.md                 # деплой и продакшен
+└── docs/                     # DEPLOY.md (деплой), CHARACTERS.md, DEAL-OUTCOME.md
 ```
 
 **Продакшен:** https://5.129.206.63.nip.io
@@ -232,4 +232,4 @@ Caddy проксирует `/ws/*` на DE; backend пишет в Postgres на 
 российские IP.
 
 **Обновление:** `git push` в `main` → GitHub Actions собирает образы и деплоит
-на оба сервера. Подробности — в [DEPLOY.md](./DEPLOY.md).
+на оба сервера. Подробности — в [DEPLOY.md](docs/DEPLOY.md).

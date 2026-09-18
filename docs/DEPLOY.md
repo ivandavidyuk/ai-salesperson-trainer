@@ -121,7 +121,7 @@ SSH-аутентификация — **по ключу** (`appleboy/ssh-action`,
 > конфигурация изменилась. Отдельный рестарт не нужен — он бы оборвал
 > активные голосовые сессии.
 
-`backend.env` — по шаблону [backend/.env.production.example](backend/.env.production.example):
+`backend.env` — по шаблону [backend/.env.production.example](../backend/.env.production.example):
 ключи `LLM_*` и `ELEVENLABS_*`; `DATABASE_URL` — публичный IP RU (Postgres);
 `REDIS_URL` — локальный `redis:6379` в compose-сети. `JWT_SECRET` совпадает
 с frontend на RU.
@@ -134,7 +134,7 @@ cd ~/ai-trainer && docker compose pull && docker compose up -d
 
 ### RU-сервер — frontend, БД, Caddy
 
-Каталог `~/ai-salesperson-trainer`, стек — [docker-compose.prod.yml](docker-compose.prod.yml).
+Каталог `~/ai-salesperson-trainer`, стек — [docker-compose.prod.yml](../docker-compose.prod.yml).
 Когда-то был копией репозитория. 31.08.2026 лишнее вычищено: исходники
 и `.git` серверу не нужны — код приезжает образом, а из репозитория стек
 читает с диска ровно четыре файла.
@@ -163,7 +163,7 @@ cd ~/ai-trainer && docker compose pull && docker compose up -d
 - `.env` (корень) — по [.env.production.example](.env.production.example): `DOMAIN`,
   `ACME_EMAIL`, `POSTGRES_*`, `BACKEND_UPSTREAM=<DE_IP>:8000`,
   `DOCKERHUB_USER`.
-- `frontend/.env` — по [frontend/.env.production.example](frontend/.env.production.example);
+- `frontend/.env` — по [frontend/.env.production.example](../frontend/.env.production.example);
   `REDIS_URL` — на DE (`redis://:ПАРОЛЬ@103.7.55.214:6379`).
 - `frontend/.env`, письма о заявках с лендинга `/start`: `MAIL_FROM`,
   `DKIM_SELECTOR`, `DKIM_PRIVATE_KEY`, по желанию `LEADS_EMAIL_TO`. Сервер
