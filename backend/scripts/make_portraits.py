@@ -110,6 +110,23 @@ from core.config import get_settings  # noqa: E402
         "shifts in the Far North. Short greying hair, weathered face with "
         "wind-roughened skin, short stubble, calm steady reserved look. "
         "Plain dark fleece jacket zipped over a T-shirt.",
+    "svetlana-belova":
+        "A 48-year-old Russian woman, head of the HR department at a machine-"
+        "building plant, long divorced. Neat chin-length bob of chestnut hair "
+        "with a few grey strands, light discreet makeup, composed attentive "
+        "face, polite reserved half-smile, observant eyes. Plain light blouse "
+        "under a simple dark cardigan.",
+    "denis-vorontsov":
+        "A 38-year-old Russian man, lead automation engineer, married father "
+        "of two, recently relocated for work. Dark brown slightly wavy hair, "
+        "short neat full beard, thin-rimmed rectangular glasses, open friendly "
+        "face with an easy warm closed-mouth smile. Plain light-blue oxford "
+        "shirt, no tie, top button open.",
+    "kristina-orlova":
+        "A 26-year-old Russian woman, manager of a coffee shop, married for a "
+        "year. Shoulder-length wavy dark-blonde hair loosely tucked behind one "
+        "ear, a few freckles, bright lively face, quick warm slightly teasing "
+        "smile. Plain mustard-yellow knitted sweater.",
     "yulia-tkachenko":
         "A 34-year-old Russian woman, head of a sales department, working "
         "twelve-hour days and raising a teenage daughter alone. Dark hair "

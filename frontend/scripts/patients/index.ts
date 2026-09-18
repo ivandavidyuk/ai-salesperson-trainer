@@ -9,6 +9,9 @@ import { profile as darya } from "./darya-melnikova";
 import { profile as pavel } from "./pavel-klimov";
 import { profile as artem } from "./artem-kovalev";
 import { profile as oleg } from "./oleg-shestakov";
+import { profile as svetlana } from "./svetlana-belova";
+import { profile as denis } from "./denis-vorontsov";
+import { profile as kristina } from "./kristina-orlova";
 import { profile as yulia } from "./yulia-tkachenko";
 import { profile as vitaly } from "./vitaly-kuznetsov";
 import { profile as rustam } from "./rustam-aliev";
@@ -41,6 +44,9 @@ export const PROFILES: PatientProfile[] = [
   pavel,
   artem,
   oleg,
+  svetlana,
+  denis,
+  kristina,
   yulia,
   vitaly,
   rustam,
