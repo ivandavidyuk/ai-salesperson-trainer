@@ -43,13 +43,14 @@ const УРОВНИ: Record<string, string> = {
  * Реплики грамотного менеджера из сценария симулятора: эксперту по отрасли
  * важно видеть не только клиента, но и то, чем мы считаем хорошую работу
  * с ним, — с этим он и будет спорить. Сценарий лежит рядом с симулятором,
- * имя файла — от слага портрета; комментарии (строки с #) опускаем
+ * имя файла — префикс отрасли и слаг портрета («realty-darya-melnikova.txt»);
+ * комментарии (строки с #) опускаем
  */
-function репликиМенеджера(имя: string): string[] {
+function репликиМенеджера(имя: string, префикс: string): string[] {
   const слаг = PATIENT_PORTRAITS[имя];
   if (!слаг) return [];
   const путь = join(
-    __dirname, "..", "..", "backend", "scripts", "dialogues", `realty-${слаг}.txt`,
+    __dirname, "..", "..", "backend", "scripts", "dialogues", `${префикс}-${слаг}.txt`,
   );
   if (!existsSync(путь)) return [];
   return readFileSync(путь, "utf8")
@@ -109,7 +110,7 @@ function отчётОфиса(пресет: Preset): string {
     const к = c.picture;
     const профиль = PROFILES.find((p) => p.name === c.patientName);
     const уровень = профиль ? (УРОВНИ[String(профиль.difficulty)] ?? "") : "";
-    const реплики = репликиМенеджера(c.patientName);
+    const реплики = репликиМенеджера(c.patientName, "realty");
     куски.push(
       `## ${c.patientName}, ${возраст(c.patientName)}${уровень ? ` · ${уровень}` : ""}`,
       "",
