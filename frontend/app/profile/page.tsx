@@ -1263,6 +1263,11 @@ function ServicesModal({
                       ✕
                     </button>
                   )}
+                  {/* Место крестика держим и у закрытой строки: иначе её цена
+                      уезжает вправо от цен соседних строк */}
+                  {!readOnly && занята && (
+                    <span aria-hidden className="mt-1 h-[30px] w-[30px] shrink-0" />
+                  )}
                 </div>
               </div>
             );
