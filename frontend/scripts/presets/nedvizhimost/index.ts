@@ -13,8 +13,9 @@ import { СЛУЧАЙ as АРТЁМ } from "./artem-kovalev";
 import { СЛУЧАЙ as ОЛЕГ } from "./oleg-shestakov";
 import { СЛУЧАЙ as СВЕТЛАНА } from "./svetlana-belova";
 import { СЛУЧАЙ as ДЕНИС } from "./denis-vorontsov";
+import { СЛУЧАЙ as КРИСТИНА } from "./kristina-orlova";
 
 export const ПРЕСЕТ: Preset = {
   clinic: КЛИНИКА,
-  cases: [ТАМАРА, ДАРЬЯ, ПАВЕЛ, АРТЁМ, ОЛЕГ, СВЕТЛАНА, ДЕНИС],
+  cases: [ТАМАРА, ДАРЬЯ, ПАВЕЛ, АРТЁМ, ОЛЕГ, СВЕТЛАНА, ДЕНИС, КРИСТИНА],
 };

@@ -122,6 +122,11 @@ from core.config import get_settings  # noqa: E402
         "short neat full beard, thin-rimmed rectangular glasses, open friendly "
         "face with an easy warm closed-mouth smile. Plain light-blue oxford "
         "shirt, no tie, top button open.",
+    "kristina-orlova":
+        "A 26-year-old Russian woman, manager of a coffee shop, married for a "
+        "year. Shoulder-length wavy dark-blonde hair loosely tucked behind one "
+        "ear, a few freckles, bright lively face, quick warm slightly teasing "
+        "smile. Plain mustard-yellow knitted sweater.",
     "yulia-tkachenko":
         "A 34-year-old Russian woman, head of a sales department, working "
         "twelve-hour days and raising a teenage daughter alone. Dark hair "
