@@ -14,7 +14,7 @@ import { prisma } from "@/lib/db";
 import { signToken } from "@/lib/auth";
 import { buildRolePrompt, industryRules, type PatientCase } from "@/scripts/patient-prompt";
 import { медицинскаяОтрасль } from "@/lib/industry";
-import { PROFILES } from "@/scripts/patients";
+import { PROFILES, составОтрасли } from "@/scripts/patients";
 import { пресетныйСлучай } from "@/scripts/presets";
 
 interface ClinicPayload {
@@ -165,8 +165,15 @@ export async function целиПересборки(organizationId: string): Prom
   цели: { id: string; name: string }[];
   занятые: string[];
 }> {
+  // Цели — только состав отрасли этой организации: персонаж, написанный
+  // под недвижимость, клинике не собирается
+  const организация = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { industry: true },
+  });
+  const состав = составОтрасли(организация?.industry ?? "").map((p) => p.name);
   const all = await prisma.patient.findMany({
-    where: { name: { in: PROFILES.map((p) => p.name) } },
+    where: { name: { in: состав } },
     select: {
       id: true,
       name: true,

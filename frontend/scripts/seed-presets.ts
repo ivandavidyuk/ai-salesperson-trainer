@@ -17,7 +17,7 @@
 
 import { PrismaClient, Prisma } from "@prisma/client";
 import { buildRolePrompt, industryRules } from "./patient-prompt";
-import { PROFILES } from "./patients";
+import { PROFILES, составОтрасли } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
 import { клиническая, type Preset } from "./presets/types";
 
@@ -54,7 +54,9 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
   // в тестовой организации. 18.09 эта проверка молча не пустила недвижимость:
   // признак ввели в проверку формы, а сюда не донесли
   const покрыты = new Set(cases.map((с) => с.patientName));
-  const непокрытые = PROFILES.filter((p) => !покрыты.has(p.name));
+  // Полнота считается по составу отрасли, а не по всей библиотеке
+  const состав = составОтрасли(clinic.industry);
+  const непокрытые = состав.filter((p) => !покрыты.has(p.name));
   if (непокрытые.length > 0 && !clinic.inProgress) {
     throw new Error(
       `${clinic.orgName}: нет случаев для ${непокрытые.map((p) => p.name).join(", ")}. ` +
@@ -64,7 +66,7 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
   }
   if (непокрытые.length > 0) {
     console.log(
-      `набор в работе: случаев ${cases.length} из ${PROFILES.length}, ` +
+      `набор в работе: случаев ${cases.length} из ${состав.length}, ` +
         `без случая — ${непокрытые.map((p) => p.name).join(", ")}`,
     );
   }

@@ -24,6 +24,7 @@ import { profile as galina } from "./galina-zaytseva";
 import { profile as roman } from "./roman-savelyev";
 import { profile as grigory } from "./grigory-logvinov";
 import { profile as maria } from "./maria-slavnova";
+import { industryKey } from "../patient-prompt";
 import type { PatientProfile } from "./types";
 
 export type { PatientProfile } from "./types";
@@ -51,3 +52,18 @@ export const PROFILES: PatientProfile[] = [
   grigory,
   maria,
 ];
+
+/**
+ * Состав отрасли — персонажи, которые в ней участвуют, в порядке мастера.
+ *
+ * Библиотека общая, но не всякий персонаж годится всякой отрасли, а новые
+ * пишутся под одну. Состав — свойство репозитория, а не базы: от него
+ * зависят список клиентов организации (api/patients), цели пересборки
+ * у клиник (lib/cases) и полнота пресета (seed-presets, check-prompts).
+ * Без него новый персонаж недвижимости появился бы в списках клиник,
+ * и первая же пересборка собрала бы ему диагноз.
+ */
+export function составОтрасли(industry: string): PatientProfile[] {
+  const ключ = industryKey(industry);
+  return PROFILES.filter((p) => !p.industries || p.industries.includes(ключ));
+}

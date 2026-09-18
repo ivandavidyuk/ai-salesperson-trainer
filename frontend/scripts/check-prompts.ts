@@ -30,7 +30,7 @@ import { writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-import { PROFILES } from "./patients";
+import { PROFILES, составОтрасли } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
 import { проверитьНабор, проверитьСлучай } from "./presets/validate";
 import {
@@ -390,7 +390,6 @@ function containsStem(text: string, stem: string): boolean {
  */
 function checkPresets(): void {
   const личности = new Map(PROFILES.map((p) => [p.name, p.personality]));
-  const именаПациентов = PROFILES.map((p) => p.name);
 
   // Словари всех отраслей по пациенту — по ним ищется протечка чужой отрасли
   const словариПоПациенту = new Map<string, Map<string, string[]>>();
@@ -406,6 +405,8 @@ function checkPresets(): void {
   for (const пресет of ПРЕСЕТЫ) {
     const отрасль = пресет.clinic.industry;
 
+    // Полнота и «лишние» считаются по составу отрасли, а не по всей библиотеке
+    const именаПациентов = составОтрасли(отрасль).map((p) => p.name);
     for (const беда of проверитьНабор(пресет.cases, пресет.clinic, именаПациентов)) {
       fail(беда);
     }
