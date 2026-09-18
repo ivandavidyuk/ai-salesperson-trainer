@@ -94,6 +94,12 @@ from core.config import get_settings  # noqa: E402
         "practical ponytail, open lively face with almost no makeup, warm "
         "ready-to-smile expression, a trace of tiredness. Plain soft "
         "sweatshirt over a T-shirt.",
+    "pavel-klimov":
+        "A 39-year-old Russian man, head of the planning department at a "
+        "furniture factory, father of two. Short neat dark-blond hair, "
+        "clean-shaven, calm attentive face, a slight thoughtful crease "
+        "between the brows, reserved polite half-smile. Plain checked shirt "
+        "under a simple dark pullover.",
     "yulia-tkachenko":
         "A 34-year-old Russian woman, head of a sales department, working "
         "twelve-hour days and raising a teenage daughter alone. Dark hair "
