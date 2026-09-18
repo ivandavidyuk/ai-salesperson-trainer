@@ -7,6 +7,7 @@
 import { profile as tamara } from "./tamara-sokolova";
 import { profile as darya } from "./darya-melnikova";
 import { profile as pavel } from "./pavel-klimov";
+import { profile as artem } from "./artem-kovalev";
 import { profile as yulia } from "./yulia-tkachenko";
 import { profile as vitaly } from "./vitaly-kuznetsov";
 import { profile as rustam } from "./rustam-aliev";
@@ -37,6 +38,7 @@ export const PROFILES: PatientProfile[] = [
   // Написана под недвижимость (18.09); у клиник в состав не входит
   darya,
   pavel,
+  artem,
   yulia,
   vitaly,
   rustam,

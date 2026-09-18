@@ -100,6 +100,11 @@ from core.config import get_settings  # noqa: E402
         "clean-shaven, calm attentive face, a slight thoughtful crease "
         "between the brows, reserved polite half-smile. Plain checked shirt "
         "under a simple dark pullover.",
+    "artem-kovalev":
+        "A 29-year-old Russian man, senior software developer working from "
+        "home. Short dark hair slightly tousled, light stubble, slim face, "
+        "alert slightly ironic eyes, a hint of a smile. Plain grey hoodie "
+        "over a dark T-shirt.",
     "yulia-tkachenko":
         "A 34-year-old Russian woman, head of a sales department, working "
         "twelve-hour days and raising a teenage daughter alone. Dark hair "
