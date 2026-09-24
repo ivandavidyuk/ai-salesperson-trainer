@@ -3,7 +3,14 @@
 // Разговор карточкой — телефонная форма строки ConversationRow (кадр
 // «Телефон · 390 · главная»). В строке десктопа тема, тип, длительность,
 // оценка и слово «Расшифровка» стоят в одну линию; на 390 px им тесно,
-// поэтому карточка в два яруса: кто и когда, ниже — тип, длина и оценка.
+// поэтому карточка в два яруса: кто и когда с оценкой, ниже — тип и длина.
+//
+// Оценка — в строке с датой, а не рядом с типом, как было в макете. Там
+// тип, длина и оценка делили одну строку, и длинный тип («Профилактика
+// возражений», «Выявление потребности») не оставлял оценке места даже
+// на 412 px: она одна съезжала вниз вправо. Строка даты короткая при любом
+// разговоре, поэтому оценка стоит на месте и выровнена по правому краю
+// у всех карточек (выбор Ивана 24.09 из трёх вариантов).
 //
 // Нажимается карточка целиком — это и есть переход к расшифровке, слово
 // «Расшифровка» здесь не нужно. Звезда стоит отдельной кнопкой справа,
@@ -47,8 +54,13 @@ export default function ConversationCard({
             <div className="text-pretty text-[15px] font-semibold leading-[1.3] text-ink">
               {title || "Разговор"}
             </div>
-            <div className="mt-0.5 text-[13px] text-ink-subtle">
-              {formatConversationDate(conversation.startedAt)}
+            <div className="mt-1 flex items-center gap-2 text-[13px] text-ink-subtle">
+              <span className="min-w-0">
+                {formatConversationDate(conversation.startedAt)}
+              </span>
+              <span className="ml-auto">
+                <ScoreBadge score={conversation.score} />
+              </span>
             </div>
           </div>
         </div>
@@ -64,9 +76,6 @@ export default function ConversationCard({
           )}
           <span className="font-mono text-[13px] text-ink-muted">
             {formatDuration(conversation.durationSec)}
-          </span>
-          <span className="ml-auto">
-            <ScoreBadge score={conversation.score} />
           </span>
         </div>
       </Link>
