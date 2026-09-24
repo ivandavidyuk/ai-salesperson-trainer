@@ -96,10 +96,32 @@ const FILTERS: { key: "all" | DifficultyKey; label: string }[] = [
   { key: "hard", label: "Сложный" },
 ];
 
+// Фильтр сложности на телефоне — один ряд из четырёх сегментов, и выбранный
+// окрашен в цвет своей сложности (макет «Телефон · 390», решение Ивана 23.09).
+// Классы целиком строками: Tailwind собирает только то, что видит в тексте
+const СЕГМЕНТ_ТЕЛЕФОН: Record<"all" | DifficultyKey, string> = {
+  all: "max-md:border-brand max-md:bg-brand-soft max-md:text-brand-hover",
+  easy: "max-md:border-good max-md:bg-good-surface max-md:text-good",
+  mid: "max-md:border-warn max-md:bg-warn-surface max-md:text-warn",
+  hard: "max-md:border-danger-strong max-md:bg-danger-soft max-md:text-danger-strong",
+};
+// Кнопки нижней панели на телефоне: обе во всю ширину, высотой под палец;
+// «Назад» контурная, главная шире
+const ЛЕВАЯ_ТЕЛЕФОН =
+  "max-md:inline-flex max-md:min-h-[52px] max-md:flex-1 max-md:items-center max-md:justify-center max-md:whitespace-nowrap max-md:rounded-xl max-md:border max-md:border-line-strong max-md:bg-surface-card max-md:px-3 max-md:py-0 max-md:text-[16px] max-md:font-semibold max-md:text-ink";
+const ПРАВАЯ_ТЕЛЕФОН =
+  "max-md:inline-flex max-md:min-h-[52px] max-md:w-full max-md:items-center max-md:justify-center max-md:whitespace-nowrap max-md:rounded-xl max-md:px-4 max-md:py-0 max-md:text-[16px]";
+
+const ТОЧКА_ТЕЛЕФОН: Record<DifficultyKey, string> = {
+  easy: "max-md:bg-good",
+  mid: "max-md:bg-warn",
+  hard: "max-md:bg-danger-strong",
+};
+
 // Общая рамка карточки выбора: выбранная — тиловая, заблокированная — тусклая
 function cardClasses(selected: boolean, disabled: boolean): string {
   const base =
-    "flex w-full items-center gap-3 rounded-xl border-[length:1.5px] p-3.5 text-left transition-colors";
+    "flex w-full items-center gap-3 rounded-xl border-[length:1.5px] p-3.5 text-left transition-colors max-md:min-h-16 max-md:rounded-[14px] max-md:py-2";
   if (disabled) {
     return `${base} cursor-not-allowed border-line bg-surface-bubble opacity-60`;
   }
@@ -111,11 +133,11 @@ function cardClasses(selected: boolean, disabled: boolean): string {
 function Radio({ selected, disabled }: { selected: boolean; disabled: boolean }) {
   return (
     <span
-      className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 ${
+      className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 max-md:h-[22px] max-md:w-[22px] ${
         selected ? "border-brand" : disabled ? "border-line-strong" : "border-[#C6D3D0]"
       }`}
     >
-      {selected && <span className="h-2 w-2 rounded-full bg-brand" />}
+      {selected && <span className="h-2 w-2 rounded-full bg-brand max-md:h-2.5 max-md:w-2.5" />}
     </span>
   );
 }
@@ -131,9 +153,9 @@ function SoonBadge({ причина }: { причина: "скоро" | "дем�
 // Заголовок группы: подпись и линия до конца строки
 function GroupTitle({ children, tone }: { children: string; tone?: "warn" }) {
   return (
-    <div className="mb-3 flex items-baseline gap-2.5">
+    <div className="mb-3 flex items-baseline gap-2.5 max-md:mb-2.5 max-md:items-center">
       <div
-        className={`font-mono text-[12.5px] uppercase tracking-[.12em] ${
+        className={`font-mono text-[12.5px] uppercase tracking-[.12em] max-md:whitespace-nowrap max-md:text-[13px] max-md:tracking-[.1em] ${
           tone === "warn" ? "text-warn" : "text-brand-hover"
         }`}
       >
@@ -150,7 +172,7 @@ function DifficultyPill({ difficulty }: { difficulty: DifficultyKey }) {
     // Без точки: заливка плашки сама несёт цвет сложности. Точки остались
     // только в фильтрах, где кнопки белые и цвету взяться неоткуда.
     <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-[3px] text-[12px] font-semibold ${tone.pill}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-[3px] text-[12px] font-semibold max-md:text-[13px] ${tone.pill}`}
     >
       {tone.label}
     </span>
@@ -468,24 +490,24 @@ export default function TrainingSetupModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(12,26,24,.55)] p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(12,26,24,.55)] p-6 max-md:p-0"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Настройка тренировки"
     >
       <div
-        className="relative flex max-h-full w-[660px] max-w-full flex-col overflow-hidden rounded-[18px] bg-surface shadow-[0_40px_100px_-30px_rgba(12,26,24,.75)]"
+        className="relative flex max-h-full w-[660px] max-w-full flex-col overflow-hidden rounded-[18px] bg-surface shadow-[0_40px_100px_-30px_rgba(12,26,24,.75)] max-md:h-dvh max-md:w-full max-md:rounded-none max-md:shadow-none"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Шапка с шагами */}
-        <div className="shrink-0 bg-surface-card px-6 pt-5">
-          <div className="flex items-start gap-3.5">
-            <div className="min-w-0 flex-1">
-              <div className="text-[20.5px] font-semibold tracking-[-.01em] text-ink">
+        <div className="shrink-0 bg-surface-card px-6 pt-5 max-md:pl-5 max-md:pr-2 max-md:pt-1.5">
+          <div className="flex items-start gap-3.5 max-md:gap-2">
+            <div className="min-w-0 flex-1 max-md:pt-1.5">
+              <div className="text-[20.5px] font-semibold tracking-[-.01em] text-ink max-md:text-[18px]">
                 Настройка тренировки
               </div>
-              <div className="mt-[3px] text-pretty text-[15px] text-ink-muted">
+              <div className="mt-[3px] text-pretty text-[15px] text-ink-muted max-md:mt-0.5 max-md:text-[14px]">
                 {assignment
                   ? `Задание: ${assignment.title}`
                   : `Шаг ${step + 1} из ${steps.length} · ${шагиСловами[currentStep].hint}`}
@@ -496,7 +518,7 @@ export default function TrainingSetupModal({
               onClick={onClose}
               title="Закрыть"
               aria-label="Закрыть"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-bubble text-lg leading-none text-ink-muted transition-colors hover:bg-line"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-bubble text-lg leading-none text-ink-muted transition-colors hover:bg-line max-md:h-11 max-md:w-11 max-md:rounded-xl max-md:bg-transparent max-md:text-[28px] max-md:font-light"
             >
               ×
             </button>
@@ -504,7 +526,7 @@ export default function TrainingSetupModal({
 
           {/* Один шаг — показывать нечего (режим задания) */}
           {steps.length > 1 && (
-          <div className="mt-[18px] flex items-center">
+          <div className="mt-[18px] flex items-center max-md:mt-0 max-md:pb-3.5 max-md:pr-3 max-md:pt-3">
             {steps.map((key, index) => {
               const done = index < step;
               const active = index === step;
@@ -515,7 +537,7 @@ export default function TrainingSetupModal({
                   className={`flex items-center ${last ? "flex-none" : "min-w-0 flex-1"}`}
                 >
                   <span
-                    className={`inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full font-mono text-[14px] font-bold ${
+                    className={`inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full font-mono text-[14px] font-bold max-md:h-6 max-md:w-6 max-md:text-[13px] ${
                       done || active
                         ? "bg-brand text-white"
                         : "border-[length:1.5px] border-line-strong bg-surface-card text-ink-placeholder"
@@ -524,7 +546,7 @@ export default function TrainingSetupModal({
                     {done ? "✓" : index + 1}
                   </span>
                   <span
-                    className={`ml-2.5 whitespace-nowrap text-[14.5px] ${
+                    className={`ml-2.5 whitespace-nowrap text-[14.5px] max-md:ml-[7px] max-md:text-[14px] ${
                       active
                         ? "font-semibold text-ink"
                         : done
@@ -536,7 +558,7 @@ export default function TrainingSetupModal({
                   </span>
                   {!last && (
                     <span
-                      className={`mx-2.5 h-0.5 flex-1 rounded-full ${
+                      className={`mx-2.5 h-0.5 flex-1 rounded-full max-md:mx-2 max-md:min-w-2 ${
                         done ? "bg-brand" : "bg-line"
                       }`}
                     />
@@ -547,11 +569,11 @@ export default function TrainingSetupModal({
           </div>
           )}
 
-          <div className="mt-[18px] h-px bg-line" />
+          <div className="mt-[18px] h-px bg-line max-md:-ml-5 max-md:-mr-2 max-md:mt-0" />
         </div>
 
         {/* Тело шага */}
-        <div className="flex min-h-0 flex-1 flex-col gap-[22px] overflow-y-auto px-6 py-[22px]">
+        <div className="flex min-h-0 flex-1 flex-col gap-[22px] overflow-y-auto px-6 py-[22px] max-md:gap-5 max-md:px-4 max-md:pb-6 max-md:pt-4">
           {currentStep === "assign" && (
             <>
               {/* В режиме выбора эти поля не нужны: заголовок, срок,
@@ -648,7 +670,7 @@ export default function TrainingSetupModal({
                   value={comment}
                   onChange={(event) => setComment(event.target.value)}
                   placeholder="Например: отвечай выгодой клиента, а не оправданием цены"
-                  className="min-h-[96px] w-full resize-y rounded-xl border-[length:1.5px] border-line bg-surface-card px-3.5 py-3 text-sm leading-normal text-ink outline-none transition-colors placeholder:text-ink-placeholder focus:border-brand"
+                  className="min-h-[96px] w-full resize-y rounded-xl border-[length:1.5px] border-line bg-surface-card px-3.5 py-3 text-sm leading-normal text-ink outline-none transition-colors placeholder:text-ink-placeholder focus:border-brand max-md:text-[16px]"
                 />
               </div>
               )}
@@ -690,7 +712,7 @@ export default function TrainingSetupModal({
 
           {currentStep === "patient" && (
             <div>
-              <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-line-strong bg-surface-card px-3.5 py-2.5">
+              <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-line-strong bg-surface-card px-3.5 py-2.5 max-md:mb-2.5 max-md:min-h-[52px] max-md:py-0">
                 <svg
                   width="18"
                   height="18"
@@ -710,11 +732,11 @@ export default function TrainingSetupModal({
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={слова.поискПоИмени}
                   aria-label={`Поиск ${слова.клиента}`}
-                  className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-placeholder"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-placeholder max-md:min-h-11 max-md:text-[16px]"
                 />
               </div>
 
-              <div className="mb-3.5 flex flex-wrap gap-[7px]">
+              <div className="mb-3.5 flex flex-wrap gap-[7px] max-md:mb-2.5 max-md:grid max-md:grid-cols-4 max-md:gap-[3px] max-md:rounded-xl max-md:border max-md:border-line max-md:bg-surface-bubble max-md:p-[3px]">
                 {FILTERS.map((item) => {
                   const active = filter === item.key;
                   const dot = item.key !== "all" ? DIFFICULTY[item.key].dot : null;
@@ -723,16 +745,18 @@ export default function TrainingSetupModal({
                       key={item.key}
                       type="button"
                       onClick={() => setFilter(item.key)}
-                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[14px] font-semibold transition-colors ${
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[14px] font-semibold transition-colors max-md:min-h-11 max-md:min-w-0 max-md:justify-center max-md:gap-[5px] max-md:rounded-[9px] max-[379px]:gap-1 max-[379px]:text-[13px] max-md:border-[length:1.5px] max-md:px-0.5 max-md:py-0 max-md:tracking-[-.01em] ${
                         active
-                          ? "border-brand bg-brand text-white"
-                          : "border-line-strong bg-surface-card text-ink-muted hover:border-brand-soft"
+                          ? `border-brand bg-brand text-white ${СЕГМЕНТ_ТЕЛЕФОН[item.key]}`
+                          : "border-line-strong bg-surface-card text-ink-muted hover:border-brand-soft max-md:border-transparent max-md:bg-transparent"
                       }`}
                     >
                       {dot && (
                         <span
-                          className={`inline-block h-1.5 w-1.5 rounded-full ${
-                            active ? "bg-white" : dot
+                          className={`inline-block h-1.5 w-1.5 rounded-full max-md:h-[7px] max-md:w-[7px] ${
+                            active && item.key !== "all"
+                              ? `bg-white ${ТОЧКА_ТЕЛЕФОН[item.key]}`
+                              : dot
                           }`}
                         />
                       )}
@@ -741,6 +765,34 @@ export default function TrainingSetupModal({
                   );
                 })}
               </div>
+
+              {!isLastStep && (
+                <button
+                  type="button"
+                  onClick={handleRandom}
+                  title="Выбрать случайно и перейти к обзору"
+                  className="mb-2.5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-line-accent bg-surface-card px-4 text-[15px] font-semibold text-brand-hover md:hidden"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.9"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M16 3h5v5" />
+                    <path d="M4 20L21 3" />
+                    <path d="M21 16v5h-5" />
+                    <path d="M15 15l6 6" />
+                    <path d="M4 4l5 5" />
+                  </svg>
+                  Случайный
+                </button>
+              )}
 
               {!patients && !loadError && (
                 <div className="flex justify-center py-9">
@@ -777,7 +829,7 @@ export default function TrainingSetupModal({
                         title={слова.оКлиенте}
                         // У выбранной строки фон тиловый, и серый ховер на нём
                         // почти не читается — берём тот же оттенок, что на «Обзоре»
-                        className={`-ml-1 inline-flex min-w-0 items-center gap-2.5 rounded-full py-1 pl-1 pr-2.5 transition-colors ${
+                        className={`-ml-1 inline-flex min-w-0 items-center gap-2.5 rounded-full py-1 pl-1 pr-2.5 transition-colors max-md:min-h-12 ${
                           selected ? "hover:bg-[#DCEDE9]" : "hover:bg-surface-bubble"
                         }`}
                       >
@@ -787,11 +839,13 @@ export default function TrainingSetupModal({
                           lazy
                         />
                         <span className="min-w-0 text-left">
-                          <span className="block whitespace-nowrap text-[16px] font-semibold text-ink">
+                          <span className="block whitespace-nowrap text-[16px] font-semibold text-ink max-md:whitespace-normal max-md:leading-[1.25]">
                             {patient.name}
                           </span>
+                          {/* На телефоне подписи нет, как в макете: на 390 px
+                              от неё оставалось бы «34 года · лаз…» */}
                           {patient.description && (
-                            <span className="block truncate text-[13.5px] text-ink-subtle">
+                            <span className="block truncate text-[13.5px] text-ink-subtle max-md:hidden">
                               {patient.description}
                             </span>
                           )}
@@ -851,8 +905,8 @@ export default function TrainingSetupModal({
                 <div className="mb-2.5 font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
                   Тип тренировки
                 </div>
-                <div className="flex items-center gap-3 rounded-xl border-[length:1.5px] border-line-accent bg-surface-accent px-4 py-[15px]">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-brand">
+                <div className="flex items-center gap-3 rounded-xl border-[length:1.5px] border-line-accent bg-surface-accent px-4 py-[15px] max-md:items-start">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-brand max-md:h-11 max-md:w-11">
                     <svg
                       width="20"
                       height="20"
@@ -870,11 +924,16 @@ export default function TrainingSetupModal({
                     <span className="block text-[16.5px] font-semibold text-ink">
                       {selectedType.title}
                     </span>
-                    <span className="mt-0.5 block text-[14.5px] text-ink-muted">
+                    <span className="mt-0.5 block text-[14.5px] text-ink-muted max-md:text-[14px]">
                       {selectedType.description}
                     </span>
+                    {/* На телефоне плашка уходит под описание: справа она
+                        сжимала текст в узкую колонку */}
+                    <span className="mt-2 inline-block whitespace-nowrap rounded-full border border-line-accent bg-surface-card px-2.5 py-1 text-[13px] font-semibold text-brand-hover md:hidden">
+                      {GROUP_SHORT[selectedType.group]}
+                    </span>
                   </span>
-                  <span className="shrink-0 whitespace-nowrap rounded-full border border-line-accent bg-surface-card px-2.5 py-1 text-[12px] font-semibold text-brand-hover">
+                  <span className="shrink-0 whitespace-nowrap rounded-full border border-line-accent bg-surface-card px-2.5 py-1 text-[12px] font-semibold text-brand-hover max-md:hidden">
                     {GROUP_SHORT[selectedType.group]}
                   </span>
                 </div>
@@ -894,14 +953,16 @@ export default function TrainingSetupModal({
                     >
                       <PatientAvatar
                         name={selectedPatient.name}
-                        className="h-[52px] w-[52px] bg-brand-soft text-[18.5px] font-semibold text-brand"
+                        className="h-[52px] w-[52px] bg-brand-soft text-[18.5px] font-semibold text-brand max-md:h-10 max-md:w-10 max-md:text-sm"
                       />
                       <span className="min-w-0 text-left">
-                        <span className="block whitespace-nowrap text-base font-semibold text-ink">
+                        <span className="block whitespace-nowrap text-base font-semibold text-ink max-md:whitespace-normal max-md:leading-[1.25]">
                           {selectedPatient.name}
                         </span>
+                        {/* Подписи на телефоне нет, как и на шаге выбора:
+                            повод целиком стоит ниже, в описании */}
                         {selectedPatient.description && (
-                          <span className="block text-[14px] text-ink-subtle">
+                          <span className="block text-[14px] text-ink-subtle max-md:hidden">
                             {selectedPatient.description}
                           </span>
                         )}
@@ -1015,13 +1076,13 @@ export default function TrainingSetupModal({
         </div>
 
         {/* Футер */}
-        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-line bg-surface-card px-6 py-[15px]">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-line bg-surface-card px-6 py-[15px] max-md:gap-2.5 max-md:px-4 max-md:pb-4 max-md:pt-3">
           {/* На первом шаге возвращаться некуда — только отмена */}
           {step === 0 ? (
             <button
               type="button"
               onClick={onClose}
-              className="px-1 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink-body"
+              className={`px-1 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink-body ${ЛЕВАЯ_ТЕЛЕФОН}`}
             >
               Отмена
             </button>
@@ -1029,13 +1090,13 @@ export default function TrainingSetupModal({
             <button
               type="button"
               onClick={() => setStep(step - 1)}
-              className="inline-flex items-center gap-1.5 px-1 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink-body"
+              className={`inline-flex items-center gap-1.5 px-1 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink-body ${ЛЕВАЯ_ТЕЛЕФОН}`}
             >
               ‹ Назад
             </button>
           )}
 
-          <div className="flex items-center gap-2.5">
+          <div className={`flex items-center gap-2.5 ${isLastStep ? "max-md:flex-[2]" : "max-md:flex-[1.6]"}`}>
             {/* На шаге «Кому» случайного выбора нет: handleRandom заполняет
                 тип и пациента, но менеджера выбрать за руководителя нельзя —
                 кнопка увозила на «Обзор» с пустым получателем, и задание
@@ -1045,7 +1106,7 @@ export default function TrainingSetupModal({
                 type="button"
                 onClick={handleRandom}
                 title="Выбрать случайно и перейти к обзору"
-                className="inline-flex items-center gap-2 rounded-input border border-line-accent bg-surface-card px-[18px] py-3 text-[16px] font-semibold text-brand-hover transition-colors hover:bg-surface-accent"
+                className="inline-flex items-center gap-2 rounded-input border border-line-accent bg-surface-card px-[18px] py-3 text-[16px] font-semibold text-brand-hover transition-colors hover:bg-surface-accent max-md:hidden"
               >
                 <svg
                   width="16"
@@ -1073,7 +1134,7 @@ export default function TrainingSetupModal({
                 type="button"
                 disabled={!canNext}
                 onClick={() => setStep(step + 1)}
-                className={`rounded-input px-[26px] py-3 text-[16.5px] font-semibold text-white transition-colors ${
+                className={`rounded-input px-[26px] py-3 text-[16.5px] font-semibold text-white transition-colors ${ПРАВАЯ_ТЕЛЕФОН} ${
                   canNext
                     ? "bg-brand hover:bg-brand-hover"
                     : "cursor-not-allowed bg-disabled"
@@ -1092,7 +1153,7 @@ export default function TrainingSetupModal({
                   })
                 }
                 disabled={!canNext}
-                className="inline-flex items-center gap-2 rounded-input bg-brand px-[26px] py-[13px] text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
+                className={`inline-flex items-center gap-2 rounded-input bg-brand px-[26px] py-[13px] text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted ${ПРАВАЯ_ТЕЛЕФОН}`}
               >
                 Готово
               </button>
@@ -1101,7 +1162,7 @@ export default function TrainingSetupModal({
                 type="button"
                 onClick={handleCreate}
                 disabled={starting || !selectedManager || !selectedType || !selectedPatient}
-                className="inline-flex items-center gap-2 rounded-input bg-brand px-[26px] py-[13px] text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
+                className={`inline-flex items-center gap-2 rounded-input bg-brand px-[26px] py-[13px] text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted ${ПРАВАЯ_ТЕЛЕФОН}`}
               >
                 {starting ? (
                   <Spinner />
@@ -1127,7 +1188,7 @@ export default function TrainingSetupModal({
                 type="button"
                 onClick={handleStart}
                 disabled={starting}
-                className="inline-flex items-center gap-2.5 rounded-input bg-brand px-[26px] py-[13px] text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
+                className={`inline-flex items-center gap-2.5 rounded-input bg-brand px-[26px] py-[13px] text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted ${ПРАВАЯ_ТЕЛЕФОН}`}
               >
                 {starting ? (
                   <Spinner />

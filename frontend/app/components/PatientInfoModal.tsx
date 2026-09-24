@@ -75,18 +75,22 @@ export default function PatientInfoModal({
 
   return (
     <div
-      className="absolute inset-0 z-10 flex items-center justify-center bg-[rgba(12,26,24,.5)] p-6"
+      className="absolute inset-0 z-10 flex items-center justify-center bg-[rgba(12,26,24,.5)] p-6 max-md:fixed max-md:z-50 max-md:items-end max-md:p-0"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={`${слова.оКлиенте}: ${patient.name}`}
     >
       <div
-        className="flex max-h-full w-[640px] max-w-full flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-[0_30px_80px_-30px_rgba(12,26,24,.7)]"
+        className="flex max-h-full w-[640px] max-w-full flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-[0_30px_80px_-30px_rgba(12,26,24,.7)] max-md:h-[calc(100dvh-56px)] max-md:max-h-none max-md:w-full max-md:rounded-b-none max-md:rounded-t-[24px]"
         onClick={(event) => event.stopPropagation()}
       >
+        {/* Ручка листа — только на телефоне */}
+        <div className="flex shrink-0 justify-center pt-2 md:hidden" aria-hidden="true">
+          <span className="h-[5px] w-9 rounded-[3px] bg-[#D5DDDB]" />
+        </div>
         {/* Кто. Шапка и кнопки остаются на месте — прокручивается только тело */}
-        <div className="flex shrink-0 items-start gap-4 px-7 pb-5 pt-[26px]">
+        <div className="flex shrink-0 items-start gap-4 px-7 pb-5 pt-[26px] max-md:gap-3 max-md:pb-3 max-md:pl-5 max-md:pr-2 max-md:pt-1.5">
           <PatientAvatar
             name={patient.name}
             className="h-14 w-14 bg-brand-soft text-[19.5px] font-semibold text-brand"
@@ -118,7 +122,7 @@ export default function PatientInfoModal({
             onClick={onClose}
             title="Закрыть"
             aria-label="Закрыть"
-            className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-ink-icon transition-colors hover:bg-surface-bubble hover:text-ink-muted"
+            className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-ink-icon transition-colors hover:bg-surface-bubble hover:text-ink-muted max-md:h-11 max-md:w-11 max-md:text-ink-muted"
           >
             <svg
               width="15"
@@ -137,17 +141,17 @@ export default function PatientInfoModal({
 
         <div className="h-px shrink-0 bg-line-soft" />
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-7 pb-[26px] pt-[22px]">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-7 pb-[26px] pt-[22px] max-md:px-5 max-md:pb-5 max-md:pt-4">
           {/* С чем и подробности — те же два текста, что в карточке,
               но здесь анамнез виден целиком: ради этого окно и открывают */}
           <div>
             {reason && (
-              <div className="text-pretty text-[20.5px] font-semibold leading-[1.35] text-ink">
+              <div className="text-pretty text-[20.5px] font-semibold leading-[1.35] text-ink max-md:text-[18px]">
                 {reason}
               </div>
             )}
             <p
-              className={`text-pretty text-[16px] leading-[1.65] text-ink-label ${
+              className={`text-pretty text-[16px] leading-[1.65] text-ink-label max-md:text-[15px] ${
                 reason ? "mt-3" : ""
               }`}
             >
@@ -214,11 +218,13 @@ export default function PatientInfoModal({
         </div>
 
         {/* Что делать */}
-        <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-line-soft px-7 py-4">
+        <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-line-soft px-7 py-4 max-md:px-5 max-md:pb-5 max-md:pt-3">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-input border border-line-strong bg-surface-card px-5 py-[11px] text-[16px] font-medium text-ink transition-colors hover:border-brand hover:text-brand-hover"
+            className={`rounded-input border border-line-strong bg-surface-card px-5 py-[11px] text-[16px] font-medium text-ink transition-colors hover:border-brand hover:text-brand-hover ${
+              onStart ? "max-md:hidden" : "max-md:min-h-[52px] max-md:w-full max-md:rounded-xl max-md:py-0 max-md:font-semibold"
+            }`}
           >
             Закрыть
           </button>
@@ -233,7 +239,7 @@ export default function PatientInfoModal({
                   ? undefined
                   : `Этот ${слова.клиент} больше не доступен`
               }
-              className={`flex items-center gap-2 rounded-input px-[22px] py-[11px] text-[16.5px] font-semibold text-white transition-colors ${
+              className={`flex items-center gap-2 rounded-input px-[22px] py-[11px] text-[16.5px] font-semibold text-white transition-colors max-md:min-h-[52px] max-md:w-full max-md:justify-center max-md:rounded-xl max-md:py-0 max-md:text-[16px] ${
                 patient.isActive
                   ? "bg-brand hover:bg-brand-hover"
                   : "cursor-not-allowed bg-disabled"

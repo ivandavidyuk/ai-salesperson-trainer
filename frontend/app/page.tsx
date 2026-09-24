@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import AllConversationsModal from "@/app/components/AllConversationsModal";
 import AppShell from "@/app/components/AppShell";
+import ConversationCard from "@/app/components/ConversationCard";
 import ConversationRow from "@/app/components/ConversationRow";
 import DailyCard from "@/app/components/DailyCard";
 import DemoExpiredModal from "@/app/components/DemoExpiredModal";
@@ -121,25 +122,25 @@ function StatCard({
   return (
     <div
       style={{ gridColumn: `span ${span}` }}
-      className={`flex flex-col items-center justify-center rounded-xl border px-3 py-[11px] text-center ${cls}`}
+      className={`flex flex-col items-center justify-center rounded-xl border px-3 py-[11px] text-center max-md:min-h-[68px] max-md:px-1.5 max-md:py-2.5 ${cls}`}
     >
       <div
         className={`font-mono leading-[1.1] ${
-          accent ? "text-2xl text-brand-score" : "text-[27px] text-ink"
+          accent ? "text-2xl text-brand-score max-md:text-[22px]" : "text-[27px] text-ink max-md:text-[22px]"
         }`}
       >
         {value}
         {/* Приписку прячем у прочерка: «— / 10» читается как поломка */}
         {suffix && value !== "—" && (
           <span
-            className={accent ? "text-[16.5px] text-brand-score-muted" : "text-sm text-ink-muted"}
+            className={accent ? "text-[16.5px] text-brand-score-muted max-md:text-[14px]" : "text-sm text-ink-muted"}
           >
             {suffix}
           </span>
         )}
       </div>
       <div
-        className={`mt-[3px] whitespace-nowrap text-[13px] ${
+        className={`mt-[3px] whitespace-nowrap text-[13px] max-md:mt-1 max-md:whitespace-normal max-md:leading-tight ${
           accent ? "text-brand-score-label" : "text-ink-muted"
         }`}
       >
@@ -258,6 +259,10 @@ export default function HomePage() {
 
       {data && (
         <>
+          {/* Компьютер. Обёртка display: contents — для раскладки её нет,
+              оба ряда остаются прямыми детьми колонки оболочки; на телефоне
+              она прячет десктоп целиком, а телефонная колонка ниже */}
+          <div className="contents max-md:hidden">
           {/* Контент ограничен 1440px и центрируется: на 1680/1920 растут
               только боковые поля, колонки не расползаются */}
           <div className="mx-auto w-full max-w-[1760px] shrink-0 px-10 pb-1 pt-[26px]">
@@ -387,6 +392,134 @@ export default function HomePage() {
               strength={data.progress.strength}
               growthPoint={data.progress.growthPoint}
             />
+          </div>
+          </div>
+
+          {/* Телефон: одна колонка в порядке кадра «Телефон · 390 · главная».
+              Разговоры не подбираются по высоте, как на компьютере: колонка
+              прокручивается, и показываем пять последних */}
+          <div className="flex flex-col gap-3.5 px-4 pb-6 pt-5 md:hidden">
+            <div>
+              <div className="text-[24px] font-bold leading-[1.2] tracking-[-.02em] text-ink">
+                {greeting()}, {data.user.firstName} 👋
+              </div>
+              {data.user.jobTitle && (
+                <div className="mt-1 text-[14px] text-ink-subtle">
+                  {data.user.jobTitle}
+                </div>
+              )}
+            </div>
+
+            {hasConversations ? (
+              <>
+                <div className="flex flex-col gap-4 rounded-2xl bg-brand p-5 text-white">
+                  <div>
+                    <div className="text-[19px] font-semibold tracking-[-.01em]">
+                      Готовы начать подход?
+                    </div>
+                    <div className="mt-1.5 text-[15px] leading-normal text-brand-panel-text">
+                      Нажмите кнопку «Начать тренировку», а затем выберите тип
+                      тренировки и {слова.клиента}.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSetupOpen(true)}
+                    className="inline-flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-xl bg-white px-5 text-[16px] font-semibold text-brand-hover active:bg-brand-panel-meta"
+                  >
+                    <span className="inline-block h-2 w-2 rounded-full bg-brand" />
+                    Начать тренировку
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-6 gap-2">
+                  <StatCard span={2} value={String(data.stats.total)} label="разговоров" />
+                  <StatCard span={2} value={String(data.stats.thisWeek)} label="за неделю" />
+                  <StatCard
+                    span={2}
+                    value={formatDuration(data.stats.avgDurationSec)}
+                    label="средняя длина"
+                  />
+                  <StatCard
+                    span={3}
+                    accent
+                    value={data.stats.avgScore === null ? "—" : String(data.stats.avgScore)}
+                    suffix=" / 10"
+                    label="средняя оценка"
+                  />
+                  <StatCard
+                    span={3}
+                    accent
+                    value={dealsRate.label}
+                    label={dealsRate.hint ? "закрытых сделок · мало данных" : "закрытых сделок"}
+                  />
+                </div>
+
+                {/* Обёртка-блок: у панели flex-1 под колонку десктопа,
+                    здесь ей расти некуда и незачем */}
+                <div>
+                  <ProgressPanel
+                    metrics={data.progress.metrics}
+                    strength={data.progress.strength}
+                    growthPoint={data.progress.growthPoint}
+                  />
+                </div>
+
+                <div className="flex">
+                  <DailyCard tip={data.daily.tip} motivation={data.daily.motivation} />
+                </div>
+
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <div className="text-[17px] font-semibold text-ink">
+                      Прошлые разговоры
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAllOpen(true)}
+                      className="min-h-11 px-1 text-[15px] font-medium text-brand"
+                    >
+                      Все →
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-2.5">
+                    {data.recent.slice(0, 5).map((conversation) => (
+                      <ConversationCard
+                        key={conversation.id}
+                        conversation={{
+                          ...conversation,
+                          isFavorite:
+                            favorites[conversation.id] ?? conversation.isFavorite,
+                        }}
+                        onToggleFavorite={handleToggleFavorite}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : (
+              // Первый вход: плиток с нулями и пустого прогресса нет — одна
+              // карточка с кнопкой. Это первый экран собственника из аутрича
+              <div className="flex flex-col items-center rounded-2xl border border-line bg-surface-card px-5 py-8 text-center">
+                <div className="flex h-[72px] w-[72px] items-center justify-center rounded-2xl bg-brand-soft text-[32px]">
+                  🎧
+                </div>
+                <div className="mt-5 text-[20px] font-semibold text-ink">
+                  Первый разговор впереди
+                </div>
+                <p className="mt-2 text-[15px] leading-normal text-ink-muted">
+                  Проведите живой голосовой разговор с ИИ-клиентом. Он
+                  появится здесь вместе с расшифровкой, а позже — с разбором.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSetupOpen(true)}
+                  className="mt-6 inline-flex min-h-[52px] w-full items-center justify-center rounded-xl bg-brand px-5 text-[16px] font-semibold text-white active:bg-brand-hover"
+                >
+                  Начать тренировку
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
