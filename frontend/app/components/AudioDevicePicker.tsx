@@ -45,6 +45,12 @@ interface AudioDevicePickerProps {
   /** Перечитать список устройств: подключили гарнитуру во время выбора */
   onRefresh?: () => void;
   compact?: boolean;
+  /**
+   * Android: вход решает и то, где звучит пациент (см. подписи входов
+   * в lib/audioDevices). Определяет страница после гидрации — на сервере
+   * navigator нет, и разметка разошлась бы
+   */
+  androidNote?: boolean;
 }
 
 const selectClass =
@@ -111,6 +117,7 @@ export default function AudioDevicePicker({
   status = "waiting",
   onRefresh,
   compact = false,
+  androidNote = false,
 }: AudioDevicePickerProps) {
   const [testing, setTesting] = useState(false);
 
@@ -134,6 +141,14 @@ export default function AudioDevicePicker({
             </option>
           ))}
         </select>
+
+        {androidNote && !compact && inputs.length > 1 && (
+          <p className="mt-2 text-[14px] leading-snug text-ink-subtle">
+            На телефоне от микрофона зависит и то, где звучит пациент.
+            «Автоматически» берёт наушники, если они подключены, иначе
+            громкую связь.
+          </p>
+        )}
 
         {/* Шкала: засечка на пороге, с которого сервер считает звук голосом */}
         <div className="relative mt-2.5 h-2 overflow-hidden rounded-full bg-line-soft">

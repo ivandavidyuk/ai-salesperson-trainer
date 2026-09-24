@@ -854,6 +854,7 @@ function SessionScreen() {
 
             <div className="mt-6 w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-[18px]">
               <AudioDevicePicker
+                androidNote={android}
                 inputs={inputs}
                 inputId={inputId}
                 onInputChange={changeInput}
