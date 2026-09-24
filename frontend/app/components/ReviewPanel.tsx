@@ -64,6 +64,8 @@ interface ReviewPanelProps {
    * (разговоры до мастера настройки), тогда заголовок остаётся общим.
    */
   trainingTypeTitle?: string | null;
+  /** Классы корня: страница прячет панель на телефоне, пока открыт «Диалог» */
+  className?: string;
 }
 
 // Кольцо общей оценки. Дуга рисуется через stroke-dasharray, поэтому
@@ -212,9 +214,9 @@ function Stamp({
         </svg>
       </span>
 
-      <div className="animate-textrise relative min-w-0">
+      <div className="animate-textrise relative min-w-0 max-md:flex-1">
         <div
-          className={`text-[19.5px] font-semibold tracking-[-.01em] ${
+          className={`text-[19.5px] font-semibold tracking-[-.01em] max-md:text-[18px] max-md:leading-tight ${
             closed ? "text-white" : "text-ink"
           }`}
         >
@@ -232,7 +234,9 @@ function Stamp({
       </div>
 
       <span
-        className={`animate-stampbadge absolute right-4 top-1/2 -mt-[13px] rounded-[7px] border-2 px-[9px] py-[3px] font-mono text-[12.5px] font-semibold tracking-[.14em] ${
+        // На телефоне печать встаёт в строку справа: поверх заголовка
+        // «НЕ ОПЛАЧЕНО» на 360 px закрывала «Сделка не закрыта»
+        className={`animate-stampbadge absolute right-4 top-1/2 -mt-[13px] rounded-[7px] border-2 px-[9px] py-[3px] font-mono text-[12.5px] font-semibold tracking-[.14em] max-md:static max-md:mt-0 max-md:shrink-0 max-md:whitespace-nowrap max-md:px-2 max-md:text-[12px] max-md:tracking-[.1em] ${
           closed
             ? "border-white/45 text-white/80"
             : "border-danger-border text-danger-strong"
@@ -349,7 +353,7 @@ function QuoteBlock({ quote, onShow }: { quote: Quote; onShow?: (index: number) 
           <button
             type="button"
             onClick={() => onShow(quote.index)}
-            className="text-[13px] text-brand hover:text-brand-hover"
+            className="text-[13px] text-brand hover:text-brand-hover max-md:-my-3 max-md:inline-flex max-md:min-h-11 max-md:items-center max-md:text-[14px]"
           >
             показать в диалоге
           </button>
@@ -390,12 +394,12 @@ function ChecklistItemRow({
           aria-hidden="true"
           className={`h-[9px] w-[9px] shrink-0 rounded-full border-[length:1.5px] ${style.dotClass}`}
         />
-        <span className="flex-1 text-[14px] leading-snug text-ink">{item.name}</span>
+        <span className="flex-1 text-[14px] leading-snug text-ink max-md:text-[15px]">{item.name}</span>
         {canReveal && (
           <button
             type="button"
             onClick={() => setRevealed(true)}
-            className="whitespace-nowrap text-[13px] text-brand hover:text-brand-hover"
+            className="whitespace-nowrap text-[13px] text-brand hover:text-brand-hover max-md:-my-3 max-md:inline-flex max-md:min-h-11 max-md:items-center max-md:px-1"
           >
             реплика
           </button>
@@ -523,15 +527,16 @@ function ConversationChecklist({
           const isOpen = open === index;
           const score = stageScore(stage.items);
           return (
-            <div key={stage.stage} className="border-t border-line-soft py-[13px]">
+            <div key={stage.stage} className="border-t border-line-soft py-[13px] max-md:py-1.5">
+              {/* На телефоне строка этапа выше — нажимать её пальцем */}
               <button
                 type="button"
                 onClick={() => setOpen(isOpen ? null : index)}
                 aria-expanded={isOpen}
-                className="block w-full text-left"
+                className="block w-full text-left max-md:py-2"
               >
                 <div className="flex items-baseline gap-2">
-                  <span className="flex-1 text-[14px] text-ink">{label}</span>
+                  <span className="flex-1 text-[14px] text-ink max-md:text-[15px]">{label}</span>
                   <span className="font-mono text-[14px] font-semibold text-ink">
                     {score}
                   </span>
@@ -650,6 +655,7 @@ export default function ReviewPanel({
   startedAt,
   onShowMessage,
   trainingTypeTitle,
+  className = "",
 }: ReviewPanelProps) {
   const isDrill =
     review !== null && review.drillPassed !== null && review.drillPassed !== undefined;
@@ -673,7 +679,7 @@ export default function ReviewPanel({
       : "среднее пяти этапов, из 10";
 
   return (
-    <div className="flex-1 overflow-y-auto bg-surface-card px-7 py-8">
+    <div className={`flex-1 overflow-y-auto bg-surface-card px-7 py-8 max-md:px-4 max-md:py-4 ${className}`}>
       {/* Имя упражнения — заголовок панели, а прежнее «Разбор упражнения»
           уехало наверх надстрочной подписью. Новой строки не добавилось:
           поменялось содержимое уже потраченной. Режим панели («упражнение»,
@@ -688,7 +694,7 @@ export default function ReviewPanel({
           </div>
         </div>
       ) : (
-        <div className="mb-4 text-base font-semibold text-ink">
+        <div className="mb-4 text-base font-semibold text-ink max-md:hidden">
           {isDrill ? "Разбор упражнения" : "Разбор разговора"}
         </div>
       )}
