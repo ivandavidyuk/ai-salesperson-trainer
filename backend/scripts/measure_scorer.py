@@ -87,7 +87,9 @@ async def _расход() -> float:
         return float(r.json()["data"]["usage"])
 
 
-async def прогон(конфиги: list[str], прогонов: int, разговоры: list[str]) -> dict:
+async def прогон(
+    конфиги: list[str], прогонов: int, разговоры: list[str], параллельно: int = _ПАРАЛЛЕЛЬНО
+) -> dict:
     from core.config import get_settings
     from services import scoring, usage
     from services.session import SessionStore
@@ -128,7 +130,7 @@ async def прогон(конфиги: list[str], прогонов: int, раз�
         )
         до = await _расход()
         начало = time.monotonic()
-        семафор = asyncio.Semaphore(_ПАРАЛЛЕЛЬНО)
+        семафор = asyncio.Semaphore(параллельно)
 
         async def один(short, history, ctx, номер):
             async with семафор:
@@ -173,6 +175,10 @@ async def прогон(конфиги: list[str], прогонов: int, раз�
             "tokens": счёт.как_словарь(),
             "runs": прогоны,
         })
+        # Каждая конфигурация — строкой сразу, как готова. 24.09 прогон
+        # остановили на четвёртой из-за перерасхода, а ответы печатались
+        # только в конце — три готовые конфигурации ($2,5) пропали целиком
+        print(json.dumps(итог["configs"][-1], ensure_ascii=False), flush=True)
         print(f"{конфиг}: готово, ${итог['configs'][-1]['cost_usd']}", file=sys.stderr)
 
     scoring._ground_final = исходная_сверка
@@ -203,8 +209,13 @@ def _медиана(values: list):
 
 
 def отчёт(путь: str) -> str:
+    # Прогон пишет по строке на конфигурацию; первые замеры 24.09 — одним JSON
     with open(путь, encoding="utf-8") as f:
-        прогоны = json.load(f)
+        текст = f.read().strip()
+    if текст.startswith('{"configs"'):
+        прогоны = json.loads(текст)
+    else:
+        прогоны = {"configs": [json.loads(s) for s in текст.splitlines() if s.strip()]}
     with open(_ЭТАЛОН, encoding="utf-8") as f:
         эталон = {c["short"]: c for c in json.load(f)["cases"]}
 
@@ -318,14 +329,17 @@ def main() -> None:
     п.add_argument("--конфиг", action="append", required=True, help="модель@температура")
     п.add_argument("--прогонов", type=int, default=5)
     п.add_argument("--разговоры", default=",".join(_РАЗГОВОРЫ))
+    # Когда меряется время разбора — по одному: в бою разбор идёт один,
+    # а параллельные вызовы делят лимиты провайдера и время завышают
+    п.add_argument("--параллельно", type=int, default=_ПАРАЛЛЕЛЬНО)
     о = режимы.add_parser("отчёт")
     о.add_argument("файл")
     аргументы = разбор.parse_args()
 
     if аргументы.режим == "прогон":
-        итог = asyncio.run(прогон(аргументы.конфиг, аргументы.прогонов,
-                                  аргументы.разговоры.split(",")))
-        print(json.dumps(итог, ensure_ascii=False))
+        # Конфигурации печатаются по мере готовности внутри прогона
+        asyncio.run(прогон(аргументы.конфиг, аргументы.прогонов,
+                           аргументы.разговоры.split(","), аргументы.параллельно))
     else:
         print(отчёт(аргументы.файл))
 
