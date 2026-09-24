@@ -13,6 +13,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import Logo from "@/app/components/Logo";
+import BackLink from "@/app/components/BackLink";
 import Sheet from "@/app/components/Sheet";
 import { useSetIndustry, useWords } from "@/app/components/IndustryProvider";
 import { ключИзСлага } from "@/lib/industryWords";
@@ -187,9 +188,14 @@ interface AppShellProps {
   /** Заголовок в топбаре */
   title: string;
   children: ReactNode;
+  /**
+   * Телефон: стрелка назад перед заголовком вместо аватара — для страниц,
+   * куда попадают из меню аватара, а не из нижней панели (профиль)
+   */
+  phoneBack?: boolean;
 }
 
-export default function AppShell({ title, children }: AppShellProps) {
+export default function AppShell({ title, children, phoneBack = false }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const слова = useWords();
@@ -459,6 +465,27 @@ export default function AppShell({ title, children }: AppShellProps) {
               <Logo size="sm" />
             </Link>
             <span className="h-5 w-px bg-line max-md:hidden" aria-hidden="true" />
+            {phoneBack && (
+              <BackLink
+                className="-ml-3.5 inline-flex h-11 w-11 shrink-0 items-center justify-center text-ink md:hidden"
+                ariaLabel="Назад"
+                label={
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M15 6l-6 6 6 6" />
+                  </svg>
+                }
+              />
+            )}
             <div className="text-[16.5px] font-semibold text-ink max-md:truncate max-md:text-[18px] max-md:tracking-[-.01em]">
               {title}
             </div>
@@ -474,7 +501,7 @@ export default function AppShell({ title, children }: AppShellProps) {
               </span>
             )}
 
-            <div className="relative">
+            <div className={`relative ${phoneBack ? "max-md:hidden" : ""}`}>
               {/* На телефоне от кнопки остаётся один аватар в круге 44 px:
                   имя в узкой шапке не помещается рядом с названием раздела */}
               <button

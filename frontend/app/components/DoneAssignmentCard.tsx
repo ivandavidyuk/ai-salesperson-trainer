@@ -27,7 +27,9 @@ export default function DoneAssignmentCard({
   const { conversation } = assignment;
 
   return (
-    <div className="flex items-center gap-3 rounded-[14px] border border-line bg-surface-card px-[18px] py-3.5">
+    // На телефоне карточка в два яруса: что и когда, ниже — кто выполнил,
+    // длина, оценка и переход к расшифровке. В одну строку это не влезает
+    <div className="flex items-center gap-3 rounded-[14px] border border-line bg-surface-card px-[18px] py-3.5 max-md:flex-wrap max-md:gap-y-2 max-md:rounded-2xl max-md:px-4">
       <span
         className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-good-surface text-[13px] font-bold text-good"
         aria-hidden="true"
@@ -35,8 +37,8 @@ export default function DoneAssignmentCard({
         ✓
       </span>
 
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[15.5px] font-semibold text-ink">
+      <div className="min-w-0 flex-1 max-md:basis-[calc(100%-38px)]">
+        <div className="truncate text-[15.5px] font-semibold text-ink max-md:whitespace-normal">
           {assignment.title}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-subtle">
@@ -56,6 +58,9 @@ export default function DoneAssignmentCard({
           <span>{assignment.trainingType.title}</span>
         </div>
       </div>
+
+      {/* Отступ второго яруса — под текст, мимо галочки */}
+      <span className="w-[26px] shrink-0 md:hidden" aria-hidden="true" />
 
       {isHead && assignment.assignee && (
         <span className="inline-flex shrink-0 items-center gap-2 text-[13px] text-ink-body">
@@ -84,7 +89,7 @@ export default function DoneAssignmentCard({
           <Link
             href={`/transcript/${conversation.id}`}
             title="Открыть расшифровку"
-            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap py-1 text-[12.5px] font-medium text-brand transition-colors hover:text-brand-hover hover:underline hover:[text-underline-offset:3px]"
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap py-1 text-[12.5px] font-medium text-brand transition-colors hover:text-brand-hover hover:underline hover:[text-underline-offset:3px] max-md:ml-auto max-md:min-h-11 max-md:text-[14px]"
           >
             Расшифровка
             <svg

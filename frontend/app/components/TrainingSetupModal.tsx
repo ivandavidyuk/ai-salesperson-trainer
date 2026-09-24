@@ -24,6 +24,7 @@ import {
   DIFFICULTY,
   GROUP_LABELS,
   GROUP_SHORT,
+  СЕГМЕНТ_ТЕЛЕФОН,
   ЗАМОК_БЕЙДЖ,
   замок,
   type Assignment,
@@ -96,27 +97,12 @@ const FILTERS: { key: "all" | DifficultyKey; label: string }[] = [
   { key: "hard", label: "Сложный" },
 ];
 
-// Фильтр сложности на телефоне — один ряд из четырёх сегментов, и выбранный
-// окрашен в цвет своей сложности (макет «Телефон · 390», решение Ивана 23.09).
-// Классы целиком строками: Tailwind собирает только то, что видит в тексте
-const СЕГМЕНТ_ТЕЛЕФОН: Record<"all" | DifficultyKey, string> = {
-  all: "max-md:border-brand max-md:bg-brand-soft max-md:text-brand-hover",
-  easy: "max-md:border-good max-md:bg-good-surface max-md:text-good",
-  mid: "max-md:border-warn max-md:bg-warn-surface max-md:text-warn",
-  hard: "max-md:border-danger-strong max-md:bg-danger-soft max-md:text-danger-strong",
-};
 // Кнопки нижней панели на телефоне: обе во всю ширину, высотой под палец;
 // «Назад» контурная, главная шире
 const ЛЕВАЯ_ТЕЛЕФОН =
   "max-md:inline-flex max-md:min-h-[52px] max-md:flex-1 max-md:items-center max-md:justify-center max-md:whitespace-nowrap max-md:rounded-xl max-md:border max-md:border-line-strong max-md:bg-surface-card max-md:px-3 max-md:py-0 max-md:text-[16px] max-md:font-semibold max-md:text-ink";
 const ПРАВАЯ_ТЕЛЕФОН =
   "max-md:inline-flex max-md:min-h-[52px] max-md:w-full max-md:items-center max-md:justify-center max-md:whitespace-nowrap max-md:rounded-xl max-md:px-4 max-md:py-0 max-md:text-[16px]";
-
-const ТОЧКА_ТЕЛЕФОН: Record<DifficultyKey, string> = {
-  easy: "max-md:bg-good",
-  mid: "max-md:bg-warn",
-  hard: "max-md:bg-danger-strong",
-};
 
 // Общая рамка карточки выбора: выбранная — тиловая, заблокированная — тусклая
 function cardClasses(selected: boolean, disabled: boolean): string {
@@ -736,7 +722,7 @@ export default function TrainingSetupModal({
                 />
               </div>
 
-              <div className="mb-3.5 flex flex-wrap gap-[7px] max-md:mb-2.5 max-md:grid max-md:grid-cols-4 max-md:gap-[3px] max-md:rounded-xl max-md:border max-md:border-line max-md:bg-surface-bubble max-md:p-[3px]">
+              <div className={`mb-3.5 flex flex-wrap gap-[7px] max-md:mb-2.5 ${СЕГМЕНТ_ТЕЛЕФОН.ряд}`}>
                 {FILTERS.map((item) => {
                   const active = filter === item.key;
                   const dot = item.key !== "all" ? DIFFICULTY[item.key].dot : null;
@@ -745,17 +731,17 @@ export default function TrainingSetupModal({
                       key={item.key}
                       type="button"
                       onClick={() => setFilter(item.key)}
-                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[14px] font-semibold transition-colors max-md:min-h-11 max-md:min-w-0 max-md:justify-center max-md:gap-[5px] max-md:rounded-[9px] max-[379px]:gap-1 max-[379px]:text-[13px] max-md:border-[length:1.5px] max-md:px-0.5 max-md:py-0 max-md:tracking-[-.01em] ${
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[14px] font-semibold transition-colors ${СЕГМЕНТ_ТЕЛЕФОН.кнопка} ${
                         active
-                          ? `border-brand bg-brand text-white ${СЕГМЕНТ_ТЕЛЕФОН[item.key]}`
-                          : "border-line-strong bg-surface-card text-ink-muted hover:border-brand-soft max-md:border-transparent max-md:bg-transparent"
+                          ? `border-brand bg-brand text-white ${СЕГМЕНТ_ТЕЛЕФОН.выбран[item.key]}`
+                          : `border-line-strong bg-surface-card text-ink-muted hover:border-brand-soft ${СЕГМЕНТ_ТЕЛЕФОН.невыбран}`
                       }`}
                     >
                       {dot && (
                         <span
                           className={`inline-block h-1.5 w-1.5 rounded-full max-md:h-[7px] max-md:w-[7px] ${
                             active && item.key !== "all"
-                              ? `bg-white ${ТОЧКА_ТЕЛЕФОН[item.key]}`
+                              ? `bg-white ${СЕГМЕНТ_ТЕЛЕФОН.точка[item.key]}`
                               : dot
                           }`}
                         />
