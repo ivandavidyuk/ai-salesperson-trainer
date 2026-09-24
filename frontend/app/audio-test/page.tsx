@@ -10,8 +10,22 @@
 // микрофона; по тому, какие звучат в наушниках, выбирается починка.
 //
 // Ссылок сюда нет, страница за входом. Удалить после замера.
+//
+// Замер 24.09: все шесть кнопок A–F звучат в наушниках, в том числе A,
+// устроенная как тренажёр. Значит, тренажёр отличается чем-то ещё. Кандидаты —
+// то, чего у кнопок A–F нет: сохранённые в браузере микрофон и динамик
+// (выбор динамика на телефоне теперь скрыт, но мог остаться с июля, когда
+// телефон видел десктопную вёрстку), захват через MicRecorder с контекстом
+// на 16 кГц и плеер на MediaSource. Кнопки G–J добавляют их по одному.
 
 import { useEffect, useRef, useState } from "react";
+import { AudioPlayer, MicRecorder } from "@/lib/voiceClient";
+import {
+  saveInputId,
+  saveOutputId,
+  savedInputId,
+  savedOutputId,
+} from "@/lib/audioDevices";
 
 // Пять коротких сигналов 440 Гц. Длинный тон нарочно: если звук переедет
 // из динамика в наушники посреди проигрывания, это будет слышно
@@ -65,6 +79,37 @@ const ВАРИАНТЫ: Вариант[] = [
   { key: "F", label: "Без микрофона, звук через <audio> (контроль)", mic: "none", how: "element" },
 ];
 
+// Связка тренажёра по частям. «Сохранённое» — то, что лежит в localStorage
+// этого браузера под ключами выбора устройств
+interface ВариантТренажёра {
+  key: string;
+  label: string;
+  /** Захват как в тренажёре (MicRecorder) или простой getUserMedia */
+  recorder: boolean;
+  /** Брать сохранённый микрофон */
+  savedInput: boolean;
+  /** Отправлять звук в сохранённый динамик (setSinkId) */
+  savedOutput: boolean;
+  /** Играть плеером тренажёра (MediaSource) или простым <audio> */
+  player: boolean;
+}
+
+const ВАРИАНТЫ_ТРЕНАЖЁРА: ВариантТренажёра[] = [
+  { key: "G", label: "Тренажёр целиком: его захват, его плеер, сохранённые микрофон и динамик", recorder: true, savedInput: true, savedOutput: true, player: true },
+  { key: "H", label: "Тренажёр без сохранённого: его захват и плеер, устройства по умолчанию", recorder: true, savedInput: false, savedOutput: false, player: true },
+  { key: "I", label: "Только сохранённый динамик: обычный микрофон, <audio> в сохранённый динамик", recorder: false, savedInput: false, savedOutput: true, player: false },
+  { key: "J", label: "Только сохранённый микрофон: он же с эхоподавлением, обычный <audio>", recorder: false, savedInput: true, savedOutput: false, player: false },
+];
+
+function base64(buffer: ArrayBuffer): string {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
 function обработка(mode: Режим): MediaTrackConstraints {
   if (mode === "aec") return { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
   if (mode === "ns") return { echoCancellation: false, noiseSuppression: true, autoGainControl: true };
@@ -73,17 +118,89 @@ function обработка(mode: Режим): MediaTrackConstraints {
 
 export default function AudioTestPage() {
   const stream = useRef<MediaStream | null>(null);
+  const recorder = useRef<MicRecorder | null>(null);
+  const player = useRef<AudioPlayer | null>(null);
   const [status, setStatus] = useState("Нажмите вариант — прозвучат пять коротких сигналов");
-  const [devices, setDevices] = useState<string[]>([]);
+  const [devices, setDevices] = useState<{ kind: string; label: string; id: string }[]>([]);
+  const [saved, setSaved] = useState<{ input: string | null; output: string | null }>({
+    input: null,
+    output: null,
+  });
 
   function stopMic() {
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
+    void recorder.current?.stop();
+    recorder.current = null;
+    player.current?.reset();
+    player.current = null;
   }
 
   async function refreshDevices() {
+    setSaved({ input: savedInputId(), output: savedOutputId() });
     const all = await navigator.mediaDevices?.enumerateDevices();
-    setDevices((all ?? []).map((d) => `${d.kind}: ${d.label || "(без подписи)"}`));
+    setDevices(
+      (all ?? []).map((d) => ({ kind: d.kind, label: d.label || "(без подписи)", id: d.deviceId }))
+    );
+  }
+
+  // Сохранённое устройство словами: подпись из списка браузера, если нашлась
+  function назвать(
+    id: string | null,
+    kind: string,
+    list: { kind: string; label: string; id: string }[] = devices
+  ): string {
+    if (!id) return "не сохранён — берётся по умолчанию";
+    const device = list.find((d) => d.id === id && d.kind === kind);
+    return device ? `«${device.label}» (${id.slice(0, 8)})` : `нет в списке (${id.slice(0, 8)})`;
+  }
+
+  async function playTrainer(вариант: ВариантТренажёра) {
+    try {
+      setStatus(`Вариант ${вариант.key}: включаю…`);
+      stopMic();
+      const inputId = вариант.savedInput ? savedInputId() : null;
+      const outputId = вариант.savedOutput ? savedOutputId() : null;
+      if (вариант.recorder) {
+        recorder.current = new MicRecorder();
+        await recorder.current.start(() => {}, { deviceId: inputId });
+      } else {
+        stream.current = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            ...(inputId ? { deviceId: { exact: inputId } } : {}),
+          },
+        });
+      }
+      void refreshDevices();
+      // Свежий список: состояние в этом замыкании ещё прежнее
+      const list = ((await navigator.mediaDevices.enumerateDevices()) ?? []).map((d) => ({
+        kind: d.kind,
+        label: d.label || "(без подписи)",
+        id: d.deviceId,
+      }));
+      await new Promise((r) => setTimeout(r, 1200));
+      const mp3 = await (await fetch("/audio-test-tone.mp3")).arrayBuffer();
+      if (вариант.player) {
+        player.current = new AudioPlayer();
+        player.current.setOutputDevice(outputId);
+        player.current.pushChunk(base64(mp3));
+        player.current.endUtterance();
+      } else {
+        const audio = new Audio(URL.createObjectURL(new Blob([mp3], { type: "audio/mpeg" })));
+        if (outputId && typeof audio.setSinkId === "function") await audio.setSinkId(outputId);
+        await audio.play();
+      }
+      setStatus(
+        `Вариант ${вариант.key} звучит (сигнал три секунды). Микрофон: ${назвать(inputId, "audioinput", list)}; ` +
+          `динамик: ${назвать(outputId, "audiooutput", list)}. Где слышно?`
+      );
+    } catch (error) {
+      const name = (error as { name?: string } | null)?.name ?? "ошибка";
+      setStatus(`Вариант ${вариант.key}: не получилось — ${name}`);
+    }
   }
 
   async function startMic(mode: Режим): Promise<string> {
@@ -143,22 +260,55 @@ export default function AudioTestPage() {
     return stopMic;
   }, []);
 
+  const кнопка =
+    "flex min-h-[56px] items-center gap-3 rounded-xl border border-line-strong bg-surface-card px-4 py-3 text-left text-[15px] font-medium text-ink active:bg-surface-bubble";
+
   return (
     <main className="mx-auto min-h-dvh max-w-[520px] bg-surface px-4 py-6">
       <h1 className="text-[22px] font-semibold text-ink">Куда идёт звук</h1>
       <p className="mt-2 text-[15px] leading-normal text-ink-muted">
         Подключите Bluetooth-наушники и нажимайте варианты по очереди. Про
-        каждый запомните: сигналы в наушниках или в динамике телефона.
+        каждый запомните: сигнал в наушниках или в динамике телефона.
       </p>
 
-      <div className="mt-5 flex flex-col gap-2.5">
+      {/* Второй заход: A–F все звучали в наушниках, ищем, чем отличается тренажёр */}
+      <div className="mt-5 rounded-xl border border-line bg-surface-card px-4 py-3 text-[14.5px] leading-normal text-ink-body">
+        <div className="font-semibold text-ink">Сохранено в этом браузере</div>
+        <div className="mt-1">Микрофон: {назвать(saved.input, "audioinput")}</div>
+        <div>Динамик: {назвать(saved.output, "audiooutput")}</div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2.5">
+        {ВАРИАНТЫ_ТРЕНАЖЁРА.map((вариант) => (
+          <button key={вариант.key} type="button" onClick={() => void playTrainer(вариант)} className={кнопка}>
+            <span className="font-mono text-[18px] font-semibold text-brand">{вариант.key}</span>
+            {вариант.label}
+          </button>
+        ))}
+      </div>
+
+      <p className="mt-4 rounded-xl bg-surface-card px-4 py-3 text-[15px] leading-normal text-ink-body">
+        {status}
+      </p>
+
+      <button
+        type="button"
+        onClick={() => {
+          stopMic();
+          saveInputId(null);
+          saveOutputId(null);
+          void refreshDevices();
+          setStatus("Сохранённые микрофон и динамик забыты: тренажёр возьмёт устройства по умолчанию");
+        }}
+        className="mt-4 min-h-11 w-full rounded-xl border border-line-strong bg-surface-card px-4 text-[15px] font-semibold text-ink"
+      >
+        Забыть сохранённые микрофон и динамик
+      </button>
+
+      <div className="mt-8 text-[15px] font-semibold text-ink">Первый заход (A–F)</div>
+      <div className="mt-3 flex flex-col gap-2.5">
         {ВАРИАНТЫ.map((вариант) => (
-          <button
-            key={вариант.key}
-            type="button"
-            onClick={() => void play(вариант)}
-            className="flex min-h-[56px] items-center gap-3 rounded-xl border border-line-strong bg-surface-card px-4 py-3 text-left text-[15px] font-medium text-ink active:bg-surface-bubble"
-          >
+          <button key={вариант.key} type="button" onClick={() => void play(вариант)} className={кнопка}>
             <span className="font-mono text-[18px] font-semibold text-brand">{вариант.key}</span>
             {вариант.label}
           </button>
@@ -175,13 +325,11 @@ export default function AudioTestPage() {
         </button>
       </div>
 
-      <p className="mt-5 rounded-xl bg-surface-card px-4 py-3 text-[15px] leading-normal text-ink-body">
-        {status}
-      </p>
-
-      <div className="mt-5 font-mono text-[12px] leading-relaxed text-ink-subtle">
-        {devices.map((line, index) => (
-          <div key={index}>{line}</div>
+      <div className="mt-5 break-all font-mono text-[12px] leading-relaxed text-ink-subtle">
+        {devices.map((d, index) => (
+          <div key={index}>
+            {d.kind}: {d.label} ({d.id.slice(0, 8) || "без id"})
+          </div>
         ))}
       </div>
     </main>
