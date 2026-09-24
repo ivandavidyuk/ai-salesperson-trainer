@@ -19,10 +19,11 @@ import CaseServiceToggle from "@/app/components/CaseServiceToggle";
 import DiagnosticsDocument from "@/app/components/DiagnosticsDocument";
 import { useIndustry, useWords } from "@/app/components/IndustryProvider";
 import Logo from "@/app/components/Logo";
+import PatientAvatar from "@/app/components/PatientAvatar";
 import SpeakerPill from "@/app/components/SpeakerPill";
 import Timer from "@/app/components/Timer";
 import type { CaseService } from "@/lib/caseService";
-import { AudioPlayer, MicRecorder } from "@/lib/voiceClient";
+import { AudioPlayer, MicRecorder, primeAudioElement } from "@/lib/voiceClient";
 import {
   listDevices,
   describeMicError,
@@ -131,6 +132,10 @@ function SessionScreen() {
   // waiting — кнопка нажата, ждём ответа сервера (или повтор при pending)
   const [diagnostics, setDiagnostics] = useState<string | null>(null);
   const [diagnosticsWaiting, setDiagnosticsWaiting] = useState(false);
+  // Телефон: документ диагностики — лист снизу, его можно свернуть обратно
+  // в кнопку и развернуть снова. На компьютере карточка стоит в колонке
+  // и не сворачивается
+  const [листДиагностики, setЛистДиагностики] = useState(true);
   // Название упражнения и услуга к нему; у полного разговора null
   const [drill, setDrill] = useState<Drill | null>(null);
   // Звучит ли сейчас ответ ИИ — от этого зависит индикатор и вид аватара
@@ -386,6 +391,9 @@ function SessionScreen() {
 
   // «Начать тренировку»: создаём сессию, подключаем WebSocket, микрофон и плеер
   async function handleStart() {
+    // Строго до первого await: на iPhone звук разрешается только элементу,
+    // проигранному в обработчике нажатия. На компьютере — null
+    const primed = primeAudioElement();
     setBusy(true);
     setErrorMsg("");
     setScreenState("connecting");
@@ -462,8 +470,9 @@ function SessionScreen() {
       // Готовим плеер для голосовых ответов ИИ
       // Диагностика плеера уходит в тот же серверный лог, что и тайминги
       // ходов: клиентский сбой воспроизведения иначе неотличим от серверного
-      playerRef.current = new AudioPlayer((data) =>
-        sendWs({ type: "client_audio", ...data })
+      playerRef.current = new AudioPlayer(
+        (data) => sendWs({ type: "client_audio", ...data }),
+        primed
       );
       playerRef.current.setOutputDevice(outputId);
 
@@ -560,6 +569,18 @@ function SessionScreen() {
 
       ws.onerror = () => {
         console.warn("Ошибка WebSocket-соединения");
+      };
+
+      // Сервер сам закрывает сокет только после нашего «стоп» — а своё
+      // закрытие handleStop снимает сокет из ref раньше, чем придёт это
+      // событие. Всё прочее — настоящий обрыв: пропала сеть, телефон усыпил
+      // вкладку. Раньше экран в этом случае продолжал «идти» и молчал
+      ws.onclose = () => {
+        if (wsRef.current !== ws) return;
+        wsRef.current = null;
+        setErrorMsg(
+          "Связь с тренажёром прервалась. Завершите разговор — всё сказанное сохранится в расшифровке."
+        );
       };
     } finally {
       setBusy(false);
@@ -668,6 +689,34 @@ function SessionScreen() {
   }, []);
 
   const inCall = screenState === "active" || screenState === "paused";
+
+  // Пока идёт разговор, экран не гаснет: телефон, погасивший экран, усыпляет
+  // вкладку, и разговор обрывается. Блокировка снимается системой, когда
+  // вкладку сворачивают, — берём её заново, когда вкладка снова на виду.
+  // На компьютере то же самое: не уходить в сон посреди звонка
+  useEffect(() => {
+    if (!inCall || typeof navigator === "undefined" || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+    const take = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const next = await navigator.wakeLock.request("screen");
+        if (cancelled) void next.release();
+        else lock = next;
+      } catch {
+        // Отказали (режим энергосбережения) — разговор идёт и так
+      }
+    };
+    void take();
+    const onVisible = () => void take();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      void lock?.release();
+    };
+  }, [inCall]);
   // Уйти со страницы можно, пока разговор не начался. Проверка звука сюда
   // тоже входит: с неё есть своя «Назад», но и общий выход должен работать
   const canLeave =
@@ -676,24 +725,29 @@ function SessionScreen() {
     screenState === "micError";
 
   return (
-    <main className="flex h-screen flex-col bg-surface-card">
+    <main className="flex h-screen flex-col bg-surface-card max-md:h-dvh">
       {/* Топбар: логотип и «Назад», справа — таймер во время разговора.
           Высота и отступы те же, что в AppShell: экран разговора выпадает
           из общей оболочки, но выглядеть должен её продолжением. */}
-      <header className="flex h-[66px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7">
+      <header className="flex h-[66px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7 max-md:h-14 max-md:px-5">
         <div className="flex items-center gap-3.5">
-          <Link href="/" title="На главную" className="shrink-0">
+          <Link href="/" title="На главную" className="shrink-0 max-md:inline-flex max-md:min-h-11 max-md:items-center">
             <Logo size="sm" />
           </Link>
           {/* Уйти можно только до начала разговора: во время него переход
               оборвал бы живую сессию, поэтому ссылки там нет */}
           {canLeave && (
             <>
-              <span className="h-5 w-px bg-line" aria-hidden="true" />
-              <BackLink />
+              <span className="h-5 w-px bg-line max-md:hidden" aria-hidden="true" />
+              <BackLink className="max-md:hidden" />
             </>
           )}
         </div>
+
+        {/* На телефоне «Назад» справа, как в макете: слева только логотип */}
+        {canLeave && (
+          <BackLink className="inline-flex min-h-11 items-center px-1 text-[15px] md:hidden" />
+        )}
 
         {inCall && <Timer seconds={seconds} paused={screenState === "paused"} size="lg" />}
 
@@ -711,12 +765,15 @@ function SessionScreen() {
           внутри карточки; если экран ниже ~760 px и не помещаются даже
           аватар с кнопками — прокручивается сама колонка (overflow-y-auto),
           а «safe center» не даёт ей обрезать верх при переполнении */}
-      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-10 py-10 [justify-content:safe_center]">
+      {/* Обёртка — опора для листа диагностики на телефоне. На компьютере
+          её геометрия та же, что была у колонки */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-10 py-10 [justify-content:safe_center] max-md:px-4 max-md:py-6">
         {/* --- До старта --- */}
         {screenState === "idle" && (
           <>
             <CallAvatar name={patient?.name ?? null} state="idle" />
-            <div className="mt-[18px] text-[23.5px] font-semibold text-ink">
+            <div className="mt-[18px] text-center text-[23.5px] font-semibold text-ink max-md:text-[22px]">
               {patient?.name ?? слова.Клиент}
             </div>
             {patient?.description && (
@@ -754,12 +811,12 @@ function SessionScreen() {
             <button
               type="button"
               onClick={() => setScreenState("check")}
-              className="mt-6 inline-flex items-center gap-2.5 rounded-input bg-brand px-[30px] py-3.5 text-base font-semibold text-white transition-colors hover:bg-brand-hover"
+              className="mt-6 inline-flex items-center gap-2.5 rounded-input bg-brand px-[30px] py-3.5 text-base font-semibold text-white transition-colors hover:bg-brand-hover max-md:hidden"
             >
               <span className="inline-block h-2 w-2 rounded-full bg-white" />
               Начать тренировку
             </button>
-            <p className="mt-3 text-[14px] text-ink-placeholder">
+            <p className="mt-3 text-[14px] text-ink-placeholder max-md:hidden">
               Понадобится доступ к микрофону
             </p>
           </>
@@ -768,10 +825,10 @@ function SessionScreen() {
         {/* --- Проверка звука: отдельный шаг между карточкой и разговором --- */}
         {screenState === "check" && (
           <>
-            <div className="text-[22.5px] font-semibold text-ink">
+            <div className="text-[22.5px] font-semibold text-ink max-md:self-stretch max-md:text-[22px]">
               Проверим, что вас слышно
             </div>
-            <p className="mt-2 max-w-[420px] text-pretty text-center text-[16px] leading-normal text-ink-muted">
+            <p className="mt-2 max-w-[420px] text-pretty text-center text-[16px] leading-normal text-ink-muted max-md:self-stretch max-md:text-left max-md:text-[15px]">
               Скажите вслух пару слов. Полоса должна перешагивать засечку —
               тогда разговор пойдёт как надо.
             </p>
@@ -795,7 +852,7 @@ function SessionScreen() {
               )}
             </div>
 
-            <div className="mt-6 flex items-center gap-3">
+            <div className="mt-6 flex items-center gap-3 max-md:hidden">
               {/* Блокируем только когда микрофон работает, но молчит:
                   это и есть случай линейного входа. При запрете доступа
                   или отсутствии устройства уровень измерить нечем, порог
@@ -822,7 +879,7 @@ function SessionScreen() {
               </button>
             </div>
 
-            <p className="mt-3 text-[13.5px] text-ink-placeholder">
+            <p className="mt-3 text-[13.5px] text-ink-placeholder max-md:hidden">
               Выбор устройств запомним для следующих разговоров
             </p>
           </>
@@ -866,7 +923,7 @@ function SessionScreen() {
                     : "listening"
               }
             />
-            <div className="mt-[30px] text-[31px] font-semibold text-ink">
+            <div className="mt-[30px] text-center text-[31px] font-semibold text-ink max-md:mt-5 max-md:text-[24px]">
               {patient?.name ?? слова.Клиент}
             </div>
             {/* Название упражнения — моноширинной подписью, а не обычным
@@ -939,7 +996,7 @@ function SessionScreen() {
               // Карточка держит размер содержимого; в высоту экрана она
               // вписывается тем, что документ внутри ограничен остатком
               // экрана и прокручивается сам (см. его класс ниже)
-              <div className="mt-6 flex w-full max-w-[440px] flex-col rounded-xl border border-line bg-surface-card px-[18px] py-4 text-left shadow-card">
+              <div className="mt-6 flex w-full max-w-[440px] flex-col rounded-xl border border-line bg-surface-card px-[18px] py-4 text-left shadow-card max-md:hidden">
                 <div className="mb-2.5 shrink-0 text-[12.5px] font-medium uppercase tracking-[.1em] text-ink-subtle">
                   Результат диагностики
                 </div>
@@ -968,7 +1025,43 @@ function SessionScreen() {
                 «Микрофон не даёт сигнала» и списком устройств колонка
                 на 1280×800 вылезала на 6 px — появлялась прокрутка. Отступ
                 над кнопками в этом состоянии меньше, как в макете */}
-            <div className={`${drill && micAlert ? "mt-7" : "mt-10"} flex gap-3.5`}>
+            {/* Телефон: результат диагностики и услуга — кнопками во всю
+                ширину в колонке, «Пауза» и «Завершить» — в панели внизу */}
+            {fullConversation && естьДиагностика && !(diagnostics && листДиагностики) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setЛистДиагностики(true);
+                  if (!diagnostics) handleDiagnostics();
+                }}
+                disabled={diagnosticsWaiting}
+                className="mt-6 inline-flex min-h-[52px] w-full items-center justify-center gap-[9px] rounded-xl border border-line-strong bg-white px-5 text-[16px] font-semibold text-ink disabled:text-ink-muted md:hidden"
+              >
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-brand"
+                  aria-hidden="true"
+                >
+                  <path d="M6 3h8l4 4v14H6z" />
+                  <path d="M9.5 12h5M9.5 16h3.5" />
+                </svg>
+                {diagnosticsWaiting ? "Готовим…" : "Результат диагностики"}
+              </button>
+            )}
+            {drill?.showsService && (
+              <div className="mt-6 w-full md:hidden">
+                <CaseServiceToggle service={drill.service} phone />
+              </div>
+            )}
+
+            <div className={`${drill && micAlert ? "mt-7" : "mt-10"} flex gap-3.5 max-md:hidden`}>
               {/* Результат диагностики — только в полном разговоре и до
                   показа. Маркера «сценка отыграна» нет намеренно: менеджер
                   сам решает, когда пациент «сходил», — сценку он всё равно
@@ -1050,7 +1143,7 @@ function SessionScreen() {
               </ol>
             )}
 
-            <div className="mt-6 flex items-center gap-3">
+            <div className="mt-6 flex items-center gap-3 max-md:hidden">
               <button
                 type="button"
                 onClick={handleStart}
@@ -1071,7 +1164,7 @@ function SessionScreen() {
             </div>
 
             {micError.note && (
-              <p className="mt-3 max-w-[420px] text-center text-[14px] leading-snug text-ink-placeholder">
+              <p className="mt-3 max-w-[420px] text-center text-[14px] leading-snug text-ink-placeholder max-md:hidden">
                 {micError.note}
               </p>
             )}
@@ -1094,6 +1187,205 @@ function SessionScreen() {
           </>
         )}
       </div>
+
+      {/* Телефон: результат диагностики — лист поверх колонки. Над ним
+          остаётся строка «кто на линии» — аватар, имя и кто говорит, —
+          чтобы, читая документ, не перебить пациента */}
+      {inCall && diagnostics && листДиагностики && (
+        <div className="absolute inset-0 z-20 flex flex-col bg-surface md:hidden">
+          <div className="flex shrink-0 items-center gap-3.5 px-5 py-3.5">
+            <PatientAvatar
+              name={patient?.name ?? null}
+              className="h-14 w-14 border-2 border-brand bg-brand-soft text-lg font-semibold text-brand"
+            />
+            <div className="min-w-0">
+              <div className="truncate text-[19px] font-semibold text-ink">
+                {patient?.name ?? слова.Клиент}
+              </div>
+              <div className="mt-1">
+                <SpeakerPill
+                  state={
+                    screenState === "paused"
+                      ? "paused"
+                      : aiSpeaking
+                        ? "speaking"
+                        : "listening"
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col rounded-t-[24px] bg-surface-card shadow-[0_-18px_50px_-24px_rgba(12,26,24,.45)]">
+            <div className="flex justify-center pt-2" aria-hidden="true">
+              <span className="h-[5px] w-9 rounded-[3px] bg-[#D5DDDB]" />
+            </div>
+            <div className="flex min-h-[48px] items-center gap-2.5 pl-5 pr-2">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-brand"
+                aria-hidden="true"
+              >
+                <path d="M6 3h8l4 4v14H6z" />
+                <path d="M9.5 12h5M9.5 16h3.5" />
+              </svg>
+              <div className="flex-1 text-[18px] font-semibold text-ink">
+                Результат диагностики
+              </div>
+              <button
+                type="button"
+                onClick={() => setЛистДиагностики(false)}
+                title="Свернуть"
+                aria-label="Свернуть"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-ink-muted"
+              >
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-1">
+              <CaseServiceBlock service={diagnosticsService} variant="card" />
+              <div className="mb-2 mt-4 font-mono text-[13px] uppercase tracking-[.1em] text-ink-subtle">
+                Документ врача
+              </div>
+              <DiagnosticsDocument
+                text={diagnostics}
+                className="font-mono text-[13.5px] leading-snug text-ink-label"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
+
+      {/* Телефон: действия закреплены внизу экрана — большой палец
+          достаёт до них, не прокручивая колонку */}
+      {(screenState === "idle" ||
+        screenState === "check" ||
+        inCall ||
+        (screenState === "micError" && micError)) && (
+        <div className="flex shrink-0 flex-col gap-2.5 border-t border-line bg-surface-card px-4 pb-4 pt-3 md:hidden">
+          {screenState === "idle" && (
+            <>
+              <button
+                type="button"
+                onClick={() => setScreenState("check")}
+                className="inline-flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-xl bg-brand px-5 text-[16px] font-semibold text-white active:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
+              >
+                <span className="inline-block h-2 w-2 rounded-full bg-white" />
+                Начать тренировку
+              </button>
+              <p className="text-center text-[13px] text-ink-placeholder">
+                Понадобится доступ к микрофону
+              </p>
+            </>
+          )}
+
+          {screenState === "check" && (
+            <>
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={busy || (!micProven && !micError)}
+                className="inline-flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-xl bg-brand px-5 text-[16px] font-semibold text-white active:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
+              >
+                Начать
+              </button>
+              <button
+                type="button"
+                onClick={() => setScreenState("idle")}
+                className="inline-flex min-h-[52px] w-full items-center justify-center rounded-xl border border-line-strong bg-surface-card px-5 text-[16px] font-semibold text-ink active:bg-surface"
+              >
+                Назад
+              </button>
+              {/* Динамика на телефоне не выбирают — запоминаем только микрофон */}
+              <p className="text-center text-[13px] text-ink-placeholder">
+                Выбор микрофона запомним для следующих разговоров
+              </p>
+            </>
+          )}
+
+          {inCall && (
+            <div className="flex gap-2.5">
+              {screenState === "active" ? (
+                <button
+                  type="button"
+                  onClick={handlePause}
+                  disabled={busy}
+                  className="inline-flex min-h-[52px] flex-1 items-center justify-center rounded-xl border border-line-strong bg-white px-3 text-[16px] font-semibold text-ink disabled:cursor-not-allowed"
+                >
+                  Пауза
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleResume}
+                  disabled={busy}
+                  className="inline-flex min-h-[52px] flex-1 items-center justify-center rounded-xl bg-brand px-3 text-[16px] font-semibold text-white disabled:cursor-not-allowed"
+                >
+                  Продолжить
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleStop}
+                disabled={busy}
+                className={`inline-flex min-h-[52px] flex-[1.6] items-center justify-center rounded-xl px-3 text-[16px] font-semibold leading-tight disabled:cursor-not-allowed ${
+                  screenState === "paused"
+                    ? "border border-[#E3C9C6] bg-white text-danger"
+                    : "bg-danger text-white"
+                }`}
+              >
+                Завершить разговор
+              </button>
+            </div>
+          )}
+
+          {screenState === "micError" && micError && (
+            <>
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={busy}
+                className="inline-flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-xl bg-brand px-5 text-[16px] font-semibold text-white active:bg-brand-hover disabled:cursor-not-allowed disabled:bg-disabled"
+              >
+                {micError.retryLabel}
+              </button>
+              {micError.kind === "missing" && (
+                <button
+                  type="button"
+                  onClick={() => void refreshDevices()}
+                  className="inline-flex min-h-[52px] w-full items-center justify-center rounded-xl border border-line-strong bg-surface-card px-5 text-[16px] font-semibold text-ink active:bg-surface"
+                >
+                  Обновить список
+                </button>
+              )}
+              {micError.note && (
+                <p className="text-center text-[13px] leading-snug text-ink-placeholder">
+                  {micError.note}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </main>
   );
 }

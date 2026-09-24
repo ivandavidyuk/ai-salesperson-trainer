@@ -103,8 +103,10 @@ export default function ProfilePage() {
   }, [router]);
 
   return (
-    <AppShell title="Профиль">
-      <div className="mx-auto flex min-h-0 w-full max-w-[1200px] flex-1 gap-[22px] px-10 py-[26px]">
+    <AppShell title="Профиль" phoneBack>
+      {/* Телефон: одна колонка — фото, клиника, личные данные, в конце
+          «Выйти». Колонки не прокручиваются сами — прокручивается экран */}
+      <div className="mx-auto flex min-h-0 w-full max-w-[1200px] flex-1 gap-[22px] px-10 py-[26px] max-md:flex-none max-md:flex-col max-md:gap-3 max-md:px-4 max-md:py-4">
         {!profile && !loadError && (
           <div className="flex flex-1 justify-center py-16">
             <Loader />
@@ -121,7 +123,7 @@ export default function ProfilePage() {
           <>
             <AvatarCard profile={profile} onChange={setProfile} />
 
-            <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto pr-1.5">
+            <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto pr-1.5 max-md:gap-3 max-md:overflow-visible max-md:pr-0">
               {/* Менеджеру — та же карточка на том же месте, но без правки:
                   цены ему нужны в разговоре, а на пресете чужой клиники
                   он их иначе называет из головы и срывает сделки */}
@@ -220,10 +222,12 @@ function AvatarCard({ profile, onChange }: CardProps) {
   }
 
   return (
-    <div className="flex w-[296px] shrink-0 flex-col gap-4">
-      <div className="flex flex-col items-center rounded-2xl border border-line bg-surface-card px-[22px] py-[26px] text-center">
-        <div className="relative">
-          <div className="h-[118px] w-[118px] overflow-hidden rounded-full border-[3px] border-surface-accent">
+    // На телефоне обёртка растворяется: «Выйти» встаёт в конец страницы,
+    // под личные данные, а не под фото
+    <div className="flex w-[296px] shrink-0 flex-col gap-4 max-md:contents">
+      <div className="flex flex-col items-center rounded-2xl border border-line bg-surface-card px-[22px] py-[26px] text-center max-md:flex-row max-md:flex-wrap max-md:gap-x-2.5 max-md:px-4 max-md:py-4 max-md:text-left">
+        <div className="relative max-md:mr-1.5">
+          <div className="h-[118px] w-[118px] overflow-hidden rounded-full border-[3px] border-surface-accent max-md:h-[84px] max-md:w-[84px]">
             {photo ? (
               // Обычный img: next/image ради картинки из собственного роута
               // только добавил бы конфигурацию
@@ -234,7 +238,7 @@ function AvatarCard({ profile, onChange }: CardProps) {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center bg-brand-soft text-[39px] font-semibold text-brand">
+              <div className="flex h-full w-full items-center justify-center bg-brand-soft text-[39px] font-semibold text-brand max-md:text-[28px]">
                 {initials(`${profile.firstName} ${profile.lastName}`)}
               </div>
             )}
@@ -246,7 +250,7 @@ function AvatarCard({ profile, onChange }: CardProps) {
             disabled={busy}
             title="Изменить фото"
             aria-label="Изменить фото"
-            className="absolute bottom-0.5 right-0.5 flex h-[34px] w-[34px] items-center justify-center rounded-full border-[3px] border-surface-card bg-brand text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
+            className="absolute bottom-0.5 right-0.5 flex h-[34px] w-[34px] items-center justify-center rounded-full border-[3px] border-surface-card bg-brand text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted max-md:-bottom-1 max-md:-right-1 max-md:h-9 max-md:w-9"
           >
             <svg
               width="16"
@@ -265,11 +269,15 @@ function AvatarCard({ profile, onChange }: CardProps) {
           </button>
         </div>
 
-        <div className="mt-4 text-lg font-semibold text-ink">
-          {profile.firstName} {profile.lastName}
-        </div>
-        <div className="mt-[3px] text-[15px] text-ink-subtle">
-          {profile.jobTitle || "Должность не указана"}
+        {/* На телефоне имя занимает остаток первой строки — кнопки фото
+            уходят вниз, а не сжимают его в столбик */}
+        <div className="max-md:min-w-0 max-md:flex-1 max-md:basis-[calc(100%-100px)]">
+          <div className="mt-4 text-lg font-semibold text-ink max-md:mt-0">
+            {profile.firstName} {profile.lastName}
+          </div>
+          <div className="mt-[3px] text-[15px] text-ink-subtle">
+            {profile.jobTitle || "Должность не указана"}
+          </div>
         </div>
 
         <input
@@ -290,7 +298,7 @@ function AvatarCard({ profile, onChange }: CardProps) {
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={busy}
-          className="mt-[18px] w-full rounded-input bg-brand py-[11px] text-sm font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
+          className="mt-[18px] w-full rounded-input bg-brand py-[11px] text-sm font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted max-md:mt-4 max-md:min-h-[52px] max-md:w-auto max-md:flex-1 max-md:basis-[40%] max-md:rounded-xl max-md:py-0 max-md:text-[16px]"
         >
           {busy ? "Загружаем…" : "Изменить фото"}
         </button>
@@ -300,25 +308,25 @@ function AvatarCard({ profile, onChange }: CardProps) {
             type="button"
             onClick={handleDelete}
             disabled={busy}
-            className="mt-2 w-full rounded-input border border-danger-border bg-surface-card py-2.5 text-[15px] font-medium text-danger-strong transition-colors hover:bg-danger-wash disabled:cursor-not-allowed"
+            className="mt-2 w-full rounded-input border border-danger-border bg-surface-card py-2.5 text-[15px] font-medium text-danger-strong transition-colors hover:bg-danger-wash disabled:cursor-not-allowed max-md:mt-4 max-md:min-h-[52px] max-md:w-auto max-md:flex-1 max-md:basis-[40%] max-md:rounded-xl max-md:py-0 max-md:text-[16px] max-md:font-semibold"
           >
             Удалить фото
           </button>
         )}
 
-        <div className="mt-3 text-[13px] leading-snug text-locked-text">
+        <div className="mt-3 text-[13px] leading-snug text-locked-text max-md:basis-full">
           JPG или PNG, до 5 МБ.
           <br />
           Рекомендуемый размер 400×400.
         </div>
 
-        {error && <Alert className="mt-3 text-left">{error}</Alert>}
+        {error && <Alert className="mt-3 text-left max-md:basis-full">{error}</Alert>}
       </div>
 
       <button
         type="button"
         onClick={handleLogout}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-line bg-surface-card py-[13px] text-sm font-semibold text-danger-strong transition-colors hover:bg-danger-wash"
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-line bg-surface-card py-[13px] text-sm font-semibold text-danger-strong transition-colors hover:bg-danger-wash max-md:order-last max-md:min-h-[52px] max-md:py-0 max-md:text-[16px]"
       >
         <svg
           width="17"
@@ -400,11 +408,11 @@ function PersonalForm({ profile, onChange }: CardProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px]"
+      className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px] max-md:px-4 max-md:py-4"
     >
       <div className="text-[17px] font-semibold text-ink">Личные данные</div>
 
-      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3.5">
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3.5 max-md:grid-cols-1">
         <div>
           <FieldLabel>Имя и фамилия</FieldLabel>
           <TextInput
@@ -435,13 +443,13 @@ function PersonalForm({ profile, onChange }: CardProps) {
           {/* Пока форма развёрнута, ячейка остаётся на месте, но пустеет:
               управление уезжает вниз, к самим полям, и второй кнопки,
               делающей то же самое, не появляется */}
-          <div className="flex h-[43px] items-center gap-3 rounded-[11px] border border-line-strong pl-3.5 pr-1.5">
+          <div className="flex h-[43px] items-center gap-3 rounded-[11px] border border-line-strong pl-3.5 pr-1.5 max-md:h-[52px]">
             <span className="min-w-0 flex-1 text-[15px] text-ink-muted">••••••••</span>
             {!changingPassword && (
               <button
                 type="button"
                 onClick={() => setChangingPassword(true)}
-                className="shrink-0 whitespace-nowrap rounded-lg border border-line-strong bg-surface-card px-3.5 py-[7px] text-[14.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble"
+                className="shrink-0 whitespace-nowrap rounded-lg border border-line-strong bg-surface-card px-3.5 py-[7px] text-[14.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble max-md:min-h-11 max-md:text-[15px]"
               >
                 Изменить
               </button>
@@ -452,11 +460,11 @@ function PersonalForm({ profile, onChange }: CardProps) {
 
       {error && <Alert className="mt-4">{error}</Alert>}
 
-      <div className="mt-[18px] flex items-center justify-end gap-3">
+      <div className="mt-[18px] flex items-center justify-end gap-3 max-md:flex-col-reverse max-md:items-stretch max-md:gap-2">
         {saved && !error && (
           <span className="text-[14.5px] font-medium text-good">Сохранено</span>
         )}
-        <Button type="submit" loading={busy} className="px-6 py-[11px] text-[16px]">
+        <Button type="submit" loading={busy} className="px-6 py-[11px] text-[16px] max-md:min-h-[52px] max-md:rounded-xl">
           Сохранить
         </Button>
       </div>
@@ -525,8 +533,8 @@ function PasswordFields({ onDone }: { onDone: () => void }) {
         Не менее 8 символов, буквы и цифры.
       </p>
 
-      <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-3.5">
-        <div className="col-span-2">
+      <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-3.5 max-md:grid-cols-1">
+        <div className="col-span-2 max-md:col-span-1">
           <FieldLabel>Текущий пароль</FieldLabel>
           <TextInput
             type="password"
@@ -557,11 +565,11 @@ function PasswordFields({ onDone }: { onDone: () => void }) {
 
       {error && <Alert className="mt-3.5">{error}</Alert>}
 
-      <div className="mt-4 flex items-center justify-end gap-3">
+      <div className="mt-4 flex items-center justify-end gap-3 max-md:flex-col-reverse max-md:items-stretch max-md:gap-2">
         <button
           type="button"
           onClick={onDone}
-          className="text-[15px] font-medium text-ink-muted hover:text-ink"
+          className="text-[15px] font-medium text-ink-muted hover:text-ink max-md:min-h-11"
         >
           Отмена
         </button>
@@ -569,7 +577,7 @@ function PasswordFields({ onDone }: { onDone: () => void }) {
           type="button"
           onClick={handleSave}
           loading={busy}
-          className="px-5 py-[10px] text-[15.5px]"
+          className="px-5 py-[10px] text-[15.5px] max-md:min-h-[52px] max-md:rounded-xl max-md:text-[16px]"
         >
           Обновить пароль
         </Button>
@@ -839,7 +847,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
             баннер с «Собрать заново» ни к чему: кнопка ведёт в API,
             закрытое для него, и упёрлась бы в 403 */}
         {editable && partial && !progress && (
-          <div className="flex items-start gap-2.5 border-b border-warn-border bg-warn-surface px-6 py-[13px] text-[15px] leading-normal text-warn">
+          <div className="flex items-start gap-2.5 border-b border-warn-border bg-warn-surface px-6 py-[13px] text-[15px] leading-normal text-warn max-md:px-4">
             <div>
               <span className="font-semibold">
                 Пересобрали {saved.casesReady} из {saved.casesTotal}.
@@ -856,8 +864,8 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
           </div>
         )}
 
-        <div className="px-6 pb-6 pt-[22px]">
-          <div className="flex items-start justify-between gap-4">
+        <div className="px-6 pb-6 pt-[22px] max-md:px-4 max-md:pb-4 max-md:pt-4">
+          <div className="flex items-start justify-between gap-4 max-md:flex-col-reverse max-md:gap-2">
             <div>
               <div className="text-[17px] font-semibold text-ink">
                 {слова.карточкаОрганизации}
@@ -876,7 +884,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
           {/* Город узкой колонкой: в него влезает «Нижний Новгород», а тянуть
               его в половину строки незачем — размер диктует содержимое */}
           {editable ? (
-            <div className="mt-[18px] grid grid-cols-[1fr_232px] items-start gap-x-4 gap-y-3.5">
+            <div className="mt-[18px] grid grid-cols-[1fr_232px] items-start gap-x-4 gap-y-3.5 max-md:grid-cols-1">
               <div>
                 <FieldLabel>{слова.названиеОрганизации}</FieldLabel>
                 <TextInput
@@ -894,7 +902,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                 />
               </div>
               {!отрасльЗакреплена && (
-                <div className="col-span-2">
+                <div className="col-span-2 max-md:col-span-1">
                   <FieldLabel>{слова.специализация}</FieldLabel>
                   <TextInput
                     value={industry}
@@ -910,7 +918,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
           ) : (
             /* Те же три поля, но текстом: поле ввода без права ввода
                читается как поломка, а не как правило */
-            <div className="mt-[18px] grid grid-cols-[1fr_232px] items-start gap-x-4 gap-y-3.5">
+            <div className="mt-[18px] grid grid-cols-[1fr_232px] items-start gap-x-4 gap-y-3.5 max-md:grid-cols-1">
               <div>
                 <FieldLabel>{слова.названиеОрганизации}</FieldLabel>
                 <div className="text-[16px] text-ink">{name || "—"}</div>
@@ -920,7 +928,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                 <div className="text-[16px] text-ink">{city || "—"}</div>
               </div>
               {!отрасльЗакреплена && (
-                <div className="col-span-2">
+                <div className="col-span-2 max-md:col-span-1">
                   <FieldLabel>{слова.специализация}</FieldLabel>
                   <div className="text-[16px] text-ink">{industry || "—"}</div>
                 </div>
@@ -931,7 +939,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
           <div className="mt-5">
             <FieldLabel>{слова.Услуги}</FieldLabel>
             {services.length > 0 ? (
-              <div className="flex items-center gap-4 rounded-xl border border-line-soft bg-surface px-4 py-3.5">
+              <div className="flex items-center gap-4 rounded-xl border border-line-soft bg-surface px-4 py-3.5 max-md:flex-col max-md:items-stretch max-md:gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="text-[16px] font-semibold text-ink">
                     {числоПозиций(services.length, слова)}
@@ -943,13 +951,13 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                 <button
                   type="button"
                   onClick={() => setModalOpen(true)}
-                  className="shrink-0 whitespace-nowrap rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
+                  className="shrink-0 whitespace-nowrap rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble max-md:min-h-11 max-md:rounded-xl max-md:text-[16px]"
                 >
                   {слова.показатьВсеУслуги}
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-4 rounded-xl border-[1.5px] border-dashed border-line-accent bg-surface px-4 py-4">
+              <div className="flex items-center gap-4 rounded-xl border-[1.5px] border-dashed border-line-accent bg-surface px-4 py-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="text-[16px] font-semibold text-ink">
                     {слова.нетУслуг}
@@ -965,7 +973,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                       setServices([{ name: "", price: "", description: "" }]);
                       setModalOpen(true);
                     }}
-                    className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover"
+                    className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover max-md:min-h-11 max-md:rounded-xl max-md:text-[16px]"
                   >
                     {слова.добавитьПервуюУслугу}
                   </button>
@@ -983,7 +991,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
             <div className="mt-3.5">
               <FieldLabel>Диагнозы и частые жалобы</FieldLabel>
               {diagnoses.length > 0 ? (
-                <div className="flex items-center gap-4 rounded-xl border border-line-soft bg-surface px-4 py-3.5">
+                <div className="flex items-center gap-4 rounded-xl border border-line-soft bg-surface px-4 py-3.5 max-md:flex-col max-md:items-stretch max-md:gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="text-[16px] font-semibold text-ink">
                       {pluralDiagnoses(diagnoses.length)}
@@ -1003,13 +1011,13 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                   <button
                     type="button"
                     onClick={() => setDiagsOpen(true)}
-                    className="shrink-0 whitespace-nowrap rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
+                    className="shrink-0 whitespace-nowrap rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble max-md:min-h-11 max-md:rounded-xl max-md:text-[16px]"
                   >
                     Показать все диагнозы
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-4 rounded-xl border-[1.5px] border-dashed border-line-accent bg-surface px-4 py-4">
+                <div className="flex items-center gap-4 rounded-xl border-[1.5px] border-dashed border-line-accent bg-surface px-4 py-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="text-[16px] font-semibold text-ink">
                       Пока ни одного диагноза
@@ -1027,7 +1035,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                         setDiagnoses([{ name: "", complaint: "" }]);
                         setDiagsOpen(true);
                       }}
-                      className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover"
+                      className="shrink-0 whitespace-nowrap rounded-[9px] bg-brand px-4 py-2.5 text-[15px] font-semibold text-white transition-colors hover:bg-brand-hover max-md:min-h-11 max-md:rounded-xl max-md:text-[16px]"
                     >
                       Добавить первый диагноз
                     </button>
@@ -1058,7 +1066,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
               </p>
             </div>
           ) : (
-            <div className="mt-5 flex items-center justify-between gap-5 border-t border-line-soft pt-[18px]">
+            <div className="mt-5 flex items-center justify-between gap-5 border-t border-line-soft pt-[18px] max-md:flex-col max-md:items-stretch max-md:gap-3">
               <p className="max-w-[520px] text-[14px] leading-normal text-ink-muted">
                 {!filled
                   ? слова.заполнитеВсё
@@ -1071,7 +1079,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                 onClick={handleSave}
                 loading={busy}
                 disabled={!filled || !changed}
-                className="shrink-0 px-6 py-[11px] text-[16px]"
+                className="shrink-0 px-6 py-[11px] text-[16px] max-md:min-h-[52px] max-md:rounded-xl"
               >
                 Сохранить
               </Button>
@@ -1188,9 +1196,9 @@ function ServicesModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-10">
-      <div className="flex max-h-full w-[760px] flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-2xl">
-        <div className="flex shrink-0 items-start gap-4 border-b border-line-soft px-7 pb-[18px] pt-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-10 max-md:p-0">
+      <div className="flex max-h-full w-[760px] flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-2xl max-md:h-dvh max-md:max-h-none max-md:w-full max-md:rounded-none">
+        <div className="flex shrink-0 items-start gap-4 border-b border-line-soft px-7 pb-[18px] pt-6 max-md:gap-2 max-md:pb-3 max-md:pl-4 max-md:pr-2 max-md:pt-3">
           <div className="min-w-0 flex-1">
             <div className="text-[19.5px] font-semibold text-ink">{слова.услугиОрганизации}</div>
             <p className="mt-1 text-[14.5px] leading-normal text-ink-muted">
@@ -1201,13 +1209,13 @@ function ServicesModal({
             type="button"
             onClick={onClose}
             title="Закрыть"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-ink-muted transition-colors hover:bg-surface-bubble"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-ink-muted transition-colors hover:bg-surface-bubble max-md:h-11 max-md:w-11"
           >
             ✕
           </button>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-7 pb-1 pt-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-7 pb-1 pt-4 max-md:px-4">
           {services.map((service, index) => {
             // На позиции стоят клиенты: название и удаление закрыты, цена
             // и описание — нет. Сервер такую правку всё равно не пустит
@@ -1218,22 +1226,41 @@ function ServicesModal({
                 key={index}
                 className="group shrink-0 rounded-xl border border-line-soft p-3 transition-colors hover:border-line-strong"
               >
-                <div className="flex items-start gap-2.5">
+                {/* Чтение на телефоне — текстом: в однострочном поле на 360 px
+                    длинное название и описание обрезались посередине */}
+                {readOnly && (
+                  <div className="px-1 md:hidden">
+                    <div className="text-pretty text-[16px] font-semibold leading-snug text-ink">
+                      {service.name || "Без названия"}
+                    </div>
+                    {service.price && (
+                      <div className="mt-1 font-mono text-[15px] text-brand-hover">
+                        {service.price}
+                      </div>
+                    )}
+                    {service.description && (
+                      <p className="mt-1 text-pretty text-[15px] leading-snug text-ink-muted">
+                        {service.description}
+                      </p>
+                    )}
+                  </div>
+                )}
+                <div className={`flex items-start gap-2.5 ${readOnly ? "max-md:hidden" : ""}`}>
                   <div className="flex min-w-0 flex-1 flex-col gap-2">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 max-md:flex-col max-md:items-stretch max-md:gap-2">
                       <input
                         value={service.name}
                         onChange={(e) => update(index, { name: e.target.value })}
                         readOnly={readOnly || занята}
                         placeholder={слова.названиеУслуги}
-                        className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[16px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                        className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 max-md:min-h-11 text-[16px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
                       />
                       <input
                         value={service.price}
                         onChange={(e) => update(index, { price: e.target.value })}
                         readOnly={readOnly}
                         placeholder="Цена"
-                        className="w-[236px] shrink-0 rounded-[9px] border border-line-strong px-3 py-2 text-right font-mono text-[14.5px] text-brand-hover outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                        className="w-[236px] shrink-0 rounded-[9px] border border-line-strong px-3 py-2 max-md:min-h-11 text-right font-mono text-[14.5px] text-brand-hover outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft max-md:w-full max-md:text-left max-md:text-[16px]"
                       />
                     </div>
                     <input
@@ -1241,11 +1268,12 @@ function ServicesModal({
                       onChange={(e) => update(index, { description: e.target.value })}
                       readOnly={readOnly}
                       placeholder={слова.описаниеПозиции}
-                      className="rounded-[9px] border border-line-strong px-3 py-2 text-[14.5px] text-ink-muted outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                      className="rounded-[9px] border border-line-strong px-3 py-2 max-md:min-h-11 text-[14.5px] text-ink-muted outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft max-md:text-[16px]"
                     />
                     {занята && !readOnly && (
                       <p className="px-1 text-[13px] leading-snug text-ink-muted">
-                        В заявках у {клиентов} {plural(клиентов, "клиента", "клиентов", "клиентов")}:
+                        В заявках у {клиентов}{" "}
+                        {plural(клиентов, слова.клиента, слова.клиентов, слова.клиентов)}:
                         название не меняется, цену и описание править можно
                       </p>
                     )}
@@ -1258,7 +1286,7 @@ function ServicesModal({
                         setRemoved({ row: service, at: index });
                         onChange(services.filter((_, i) => i !== index));
                       }}
-                      className="mt-1 h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
+                      className="mt-1 h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100 max-md:-mr-1 max-md:-mt-1 max-md:h-11 max-md:w-11 max-md:opacity-100"
                     >
                       ✕
                     </button>
@@ -1266,7 +1294,7 @@ function ServicesModal({
                   {/* Место крестика держим и у закрытой строки: иначе её цена
                       уезжает вправо от цен соседних строк */}
                   {!readOnly && занята && (
-                    <span aria-hidden className="mt-1 h-[30px] w-[30px] shrink-0" />
+                    <span aria-hidden className="mt-1 h-[30px] w-[30px] shrink-0 max-md:hidden" />
                   )}
                 </div>
               </div>
@@ -1286,14 +1314,14 @@ function ServicesModal({
             <button
               type="button"
               onClick={() => onChange([...services, { name: "", price: "", description: "" }])}
-              className="mt-0.5 shrink-0 self-start rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
+              className="mt-0.5 shrink-0 self-start rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble max-md:min-h-11 max-md:self-stretch max-md:rounded-xl max-md:text-[16px]"
             >
               {слова.добавитьУслугу}
             </button>
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-3.5 border-t border-line-soft px-7 pb-5 pt-4">
+        <div className="flex shrink-0 items-center gap-3.5 border-t border-line-soft px-7 pb-5 pt-4 max-md:flex-col max-md:items-stretch max-md:gap-2.5 max-md:px-4 max-md:pb-4 max-md:pt-3">
           {removed ? (
             <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-[10px] border border-line bg-surface-bubble px-3 py-2.5">
               <span className="truncate text-[15px] text-ink-body">
@@ -1322,7 +1350,7 @@ function ServicesModal({
           <Button
             type="button"
             onClick={onClose}
-            className="shrink-0 px-6 py-[11px] text-[15.5px]"
+            className="shrink-0 px-6 py-[11px] text-[15.5px] max-md:min-h-[52px] max-md:rounded-xl max-md:text-[16px]"
           >
             Готово
           </Button>
@@ -1361,9 +1389,9 @@ function DiagnosesModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-10">
-      <div className="flex max-h-full w-[760px] flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-2xl">
-        <div className="flex shrink-0 items-start gap-4 border-b border-line-soft px-7 pb-[18px] pt-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-10 max-md:p-0">
+      <div className="flex max-h-full w-[760px] flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-2xl max-md:h-dvh max-md:max-h-none max-md:w-full max-md:rounded-none">
+        <div className="flex shrink-0 items-start gap-4 border-b border-line-soft px-7 pb-[18px] pt-6 max-md:gap-2 max-md:pb-3 max-md:pl-4 max-md:pr-2 max-md:pt-3">
           <div className="min-w-0 flex-1">
             <div className="text-[19.5px] font-semibold text-ink">Диагнозы и частые жалобы</div>
             <p className="mt-1 text-[14.5px] leading-normal text-ink-muted">
@@ -1375,38 +1403,50 @@ function DiagnosesModal({
             type="button"
             onClick={onClose}
             title="Закрыть"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-ink-muted transition-colors hover:bg-surface-bubble"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-ink-muted transition-colors hover:bg-surface-bubble max-md:h-11 max-md:w-11"
           >
             ✕
           </button>
         </div>
 
-        <div className="flex shrink-0 gap-2.5 px-7 pt-3.5 font-mono text-[12px] uppercase tracking-[.1em] text-brand-hover">
+        <div className="flex shrink-0 gap-2.5 px-7 pt-3.5 font-mono text-[12px] uppercase tracking-[.1em] text-brand-hover max-md:hidden">
           <div className="flex-1">Диагноз</div>
           <div className="flex-1">Жалобы при диагнозе</div>
           <div className="w-[30px] shrink-0" />
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-7 pb-1 pt-2.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-7 pb-1 pt-2.5 max-md:px-4 max-md:pt-4">
           {diagnoses.map((row, index) => (
             <div
               key={index}
               className="group shrink-0 rounded-xl border border-line-soft p-3 transition-colors hover:border-line-strong"
             >
-              <div className="flex items-start gap-2.5">
+              {readOnly && (
+                <div className="px-1 md:hidden">
+                  <div className="text-pretty text-[16px] font-semibold leading-snug text-ink">
+                    {row.name || "Без названия"}
+                  </div>
+                  {row.complaint && (
+                    <p className="mt-1 text-pretty text-[15px] leading-snug text-ink-muted">
+                      {row.complaint}
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className={`flex items-start gap-2.5 max-md:flex-wrap max-md:gap-2 ${readOnly ? "max-md:hidden" : ""}`}>
                 <input
                   value={row.name}
                   onChange={(e) => update(index, { name: e.target.value })}
                   readOnly={readOnly}
                   placeholder="Например: хронический пульпит"
-                  className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[15.5px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                  className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 max-md:min-h-11 text-[15.5px] font-semibold text-ink outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft max-md:text-[16px]"
                 />
                 <input
                   value={row.complaint}
                   onChange={(e) => update(index, { complaint: e.target.value })}
                   readOnly={readOnly}
                   placeholder="Как это звучит от пациента"
-                  className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 text-[15px] text-ink-body outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft"
+                  className="min-w-0 flex-1 rounded-[9px] border border-line-strong px-3 py-2 max-md:min-h-11 text-[15px] text-ink-body outline-none focus:border-brand focus:ring-[3px] focus:ring-brand-soft max-md:order-last max-md:basis-full max-md:text-[16px]"
                 />
                 {!readOnly && (
                   <button
@@ -1416,7 +1456,7 @@ function DiagnosesModal({
                       setRemoved({ row, at: index });
                       onChange(diagnoses.filter((_, i) => i !== index));
                     }}
-                    className="h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100"
+                    className="h-[30px] w-[30px] shrink-0 rounded-lg text-ink-icon opacity-0 transition hover:bg-danger-surface hover:text-danger-text group-hover:opacity-100 max-md:h-11 max-md:w-11 max-md:opacity-100"
                   >
                     ✕
                   </button>
@@ -1449,14 +1489,14 @@ function DiagnosesModal({
             <button
               type="button"
               onClick={() => onChange([...diagnoses, { name: "", complaint: "" }])}
-              className="mt-0.5 shrink-0 self-start rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
+              className="mt-0.5 shrink-0 self-start rounded-[9px] border border-line-strong bg-surface-card px-4 py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-surface-bubble max-md:min-h-11 max-md:self-stretch max-md:rounded-xl max-md:text-[16px]"
             >
               + Добавить диагноз
             </button>
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-3.5 border-t border-line-soft px-7 pb-5 pt-4">
+        <div className="flex shrink-0 items-center gap-3.5 border-t border-line-soft px-7 pb-5 pt-4 max-md:flex-col max-md:items-stretch max-md:gap-2.5 max-md:px-4 max-md:pb-4 max-md:pt-3">
           {removed ? (
             <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-[10px] border border-line bg-surface-bubble px-3 py-2.5">
               <span className="truncate text-[15px] text-ink-body">
@@ -1485,7 +1525,7 @@ function DiagnosesModal({
           <Button
             type="button"
             onClick={onClose}
-            className="shrink-0 px-6 py-[11px] text-[15.5px]"
+            className="shrink-0 px-6 py-[11px] text-[15.5px] max-md:min-h-[52px] max-md:rounded-xl max-md:text-[16px]"
           >
             Готово
           </Button>
@@ -1509,8 +1549,8 @@ function RebuildModal({
   const pct = progress.total > 0 ? Math.round((progress.ready / progress.total) * 100) : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50">
-      <div className="w-[520px] rounded-[18px] bg-surface-card px-[34px] pb-7 pt-8 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 max-md:items-end max-md:p-0">
+      <div className="w-[520px] rounded-[18px] bg-surface-card px-[34px] pb-7 pt-8 shadow-2xl max-md:max-h-[88dvh] max-md:w-full max-md:rounded-b-none max-md:rounded-t-[24px] max-md:px-5 max-md:pb-5 max-md:pt-6">
         <div className="flex items-center gap-4">
           <Loader />
           <div>
@@ -1539,11 +1579,11 @@ function RebuildModal({
           Заглянете сюда позже, прогресс и результат будут на этой странице.
         </p>
 
-        <div className="mt-5 flex justify-end">
+        <div className="mt-5 flex justify-end max-md:mt-3">
           <button
             type="button"
             onClick={onGiveUp}
-            className="text-[15px] font-medium text-ink-muted hover:text-ink"
+            className="text-[15px] font-medium text-ink-muted hover:text-ink max-md:min-h-11 max-md:w-full"
           >
             Перестать ждать
           </button>
@@ -1569,8 +1609,8 @@ function FailedModal({
   const pct = total > 0 ? (ready / total) * 100 : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50">
-      <div className="w-[520px] rounded-[18px] bg-surface-card px-[34px] pb-7 pt-8 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 max-md:items-end max-md:p-0">
+      <div className="w-[520px] rounded-[18px] bg-surface-card px-[34px] pb-7 pt-8 shadow-2xl max-md:max-h-[88dvh] max-md:w-full max-md:rounded-b-none max-md:rounded-t-[24px] max-md:px-5 max-md:pb-5 max-md:pt-6">
         <div className="flex items-center gap-4">
           <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-warn-surface text-[21.5px] text-warn">
             !
@@ -1597,15 +1637,15 @@ function FailedModal({
           продолжит с того места, где остановилась.
         </p>
 
-        <div className="mt-[22px] flex justify-end gap-2.5">
+        <div className="mt-[22px] flex justify-end gap-2.5 max-md:flex-col-reverse">
           <button
             type="button"
             onClick={onLater}
-            className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-[11px] text-[15.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble"
+            className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-[11px] text-[15.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble max-md:min-h-[52px] max-md:rounded-xl max-md:py-0 max-md:text-[16px]"
           >
             Позже
           </button>
-          <Button type="button" onClick={onRetry} className="px-[22px] py-[11px] text-[15.5px]">
+          <Button type="button" onClick={onRetry} className="px-[22px] py-[11px] text-[15.5px] max-md:min-h-[52px] max-md:rounded-xl max-md:py-0 max-md:text-[16px]">
             Собрать заново
           </Button>
         </div>

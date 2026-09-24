@@ -59,8 +59,8 @@ export default function ProgressPanel({
     // карточка вылезала за колонку на 72px, не включая прокрутку.
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="mb-2.5 flex items-baseline justify-between">
-        <div className="text-base font-semibold text-ink">Прогресс</div>
-        <div className="text-xs text-ink-subtle">неделя к неделе</div>
+        <div className="text-base font-semibold text-ink max-md:text-[17px]">Прогресс</div>
+        <div className="text-xs text-ink-subtle max-md:text-[13px]">неделя к неделе</div>
       </div>
 
       {/* Ужиматься карточка обязана (`min-h-0` + прокрутка), расти выше
@@ -69,7 +69,7 @@ export default function ProgressPanel({
           высоту приходилось куда-то девать: на 3440×1440 промежутки между
           этапами раздувались с 10px до 164px. Теперь свободная высота
           остаётся ПОД карточкой, где читается как отступ страницы */}
-      <div className="flex min-h-0 flex-col overflow-y-auto rounded-[14px] border border-line bg-surface-card px-5 py-[18px]">
+      <div className="flex min-h-0 flex-col overflow-y-auto rounded-[14px] border border-line bg-surface-card px-5 py-[18px] max-md:rounded-2xl max-md:p-4">
         {/* Блок считает окно в семь суток, а не всё время. Прежний текст
             «проведите первую тренировку» читался как «вы никогда
             не тренировались», и 04.08 пользователь принял пустой блок
@@ -113,7 +113,9 @@ export default function ProgressPanel({
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="mb-[5px] flex items-baseline gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[14px] font-medium tracking-[-.005em] text-ink-body">
+                      {/* На телефоне подпись переносится, а не режется многоточием:
+                          «Выявление потребности» на 360 px иначе не видно */}
+                      <span className="min-w-0 flex-1 truncate text-[14px] font-medium tracking-[-.005em] text-ink-body max-md:overflow-visible max-md:whitespace-normal max-md:text-[15px] max-md:leading-[1.3]">
                         {metric.label}
                       </span>
                       <span

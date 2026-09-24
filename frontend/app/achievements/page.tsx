@@ -9,6 +9,7 @@ import AppShell, {
   ACHIEVEMENTS_CHANGED_EVENT,
 } from "@/app/components/AppShell";
 import Loader from "@/app/components/Loader";
+import Sheet from "@/app/components/Sheet";
 import { plural } from "@/lib/format";
 import {
   Icon,
@@ -39,6 +40,8 @@ export default function AchievementsPage() {
   const [data, setData] = useState<AchievementsData | null>(null);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  // Бейдж, чьё описание открыто листом на телефоне
+  const [opened, setOpened] = useState<Achievement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,7 +94,7 @@ export default function AchievementsPage() {
 
   return (
     <AppShell title="Достижения">
-      <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px]">
+      <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px] max-md:px-4 max-md:pb-6 max-md:pt-4">
         {!data && !error && (
           <div className="flex justify-center py-16">
             <Loader />
@@ -105,9 +108,10 @@ export default function AchievementsPage() {
         {data && (
           <>
             {/* Сводка и фильтр */}
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-5">
-              <div className="flex min-w-[280px] flex-1 items-center gap-5">
-                <span className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-gold-medal to-gold-medal-deep text-white shadow-[0_10px_24px_-12px_rgba(154,107,8,.7)]">
+            {/* На телефоне сводка — карточкой над фильтрами, без кубка */}
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-5 max-md:mb-4 max-md:flex-col max-md:items-stretch max-md:gap-3">
+              <div className="flex min-w-[280px] flex-1 items-center gap-5 max-md:min-w-0 max-md:rounded-2xl max-md:border max-md:border-line max-md:bg-surface-card max-md:px-4 max-md:py-3.5">
+                <span className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-gold-medal to-gold-medal-deep text-white shadow-[0_10px_24px_-12px_rgba(154,107,8,.7)] max-md:hidden">
                   <Icon size={30}>{iconFor("trophy")}</Icon>
                 </span>
                 <div className="min-w-0 flex-1">
@@ -130,7 +134,7 @@ export default function AchievementsPage() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 max-md:gap-2">
                 {filters.map((item) => {
                   const active = filter === item.key;
                   return (
@@ -138,7 +142,7 @@ export default function AchievementsPage() {
                       key={item.key}
                       type="button"
                       onClick={() => setFilter(item.key)}
-                      className={`inline-flex items-center whitespace-nowrap rounded-full border px-[15px] py-2 text-[14.5px] font-semibold transition-colors ${
+                      className={`inline-flex items-center whitespace-nowrap rounded-full border px-[15px] py-2 text-[14.5px] font-semibold transition-colors max-md:min-h-11 max-md:py-0 ${
                         active
                           ? "border-brand bg-brand text-white"
                           : "border-line-strong bg-surface-card text-ink-muted hover:border-brand-soft"
@@ -152,13 +156,18 @@ export default function AchievementsPage() {
             </div>
 
             {/* Сетка бейджей */}
-            <div className="flex flex-wrap gap-[14px]">
+            {/* На телефоне — две колонки, описание по нажатию листом */}
+            <div className="flex flex-wrap gap-[14px] max-md:grid max-md:grid-cols-2 max-md:gap-2.5">
               {visible.map((item) => (
-                <AchievementCard key={item.id} achievement={item} />
+                <AchievementCard
+                  key={item.id}
+                  achievement={item}
+                  onOpen={() => setOpened(item)}
+                />
               ))}
 
               {visible.length === 0 && (
-                <div className="w-full px-5 py-14 text-center">
+                <div className="w-full px-5 py-14 text-center max-md:col-span-2">
                   <div className="text-base font-semibold text-ink-muted">
                     {filter === "unlocked"
                       ? "Пока ничего не получено"
@@ -175,11 +184,58 @@ export default function AchievementsPage() {
           </>
         )}
       </div>
+
+      {opened && (
+        <AchievementSheet achievement={opened} onClose={() => setOpened(null)} />
+      )}
     </AppShell>
   );
 }
 
-function AchievementCard({ achievement }: { achievement: Achievement }) {
+// Описание бейджа на телефоне: в карточке сетки на него нет места
+function AchievementSheet({
+  achievement,
+  onClose,
+}: {
+  achievement: Achievement;
+  onClose: () => void;
+}) {
+  const unlocked = achievement.unlockedAt !== null;
+  const tone = TONE_CLASSES[achievement.tone] ?? TONE_CLASSES.skill;
+  return (
+    <Sheet title="" onClose={onClose} className="md:hidden">
+      <div className="flex flex-col items-center pb-4 text-center">
+        <span
+          className={`flex h-[72px] w-[72px] items-center justify-center rounded-[18px] ${
+            unlocked ? tone.medal : "bg-locked-medal text-locked-icon"
+          }`}
+        >
+          <Icon size={30}>{iconFor(achievement.icon)}</Icon>
+        </span>
+        <div className="mt-4 text-[20px] font-semibold text-ink">{achievement.name}</div>
+        <p className="mt-1.5 text-pretty text-[15px] leading-normal text-ink-muted">
+          {achievement.description}
+        </p>
+        <div
+          className={`mt-3 flex items-center gap-1.5 text-[14px] font-semibold ${
+            unlocked ? tone.status : "text-locked-icon"
+          }`}
+        >
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
+          {unlocked ? "Получено" : "Закрыто"}
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+function AchievementCard({
+  achievement,
+  onOpen,
+}: {
+  achievement: Achievement;
+  onOpen: () => void;
+}) {
   const unlocked = achievement.unlockedAt !== null;
   const tone = TONE_CLASSES[achievement.tone] ?? TONE_CLASSES.skill;
   const icon = iconFor(achievement.icon);
@@ -187,7 +243,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
   return (
     // Пять колонок при gap-[14px]: (100% − 4 × 14px) / 5
     <div
-      className={`flex w-[calc((100%-56px)/5)] min-w-[150px] flex-col rounded-[14px] border p-[18px] ${
+      className={`relative flex w-[calc((100%-56px)/5)] min-w-[150px] flex-col rounded-[14px] border p-[18px] max-md:w-auto max-md:min-w-0 max-md:rounded-2xl max-md:p-4 ${
         unlocked
           ? "border-line bg-surface-card"
           : "border-locked-border bg-locked-surface"
@@ -220,8 +276,17 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
         )}
       </div>
 
+      {/* На телефоне вся карточка — кнопка «подробнее»: описание там
+          не помещается и открывается листом */}
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`${achievement.name}: подробнее`}
+        className="absolute inset-0 rounded-2xl md:hidden"
+      />
+
       <div
-        className={`mt-3 text-pretty text-[16px] font-semibold leading-tight ${
+        className={`mt-3 text-pretty text-[16px] font-semibold leading-tight max-md:flex-1 ${
           unlocked ? "text-ink" : "text-ink-subtle"
         }`}
       >
@@ -229,7 +294,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
       </div>
       {/* flex-1 держит строку статуса у нижнего края при разной длине описаний */}
       <div
-        className={`mt-1 flex-1 text-pretty text-[14px] leading-normal ${
+        className={`mt-1 flex-1 text-pretty text-[14px] leading-normal max-md:hidden ${
           unlocked ? "text-ink-muted" : "text-locked-text"
         }`}
       >

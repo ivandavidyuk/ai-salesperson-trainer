@@ -3,6 +3,9 @@
 // Расшифровка завершённого разговора: диалог слева, разбор справа.
 // Открывается сразу после звонка и из списка разговоров на главной.
 // Своя топ-панель вместо бокового меню — как на экране звонка.
+//
+// На телефоне две колонки не помещаются — они становятся вкладками
+// «Разбор · Диалог», и открыт разбор: за ним сюда и приходят после звонка.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -90,10 +93,18 @@ export default function TranscriptPage() {
   // ненадолго, повторный клик по другой цитате переносит подсветку
   const [highlighted, setHighlighted] = useState<number | null>(null);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Вкладка на телефоне. На компьютере видны обе колонки, и она ни на что
+  // не влияет: прячут колонки только классы max-md:
+  const [вкладка, setВкладка] = useState<"review" | "dialog">("review");
   const showMessage = useCallback((index: number) => {
-    document
-      .getElementById(`msg-${index}`)
-      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // На телефоне реплика лежит на соседней вкладке: сначала переключаем,
+    // прокручиваем уже после отрисовки — скрытую колонку прокрутить нельзя
+    setВкладка("dialog");
+    requestAnimationFrame(() =>
+      document
+        .getElementById(`msg-${index}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" })
+    );
     setHighlighted(index);
     if (highlightTimer.current) clearTimeout(highlightTimer.current);
     highlightTimer.current = setTimeout(() => setHighlighted(null), HIGHLIGHT_MS);
@@ -181,28 +192,49 @@ export default function TranscriptPage() {
     "Разговор";
 
   return (
-    <div className="flex h-screen flex-col bg-surface">
-      <header className="flex h-[66px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-10">
-        <div className="flex items-center gap-3.5">
-          <Link href="/" title="На главную" className="shrink-0">
+    <div className="flex h-screen flex-col bg-surface max-md:h-dvh">
+      {/* На телефоне в шапке только стрелка назад и кто с кем говорил:
+          логотип и кнопки не помещаются, кнопки уходят вниз */}
+      <header className="flex h-[66px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-10 max-md:h-16 max-md:border-b-0 max-md:pl-1.5 max-md:pr-4">
+        <div className="flex items-center gap-3.5 max-md:min-w-0 max-md:gap-1">
+          <Link href="/" title="На главную" className="shrink-0 max-md:hidden">
             <Logo size="sm" />
           </Link>
-          <span className="h-5 w-px bg-line" aria-hidden="true" />
-          <BackLink />
+          <span className="h-5 w-px bg-line max-md:hidden" aria-hidden="true" />
+          <BackLink className="max-md:hidden" />
+          <BackLink
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-ink md:hidden"
+            ariaLabel="Назад"
+            label={
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M15 6l-6 6 6 6" />
+              </svg>
+            }
+          />
 
           {session && (
             <>
-              <span className="h-5 w-px bg-line" aria-hidden="true" />
-              <div className="flex items-center gap-2.5">
+              <span className="h-5 w-px bg-line max-md:hidden" aria-hidden="true" />
+              <div className="flex items-center gap-2.5 max-md:min-w-0">
                 <PatientAvatar
                   name={session.patientName}
-                  className="h-[30px] w-[30px] bg-brand-soft text-xs font-semibold text-brand"
+                  className="h-[30px] w-[30px] bg-brand-soft text-xs font-semibold text-brand max-md:h-9 max-md:w-9"
                 />
-                <div>
-                  <div className="text-sm font-semibold leading-tight text-ink">
+                <div className="max-md:min-w-0">
+                  <div className="text-sm font-semibold leading-tight text-ink max-md:truncate max-md:text-[15px]">
                     {title}
                   </div>
-                  <div className="text-xs text-ink-subtle">
+                  <div className="text-xs text-ink-subtle max-md:text-[13px]">
                     {formatConversationDate(session.startedAt)} ·{" "}
                     {formatDuration(session.durationSec)}
                   </div>
@@ -212,7 +244,7 @@ export default function TranscriptPage() {
           )}
         </div>
 
-        <div className="flex gap-2.5">
+        <div className="flex gap-2.5 max-md:hidden">
           {/* Выгрузки пока нет — кнопка на месте по макету, но неактивна */}
           <Button
             variant="secondary"
@@ -244,8 +276,44 @@ export default function TranscriptPage() {
       )}
 
       {!loading && !error && data && (
+        <div
+          role="tablist"
+          aria-label="Разбор и диалог"
+          className="shrink-0 border-b border-line bg-surface-card px-4 pb-3 md:hidden"
+        >
+          <div className="grid grid-cols-2 gap-[3px] rounded-xl border border-line bg-surface-bubble p-[3px]">
+            {(
+              [
+                ["review", "Разбор"],
+                ["dialog", "Диалог"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={вкладка === key}
+                onClick={() => setВкладка(key)}
+                className={`min-h-11 rounded-[9px] text-[15px] font-semibold transition-colors ${
+                  вкладка === key
+                    ? "bg-surface-card text-ink shadow-[0_1px_3px_rgba(20,40,38,.14)]"
+                    : "text-ink-muted"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && data && (
         <div className="flex w-full min-h-0 max-w-[1760px] flex-1 self-center">
-          <div className="min-h-0 flex-[1.7] overflow-y-auto border-r border-line px-9 py-8">
+          <div
+            className={`min-h-0 flex-[1.7] overflow-y-auto border-r border-line px-9 py-8 max-md:border-r-0 max-md:px-4 max-md:py-5 ${
+              вкладка === "dialog" ? "" : "max-md:hidden"
+            }`}
+          >
             <div className="mb-6 text-center">
               <span className="rounded-full bg-surface-bubble px-3 py-1 font-mono text-[12.5px] tracking-wide text-ink-placeholder">
                 НАЧАЛО · 00:00
@@ -315,7 +383,44 @@ export default function TranscriptPage() {
             startedAt={data.session.startedAt}
             onShowMessage={showMessage}
             trainingTypeTitle={data.session.trainingTypeTitle}
+            className={вкладка === "review" ? "" : "max-md:hidden"}
           />
+        </div>
+      )}
+
+      {/* Телефон: действия внизу, во всю ширину */}
+      {!loading && (
+        <div className="flex shrink-0 gap-2.5 border-t border-line bg-surface-card px-4 pb-4 pt-3 md:hidden">
+          <button
+            type="button"
+            disabled
+            title="Скоро"
+            className="inline-flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-xl border border-line-strong bg-surface-card px-3 text-[16px] font-semibold text-ink-subtle"
+          >
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 4v11" />
+              <path d="M7 10l5 5 5-5" />
+              <path d="M5 20h14" />
+            </svg>
+            Скачать
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(repeatHref)}
+            className="inline-flex min-h-[52px] flex-[1.6] items-center justify-center rounded-xl bg-brand px-3 text-[16px] font-semibold text-white active:bg-brand-hover"
+          >
+            Ещё разговор
+          </button>
         </div>
       )}
     </div>

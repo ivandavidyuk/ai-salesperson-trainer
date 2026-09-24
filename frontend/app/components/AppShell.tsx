@@ -4,11 +4,17 @@
 // Меню разворачивается поверх контента (как в макете), поэтому основная
 // область не «прыгает» при переключении — под меню всегда зарезервирована
 // узкая полоса шириной свёрнутого состояния.
+//
+// На телефоне (уже 768 px) рейки нет: разделы — в панели внизу, шапка
+// короче. Какой вариант показать, решает CSS, а не JS: так страница
+// не мигает десктопной раскладкой, пока скрипт не узнал ширину экрана.
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import Logo from "@/app/components/Logo";
+import BackLink from "@/app/components/BackLink";
+import Sheet from "@/app/components/Sheet";
 import { useSetIndustry, useWords } from "@/app/components/IndustryProvider";
 import { ключИзСлага } from "@/lib/industryWords";
 
@@ -124,6 +130,14 @@ const icons = {
       <path d="M18 20v-6" />
     </>
   ),
+  // «Ещё» в нижней панели руководителя на телефоне
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1.4" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+      <circle cx="19" cy="12" r="1.4" fill="currentColor" />
+    </>
+  ),
 };
 
 function Icon({ children }: { children: ReactNode }) {
@@ -164,13 +178,24 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/profile", label: "Профиль", icon: <Icon>{icons.profile}</Icon> },
 ];
 
+// Нижняя панель телефона держит пять ячеек. Профиль в неё не входит — он
+// в меню аватара, как в макете. У руководителя разделов на один больше,
+// поэтому последние два уходят в лист «Ещё»
+const PHONE_HIDDEN = new Set(["/profile"]);
+const PHONE_MORE = new Set(["/training", "/achievements"]);
+
 interface AppShellProps {
   /** Заголовок в топбаре */
   title: string;
   children: ReactNode;
+  /**
+   * Телефон: стрелка назад перед заголовком вместо аватара — для страниц,
+   * куда попадают из меню аватара, а не из нижней панели (профиль)
+   */
+  phoneBack?: boolean;
 }
 
-export default function AppShell({ title, children }: AppShellProps) {
+export default function AppShell({ title, children, phoneBack = false }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const слова = useWords();
@@ -180,6 +205,8 @@ export default function AppShell({ title, children }: AppShellProps) {
   // и открытое на старте перекрывало бы страницу при каждом заходе
   const [navOpen, setNavOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  // Лист «Ещё» нижней панели руководителя на телефоне
+  const [moreOpen, setMoreOpen] = useState(false);
   // Стартуем с кэша: при переходе между страницами меню не должно моргать
   const [user, setUser] = useState<ShellUser | null>(cachedUser);
 
@@ -284,19 +311,63 @@ export default function AppShell({ title, children }: AppShellProps) {
     ? `${user.firstName}${user.lastName ? ` ${user.lastName[0]}.` : ""}`
     : "";
 
+  const пункты = NAV_ITEMS.filter(
+    // Пока роль не загружена, пункт руководителя не показываем:
+    // мелькнуть и исчезнуть хуже, чем появиться с задержкой
+    (item) => !item.headOnly || user?.role === "head"
+  ).map((пункт) =>
+    // Подпись раздела клиентов — словом отрасли
+    пункт.href === "/patients" ? { ...пункт, label: слова.Клиенты } : пункт
+  );
+
+  // null — счётчика нет вовсе: нулевой бейдж не рисуем
+  function счётчик(item: NavItem): number | null {
+    const счёт =
+      item.badge === "tasks"
+        ? taskCount
+        : item.badge === "achievements"
+          ? achievementCount
+          : 0;
+    return счёт > 0 ? счёт : null;
+  }
+
+  // Телефон: у менеджера пять разделов помещаются в панель целиком,
+  // у руководителя два последних уходят в «Ещё»
+  const наТелефоне = пункты.filter((item) => !PHONE_HIDDEN.has(item.href));
+  const вЕщё =
+    user?.role === "head"
+      ? наТелефоне.filter((item) => PHONE_MORE.has(item.href))
+      : [];
+  const вПанели = наТелефоне.filter((item) => !вЕщё.includes(item));
+  const ещёАктивно = вЕщё.some((item) => item.href === pathname);
+
+  // Аватар: фото или инициалы — одинаково в шапке компьютера и телефона
+  const аватар = user?.avatarUpdatedAt ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/api/users/${user.id}/avatar?v=${encodeURIComponent(user.avatarUpdatedAt)}`}
+      alt=""
+      className="h-full w-full object-cover"
+    />
+  ) : (
+    <>{user ? `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}` : ""}</>
+  );
+
   return (
     // h-screen (а не min-h-screen): нижний ряд главной должен растягиваться
-    // на всю оставшуюся высоту, а список внутри — скроллиться
-    <div className="relative flex h-screen">
+    // на всю оставшуюся высоту, а список внутри — скроллиться. На телефоне
+    // dvh: 100vh там считается без адресной строки, и нижняя панель уезжала
+    // бы под неё
+    <div className="relative flex h-screen max-md:h-dvh">
       {/* Полоса под меню: не даёт контенту сдвигаться при разворачивании */}
-      <div style={{ width: NAV_WIDTH_CLOSED }} className="shrink-0" />
+      <div style={{ width: NAV_WIDTH_CLOSED }} className="shrink-0 max-md:hidden" />
 
       {/* Затемнение контента при развёрнутом меню; клик — сворачивает.
           Начинается после рейки, чтобы само меню не затемнялось. */}
       {navOpen && (
         <div
           style={{ left: NAV_WIDTH_CLOSED }}
-          className="fixed inset-y-0 right-0 z-10 bg-[rgba(12,26,24,.42)]"
+          className="fixed inset-y-0 right-0 z-10 bg-[rgba(12,26,24,.42)] max-md:hidden"
           onClick={() => setNavOpen(false)}
           aria-hidden="true"
         />
@@ -309,7 +380,7 @@ export default function AppShell({ title, children }: AppShellProps) {
         }}
         // Свёрнутая рейка центрирует пункты фиксированной ширины,
         // развёрнутая растягивает их на всю ширину меню
-        className={`fixed inset-y-0 left-0 z-20 flex flex-col gap-1 overflow-hidden border-r border-line bg-surface-card px-2.5 py-3.5 transition-[width] duration-[260ms] ease-out ${
+        className={`fixed inset-y-0 left-0 z-20 flex flex-col gap-1 overflow-hidden border-r border-line bg-surface-card px-2.5 py-3.5 transition-[width] duration-[260ms] ease-out max-md:hidden ${
           navOpen ? "items-stretch" : "items-center"
         }`}
       >
@@ -343,23 +414,9 @@ export default function AppShell({ title, children }: AppShellProps) {
           {navOpen && <Logo size="sm" className="whitespace-nowrap" />}
         </button>
 
-        {NAV_ITEMS.filter(
-          // Пока роль не загружена, пункт руководителя не показываем:
-          // мелькнуть и исчезнуть хуже, чем появиться с задержкой
-          (item) => !item.headOnly || user?.role === "head"
-        ).map((пункт) => {
-          // Подпись раздела клиентов — словом отрасли
-          const item =
-            пункт.href === "/patients" ? { ...пункт, label: слова.Клиенты } : пункт;
+        {пункты.map((item) => {
           const active = pathname === item.href;
-          // null — счётчика нет вовсе: нулевой бейдж не рисуем
-          const счёт =
-            item.badge === "tasks"
-              ? taskCount
-              : item.badge === "achievements"
-                ? achievementCount
-                : 0;
-          const badge = счёт > 0 ? счёт : null;
+          const badge = счётчик(item);
           return (
             <Link
               key={item.href}
@@ -399,17 +456,42 @@ export default function AppShell({ title, children }: AppShellProps) {
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[66px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7">
-          <div className="flex items-center gap-3.5">
+        {/* На телефоне шапка ниже и без логотипа: только название раздела
+            и аватар, как в макете — на главную ведёт нижняя панель */}
+        <header className="flex h-[66px] shrink-0 items-center justify-between border-b border-line bg-surface-card px-7 max-md:h-14 max-md:gap-1 max-md:pl-5 max-md:pr-2.5">
+          <div className="flex items-center gap-3.5 max-md:min-w-0 max-md:flex-1">
             {/* Логотип есть на каждом экране и всегда ведёт на главную */}
-            <Link href="/" title="На главную" className="shrink-0">
+            <Link href="/" title="На главную" className="shrink-0 max-md:hidden">
               <Logo size="sm" />
             </Link>
-            <span className="h-5 w-px bg-line" aria-hidden="true" />
-            <div className="text-[16.5px] font-semibold text-ink">{title}</div>
+            <span className="h-5 w-px bg-line max-md:hidden" aria-hidden="true" />
+            {phoneBack && (
+              <BackLink
+                className="-ml-3.5 inline-flex h-11 w-11 shrink-0 items-center justify-center text-ink md:hidden"
+                ariaLabel="Назад"
+                label={
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M15 6l-6 6 6 6" />
+                  </svg>
+                }
+              />
+            )}
+            <div className="text-[16.5px] font-semibold text-ink max-md:truncate max-md:text-[18px] max-md:tracking-[-.01em]">
+              {title}
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 max-md:gap-1.5">
             {/* У руководителя те же разделы, но наполнение другое —
                 плашка объясняет, почему страница выглядит иначе.
                 Стоит рядом с именем: это признак смотрящего, а не страницы */}
@@ -419,27 +501,19 @@ export default function AppShell({ title, children }: AppShellProps) {
               </span>
             )}
 
-            <div className="relative">
+            <div className={`relative ${phoneBack ? "max-md:hidden" : ""}`}>
+              {/* На телефоне от кнопки остаётся один аватар в круге 44 px:
+                  имя в узкой шапке не помещается рядом с названием раздела */}
               <button
                 type="button"
                 onClick={() => setUserMenuOpen((open) => !open)}
-                className="flex items-center gap-2.5 rounded-input py-[5px] pl-1.5 pr-2.5 transition-colors hover:bg-surface-bubble"
+                title="Меню профиля"
+                className="flex items-center gap-2.5 rounded-input py-[5px] pl-1.5 pr-2.5 transition-colors hover:bg-surface-bubble max-md:h-11 max-md:w-11 max-md:justify-center max-md:rounded-full max-md:p-0 max-md:hover:bg-transparent"
               >
-                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[14.5px] font-semibold text-brand">
-                  {user?.avatarUpdatedAt ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={`/api/users/${user.id}/avatar?v=${encodeURIComponent(user.avatarUpdatedAt)}`}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <>
-                      {user ? `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}` : ""}
-                    </>
-                  )}
+                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[14.5px] font-semibold text-brand max-md:h-9 max-md:w-9">
+                  {аватар}
                 </span>
-                <span className="text-sm text-ink-muted">{shortName || "…"}</span>
+                <span className="text-sm text-ink-muted max-md:hidden">{shortName || "…"}</span>
                 <svg
                   width="15"
                   height="15"
@@ -449,7 +523,7 @@ export default function AppShell({ title, children }: AppShellProps) {
                   strokeWidth="2.2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="text-ink-icon"
+                  className="text-ink-icon max-md:hidden"
                   aria-hidden="true"
                 >
                   <path d="M6 9l6 6 6-6" />
@@ -464,12 +538,13 @@ export default function AppShell({ title, children }: AppShellProps) {
                     onClick={() => setUserMenuOpen(false)}
                     aria-hidden="true"
                   />
-                  <div className="absolute right-0 top-full z-50 w-[196px] pt-2">
-                    <div className="flex flex-col gap-0.5 rounded-xl border border-line bg-surface-card p-1.5 shadow-[0_18px_40px_-18px_rgba(20,40,38,.5)]">
+                  {/* На телефоне пункты выше и крупнее — под палец */}
+                  <div className="absolute right-0 top-full z-50 w-[196px] pt-2 max-md:w-[220px] max-md:pt-1">
+                    <div className="flex flex-col gap-0.5 rounded-xl border border-line bg-surface-card p-1.5 shadow-[0_18px_40px_-18px_rgba(20,40,38,.5)] max-md:rounded-[14px]">
                       <Link
                         href="/profile"
                         onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-[11px] rounded-[9px] px-[11px] py-2.5 text-sm font-medium text-ink-body transition-colors hover:bg-surface-bubble"
+                        className="flex items-center gap-[11px] rounded-[9px] px-[11px] py-2.5 text-sm font-medium text-ink-body transition-colors hover:bg-surface-bubble max-md:min-h-12 max-md:gap-3 max-md:rounded-[10px] max-md:px-3 max-md:py-0 max-md:text-[16px]"
                       >
                         <svg
                           width="17"
@@ -490,7 +565,7 @@ export default function AppShell({ title, children }: AppShellProps) {
                       <button
                         type="button"
                         onClick={handleLogout}
-                        className="flex w-full items-center gap-[11px] rounded-[9px] px-[11px] py-2.5 text-left text-sm font-medium text-danger-strong transition-colors hover:bg-danger-wash"
+                        className="flex w-full items-center gap-[11px] rounded-[9px] px-[11px] py-2.5 text-left text-sm font-medium text-danger-strong transition-colors hover:bg-danger-wash max-md:min-h-12 max-md:gap-3 max-md:rounded-[10px] max-md:px-3 max-md:py-0 max-md:text-[16px]"
                       >
                         <svg
                           width="17"
@@ -522,7 +597,126 @@ export default function AppShell({ title, children }: AppShellProps) {
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
           {children}
         </main>
+
+        {/* Телефон: вместо рейки — панель внизу. Она часть колонки, а не
+            fixed: контент прокручивается над ней и никогда под неё не уходит */}
+        <nav className="flex shrink-0 justify-evenly border-t border-line bg-surface-card px-1.5 py-1.5 md:hidden">
+          {вПанели.map((item) => (
+            <PhoneTab
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={item.icon}
+              active={pathname === item.href}
+              badge={счётчик(item)}
+            />
+          ))}
+          {вЕщё.length > 0 && (
+            <PhoneTab
+              label="Ещё"
+              icon={<Icon>{icons.more}</Icon>}
+              active={ещёАктивно}
+              badge={null}
+              onClick={() => setMoreOpen(true)}
+            />
+          )}
+        </nav>
       </div>
+
+      {moreOpen && (
+        <Sheet title="Ещё" onClose={() => setMoreOpen(false)} className="md:hidden">
+          <div className="flex flex-col gap-1">
+            {вЕщё.map((item) => {
+              const badge = счётчик(item);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMoreOpen(false)}
+                  className="flex min-h-14 items-center gap-3.5 rounded-xl px-2 text-[17px] font-medium text-ink active:bg-surface-bubble"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-bubble text-ink-muted">
+                    {item.icon}
+                  </span>
+                  <span className="flex-1">{item.label}</span>
+                  {badge !== null && (
+                    <span className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-brand px-1.5 text-[13px] font-bold text-white">
+                      {badge}
+                    </span>
+                  )}
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-ink-icon"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
+                </Link>
+              );
+            })}
+          </div>
+        </Sheet>
+      )}
     </div>
+  );
+}
+
+/** Ячейка нижней панели: иконка в «пилюле» и подпись под ней */
+function PhoneTab({
+  href,
+  label,
+  icon,
+  active,
+  badge,
+  onClick,
+}: {
+  href?: string;
+  label: string;
+  icon: ReactNode;
+  active: boolean;
+  badge: number | null;
+  onClick?: () => void;
+}) {
+  const className = `flex min-h-[52px] min-w-[56px] flex-none flex-col items-center justify-center gap-[3px] px-0.5 ${
+    active ? "text-brand-hover" : "text-ink-muted"
+  }`;
+  const inner = (
+    <>
+      <span
+        className={`relative inline-flex h-[30px] w-[52px] items-center justify-center rounded-full ${
+          active ? "bg-brand-soft" : ""
+        }`}
+      >
+        {icon}
+        {badge !== null && (
+          <span className="absolute -top-[5px] right-0.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full border-[length:1.5px] border-surface-card bg-brand px-[5px] text-[13px] font-bold leading-none text-white">
+            {badge}
+          </span>
+        )}
+      </span>
+      <span
+        className={`whitespace-nowrap text-[13px] leading-[1.1] tracking-[-.02em] ${
+          active ? "font-semibold" : "font-medium"
+        }`}
+      >
+        {label}
+      </span>
+    </>
+  );
+  return href ? (
+    <Link href={href} className={className} aria-current={active ? "page" : undefined}>
+      {inner}
+    </Link>
+  ) : (
+    <button type="button" onClick={onClick} className={className}>
+      {inner}
+    </button>
   );
 }

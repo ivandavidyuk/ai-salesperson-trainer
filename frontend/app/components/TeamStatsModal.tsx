@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import Loader from "@/app/components/Loader";
+import ConversationCard from "@/app/components/ConversationCard";
 import ConversationRow from "@/app/components/ConversationRow";
 import { initials } from "@/lib/format";
 import { SCORE_TEXT_CLASS, formatDealsRate, scoreTone } from "@/lib/score";
@@ -27,7 +28,7 @@ interface TeamStatsModalProps {
 
 function Tile({ value, label }: { value: string; label: string }) {
   return (
-    <div className="flex-1 rounded-xl border border-line-soft bg-surface px-4 py-3.5 text-center">
+    <div className="flex-1 rounded-xl border border-line-soft bg-surface px-4 py-3.5 text-center max-md:px-2 max-md:py-3">
       <div className="font-mono text-[23.5px] text-ink">{value}</div>
       <div className="mt-0.5 text-xs text-ink-subtle">{label}</div>
     </div>
@@ -96,19 +97,19 @@ export default function TeamStatsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(12,26,24,.5)] p-8"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(12,26,24,.5)] p-8 max-md:p-0"
       onClick={onClose}
     >
       <div
-        className="flex max-h-full w-[760px] max-w-full flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-[0_44px_110px_-30px_rgba(12,26,24,.75)]"
+        className="flex max-h-full w-[760px] max-w-full flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-[0_44px_110px_-30px_rgba(12,26,24,.75)] max-md:h-dvh max-md:max-h-none max-md:w-full max-md:rounded-none"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
         <div
-          className={`flex shrink-0 items-center gap-4 border-b border-line px-[26px] py-6 ${PLACE_BANNER[place] ?? "bg-surface-accent"}`}
+          className={`flex shrink-0 items-center gap-4 border-b border-line px-[26px] py-6 max-md:gap-3 max-md:py-4 max-md:pl-4 max-md:pr-2 ${PLACE_BANNER[place] ?? "bg-surface-accent"}`}
         >
-          <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-[length:3px] border-surface-card bg-brand-soft text-[21.5px] font-semibold text-brand shadow-[0_4px_14px_-6px_rgba(20,40,38,.5)]">
+          <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-[length:3px] border-surface-card bg-brand-soft text-[21.5px] font-semibold text-brand shadow-[0_4px_14px_-6px_rgba(20,40,38,.5)] max-md:h-[52px] max-md:w-[52px] max-md:text-lg">
             {manager.avatarUpdatedAt ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -122,13 +123,13 @@ export default function TeamStatsModal({
           </span>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2.5">
-              <div className="text-xl font-semibold text-ink">{manager.name}</div>
+            <div className="flex items-center gap-2.5 max-md:flex-wrap max-md:gap-x-2 max-md:gap-y-1">
+              <div className="text-xl font-semibold text-ink max-md:text-[18px]">{manager.name}</div>
               <span className={PLACE_PILL[place] ?? PLACE_PILL.other}>
                 {placeLabel(place)}
               </span>
             </div>
-            <div className="mt-0.5 text-[15px] text-ink-muted">
+            <div className="mt-0.5 text-[15px] text-ink-muted max-md:text-[14px]">
               {manager.jobTitle}
             </div>
           </div>
@@ -145,14 +146,15 @@ export default function TeamStatsModal({
             onClick={onClose}
             title="Закрыть"
             aria-label="Закрыть"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-card text-[18.5px] leading-none text-ink-muted transition-colors hover:bg-surface-bubble"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-card text-[18.5px] leading-none text-ink-muted transition-colors hover:bg-surface-bubble max-md:h-11 max-md:w-11 max-md:border-0 max-md:bg-transparent max-md:text-[26px]"
           >
             ×
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-[26px] pb-7 pt-6">
-          <div className="mb-6 flex gap-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-[26px] pb-7 pt-6 max-md:px-4 max-md:pb-6 max-md:pt-4">
+          {/* На телефоне плитки два на два: четыре в ряд на 360 px не читаются */}
+          <div className="mb-6 flex gap-3 max-md:mb-5 max-md:grid max-md:grid-cols-2 max-md:gap-2.5">
             <Tile value={String(manager.total)} label="разговоров всего" />
             {/* За всё время эта плитка повторила бы соседнюю — тогда её нет */}
             {подписи.key !== "all" && (
@@ -168,8 +170,8 @@ export default function TeamStatsModal({
             />
           </div>
 
-          <div className="mb-6 flex flex-wrap items-stretch gap-[26px]">
-            <div className="min-w-[300px] flex-[1.4]">
+          <div className="mb-6 flex flex-wrap items-stretch gap-[26px] max-md:gap-5">
+            <div className="min-w-[300px] flex-[1.4] max-md:min-w-0 max-md:basis-full">
               <div className="mb-3.5 font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover">
                 Прогресс по этапам
               </div>
@@ -198,7 +200,7 @@ export default function TeamStatsModal({
               </div>
             </div>
 
-            <div className="flex min-w-[250px] flex-1 flex-col gap-4">
+            <div className="flex min-w-[250px] flex-1 flex-col gap-4 max-md:min-w-0 max-md:basis-full">
               {/* Тот же случай, что в «Прогрессе» на главной: выводы взяты
                   из одного последнего разбора, а рядом стоят показатели
                   за период и за всё время. Без подписи руководитель читает
@@ -263,9 +265,16 @@ export default function TeamStatsModal({
               пациента, оценка, длительность. Раньше здесь рисовалась своя,
               и в ней стояла тема разговора — а её приложение не заполняет,
               поэтому у руководителя весь список читался как «Разговор» */}
-          <div className="flex flex-col">
+          <div className="flex flex-col max-md:hidden">
             {sessions?.map((conversation) => (
               <ConversationRow key={conversation.id} conversation={conversation} />
+            ))}
+          </div>
+          {/* Телефон: карточками, как на главной; звезды нет — это личная
+              пометка менеджера (см. ConversationRow) */}
+          <div className="flex flex-col gap-2.5 md:hidden">
+            {sessions?.map((conversation) => (
+              <ConversationCard key={conversation.id} conversation={conversation} />
             ))}
           </div>
         </div>

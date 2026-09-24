@@ -72,6 +72,30 @@ export const DIFFICULTY = {
 export type DifficultyKey = keyof typeof DIFFICULTY;
 
 /**
+ * Фильтр сложности на телефоне — один ряд из четырёх сегментов, выбранный
+ * окрашен в цвет своей сложности (макет «Телефон · 390», решение Ивана 23.09).
+ * Общий для мастера и «Пациентов». Классы целиком строками: Tailwind
+ * собирает только то, что видит в тексте.
+ */
+export const СЕГМЕНТ_ТЕЛЕФОН = {
+  ряд: "max-md:grid max-md:grid-cols-4 max-md:gap-[3px] max-md:rounded-xl max-md:border max-md:border-line max-md:bg-surface-bubble max-md:p-[3px]",
+  кнопка:
+    "max-md:min-h-11 max-md:min-w-0 max-md:justify-center max-md:gap-[5px] max-md:rounded-[9px] max-md:border-[length:1.5px] max-md:px-0.5 max-md:py-0 max-md:text-[14px] max-md:tracking-[-.01em] max-[379px]:gap-1 max-[379px]:text-[13px]",
+  невыбран: "max-md:border-transparent max-md:bg-transparent",
+  выбран: {
+    all: "max-md:border-brand max-md:bg-brand-soft max-md:text-brand-hover",
+    easy: "max-md:border-good max-md:bg-good-surface max-md:text-good",
+    mid: "max-md:border-warn max-md:bg-warn-surface max-md:text-warn",
+    hard: "max-md:border-danger-strong max-md:bg-danger-soft max-md:text-danger-strong",
+  },
+  точка: {
+    easy: "max-md:bg-good",
+    mid: "max-md:bg-warn",
+    hard: "max-md:bg-danger-strong",
+  },
+} as const;
+
+/**
  * Делит подпись пациента «34 года · лазерная коррекция зрения» на возраст
  * и повод обращения.
  *

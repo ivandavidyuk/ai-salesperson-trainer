@@ -14,6 +14,7 @@ import { useWords } from "@/app/components/IndustryProvider";
 import { plural } from "@/lib/format";
 import {
   DIFFICULTY,
+  СЕГМЕНТ_ТЕЛЕФОН,
   ЗАМОК_КНОПКА,
   замок,
   splitPatientSubtitle,
@@ -74,8 +75,9 @@ export default function PatientsPage() {
 
   return (
     <AppShell title={слова.Клиенты}>
-      <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px]">
-        <div className="mb-1.5 flex items-baseline justify-between gap-4">
+      <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px] max-md:px-4 max-md:pb-6 max-md:pt-4">
+        {/* На телефоне название раздела уже в шапке — сразу поиск, как в макете */}
+        <div className="mb-1.5 flex items-baseline justify-between gap-4 max-md:hidden">
           <h1 className="text-[22.5px] font-semibold tracking-[-.01em] text-ink">
             Библиотека {слова.клиентов}
           </h1>
@@ -86,14 +88,14 @@ export default function PatientsPage() {
             </div>
           )}
         </div>
-        <p className="mb-5 text-sm text-ink-muted">
+        <p className="mb-5 text-sm text-ink-muted max-md:hidden">
           Выберите, с кем провести тренировку — у каждого свой характер и повод
           для визита
         </p>
 
         {/* Поиск и фильтр по сложности */}
-        <div className="mb-[22px] flex flex-wrap items-center gap-3.5">
-          <div className="flex min-w-[260px] flex-1 items-center gap-2.5 rounded-xl border border-line-strong bg-surface-card px-3.5 py-2.5">
+        <div className="mb-[22px] flex flex-wrap items-center gap-3.5 max-md:mb-3.5 max-md:flex-col max-md:items-stretch max-md:gap-2.5">
+          <div className="flex min-w-[260px] flex-1 items-center gap-2.5 rounded-xl border border-line-strong bg-surface-card px-3.5 py-2.5 max-md:min-h-[52px] max-md:min-w-0 max-md:py-0">
             <svg
               width="18"
               height="18"
@@ -113,11 +115,11 @@ export default function PatientsPage() {
               onChange={(event) => setQuery(event.target.value)}
               placeholder={слова.поискПоИмени}
               aria-label={`Поиск ${слова.клиента}`}
-              className="min-w-0 flex-1 bg-transparent text-[16px] text-ink outline-none placeholder:text-ink-placeholder"
+              className="min-w-0 flex-1 bg-transparent text-[16px] text-ink outline-none placeholder:text-ink-placeholder max-md:min-h-11"
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className={`flex flex-wrap gap-2 ${СЕГМЕНТ_ТЕЛЕФОН.ряд}`}>
             {FILTERS.map((item) => {
               const active = filter === item.key;
               const dot = item.key !== "all" ? DIFFICULTY[item.key].dot : null;
@@ -126,16 +128,18 @@ export default function PatientsPage() {
                   key={item.key}
                   type="button"
                   onClick={() => setFilter(item.key)}
-                  className={`inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border px-[15px] py-2 text-[14.5px] font-semibold transition-colors ${
+                  className={`inline-flex items-center gap-[7px] whitespace-nowrap rounded-full border px-[15px] py-2 text-[14.5px] font-semibold transition-colors ${СЕГМЕНТ_ТЕЛЕФОН.кнопка} ${
                     active
-                      ? "border-brand bg-brand text-white"
-                      : "border-line-strong bg-surface-card text-ink-muted hover:border-brand-soft"
+                      ? `border-brand bg-brand text-white ${СЕГМЕНТ_ТЕЛЕФОН.выбран[item.key]}`
+                      : `border-line-strong bg-surface-card text-ink-muted hover:border-brand-soft ${СЕГМЕНТ_ТЕЛЕФОН.невыбран}`
                   }`}
                 >
                   {dot && (
                     <span
                       className={`inline-block h-[7px] w-[7px] rounded-full ${
-                        active ? "bg-white" : dot
+                        active && item.key !== "all"
+                          ? `bg-white ${СЕГМЕНТ_ТЕЛЕФОН.точка[item.key]}`
+                          : dot
                       }`}
                     />
                   )}
@@ -160,7 +164,7 @@ export default function PatientsPage() {
 
         {/* Три колонки на всех поддерживаемых ширинах: 365 / 419 / 525px.
             minmax(0,1fr) не даёт длинному слову растянуть колонку */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-4 max-md:grid-cols-1 max-md:gap-3">
           {visible.map((patient) => (
             <PatientCard
               key={patient.id}
@@ -171,7 +175,7 @@ export default function PatientsPage() {
           ))}
 
           {patients && visible.length === 0 && (
-            <div className="col-span-3 px-5 py-14 text-center">
+            <div className="col-span-3 px-5 py-14 text-center max-md:col-span-1">
               <div className="text-base font-semibold text-ink-muted">
                 Ничего не найдено
               </div>
@@ -231,7 +235,7 @@ function Identity({ patient }: { patient: PatientCardProps["patient"] }) {
     <div className="flex items-center gap-[13px]">
       <PatientAvatar
         name={patient.name}
-        className="h-[52px] w-[52px] bg-brand-soft text-[18.5px] font-semibold text-brand"
+        className="h-[52px] w-[52px] bg-brand-soft text-[18.5px] font-semibold text-brand max-md:h-14 max-md:w-14"
         lazy
       />
       <div className="min-w-0 flex-1">
@@ -274,7 +278,7 @@ function PatientCard({
   return (
     // Ширину держит сетка страницы, а не карточка: при расчётной ширине
     // карточка на 1280 ужималась до 360px и резала подпись
-    <div className="flex flex-col rounded-[14px] border border-line bg-surface-card p-5">
+    <div className="flex flex-col rounded-[14px] border border-line bg-surface-card p-5 max-md:rounded-2xl max-md:p-4">
       {/* Имя больше не кликается ни у кого: то же окно открывает кнопка
           «Подробнее» ниже, и два входа в одно место — лишний способ
           посмотреть то же самое.
@@ -299,12 +303,14 @@ function PatientCard({
             {reason}
           </div>
         )}
-        <p className="mt-[7px] line-clamp-4 text-pretty text-[14.5px] leading-normal text-ink-muted">
+        {/* На телефоне анамнез — две строки: карточек в колонке много,
+            целиком он в «Подробнее» */}
+        <p className="mt-[7px] line-clamp-4 text-pretty text-[14.5px] leading-normal text-ink-muted max-md:line-clamp-2">
           {patient.anamnesis || слова.заявкаПуста}
         </p>
       </div>
 
-      <div className="mt-[18px] flex gap-2">
+      <div className="mt-[18px] flex gap-2 max-md:mt-3.5">
         {/* Кнопка есть у всех. Менеджеру она открывает полный анамнез —
             на карточке он обрезан четырьмя строками, и до 10.08 прочитать
             его целиком было негде вовсе. Руководителю в том же окне
@@ -315,9 +321,10 @@ function PatientCard({
           type="button"
           onClick={onOpenInfo}
           title={`Подробнее ${слова.оКлиенте.toLowerCase()}`}
-          className="flex flex-1 items-center justify-center gap-[7px] rounded-input border-[length:1.5px] border-brand bg-surface-accent px-2 py-3 text-sm font-semibold text-brand-hover transition-colors hover:bg-[#DCEDE9]"
+          className="flex flex-1 items-center justify-center gap-[7px] rounded-input border-[length:1.5px] border-brand bg-surface-accent px-2 py-3 text-sm font-semibold text-brand-hover transition-colors hover:bg-[#DCEDE9] max-md:min-h-[52px] max-md:rounded-xl max-md:border max-md:border-line-strong max-md:bg-surface-card max-md:py-0 max-md:text-[16px] max-md:text-ink"
         >
           <svg
+            className="max-md:hidden"
             width="16"
             height="16"
             viewBox="0 0 24 24"
@@ -349,7 +356,7 @@ function PatientCard({
           }
           // Шире «Подробнее» в 1,3 раза: равные по виду кнопки заставляли бы
           // выбирать, а читать необязательно — тренироваться цель
-          className={`flex flex-[1.3] items-center justify-center gap-2 rounded-input px-2 py-3 text-[16.5px] font-semibold text-white transition-colors ${
+          className={`flex flex-[1.3] items-center justify-center gap-2 rounded-input px-2 py-3 text-[16.5px] font-semibold text-white transition-colors max-md:min-h-[52px] max-md:rounded-xl max-md:py-0 max-md:text-[16px] ${
             blocked
               ? "cursor-not-allowed bg-disabled"
               : "bg-brand hover:bg-brand-hover"

@@ -41,7 +41,7 @@ interface AudioDevicePickerProps {
 }
 
 const selectClass =
-  "w-full rounded-input border-[length:1.5px] border-line bg-surface-card px-3 py-2.5 text-sm text-ink outline-none transition-colors focus:border-brand";
+  "w-full rounded-input border-[length:1.5px] border-line bg-surface-card px-3 py-2.5 text-sm text-ink outline-none transition-colors focus:border-brand max-md:min-h-[52px] max-md:rounded-xl max-md:text-[16px]";
 
 const labelClass =
   "mb-1.5 block font-mono text-[12px] uppercase tracking-[.12em] text-brand-hover";
@@ -146,11 +146,14 @@ export default function AudioDevicePicker({
         {/* Подписи под шкалой: без них засечка — просто чёрточка, и человек
             не понимает, что именно должно её перешагнуть */}
         {!compact && (
-          <div className="relative mt-1 h-[13px] text-[11.5px] text-ink-placeholder">
+          <div className="relative mt-1 h-[13px] text-[11.5px] text-ink-placeholder max-md:h-4 max-md:text-[12.5px]">
             <span className="absolute left-0">тихо</span>
             <span
               style={{ left: `${(VOICE_RMS / FULL_SCALE_RMS) * 100}%` }}
-              className="absolute -translate-x-1/2 whitespace-nowrap"
+              // На телефоне шкала узкая, засечка у самого левого края —
+              // по центру засечки подпись наезжала на «тихо»; там она
+              // начинается от засечки
+              className="absolute -translate-x-1/2 whitespace-nowrap max-md:ml-1 max-md:translate-x-0"
             >
               порог голоса
             </span>
@@ -191,7 +194,7 @@ export default function AudioDevicePicker({
           Блок просто отсутствует: звук идёт в системное устройство,
           и это ожидаемо, а не ошибка — гасить и объяснять нечего */}
       {outputs.length > 0 && (
-        <div>
+        <div className="max-md:hidden">
           {!compact && <span className={labelClass}>Динамик</span>}
           <div className="flex gap-2">
             <select

@@ -97,9 +97,9 @@ function SectionTitle({
 }) {
   return (
     <div
-      className={`mb-3 flex gap-2.5 ${actions ? "items-center" : "items-baseline"}`}
+      className={`mb-3 flex gap-2.5 max-md:mb-2.5 max-md:items-center ${actions ? "items-center" : "items-baseline"}`}
     >
-      <div className="font-mono text-[12.5px] uppercase tracking-[.12em] text-brand-hover">
+      <div className="font-mono text-[12.5px] uppercase tracking-[.12em] text-brand-hover max-md:whitespace-nowrap max-md:text-[13px] max-md:tracking-[.1em]">
         {children}
       </div>
       <div className="h-px flex-1 bg-line" />
@@ -125,7 +125,7 @@ function StageCarousel({ title, count, children }: { title: string; count: numbe
     track.current?.scrollBy({ left: direction * 304, behavior: "smooth" });
 
   return (
-    <div>
+    <div className="max-md:hidden">
       <SectionTitle
         actions={
           <>
@@ -226,11 +226,13 @@ export default function TrainingPage() {
 
   return (
     <AppShell title="Тренировка">
-      <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px]">
-        <div className="mb-1.5 text-[22.5px] font-semibold tracking-[-.01em] text-ink">
+      <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px] max-md:px-4 max-md:pb-6 max-md:pt-[18px]">
+        {/* На телефоне название раздела уже в шапке — как в макете,
+            сразу секции */}
+        <div className="mb-1.5 text-[22.5px] font-semibold tracking-[-.01em] text-ink max-md:hidden">
           Выберите формат
         </div>
-        <p className="mb-6 text-sm text-ink-muted">
+        <p className="mb-6 text-sm text-ink-muted max-md:hidden">
           Пройдите разговор целиком или отработайте отдельный этап — на
           следующем шаге выберете {слова.клиента}
         </p>
@@ -245,7 +247,7 @@ export default function TrainingPage() {
           <p className="py-16 text-center text-sm text-danger-text">{error}</p>
         )}
 
-        <div className="flex flex-col gap-[30px]">
+        <div className="flex flex-col gap-[30px] max-md:gap-6">
           {/* Пустые группы не рисуем — заголовок над пустотой выглядел бы
               как сломанная вёрстка */}
           {byGroup.full.length > 0 && (
@@ -277,10 +279,26 @@ export default function TrainingPage() {
             </StageCarousel>
           )}
 
+          {byGroup.stage.length > 0 && (
+            <div className="md:hidden">
+              <SectionTitle>{GROUP_LABELS.stage}</SectionTitle>
+              <div className="overflow-hidden rounded-2xl border border-line bg-surface-card">
+                {byGroup.stage.map((type, index) => (
+                  <StageRow
+                    key={type.id}
+                    type={type}
+                    number={index + 1}
+                    onStart={() => setStarted(type)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {byGroup.special.length > 0 && (
             <div>
               <SectionTitle>{GROUP_LABELS.special}</SectionTitle>
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 max-md:gap-2.5">
                 {byGroup.special.map((type) => (
                   <SpecialCard
                     key={type.id}
@@ -314,46 +332,129 @@ function FullCard({ type, onStart }: CardProps) {
   const закрыт: Замок = замок(type);
   const blocked = закрыт !== null;
 
-  return (
-    <div className="flex items-center gap-6 rounded-2xl bg-gradient-to-br from-brand to-brand-hover px-7 py-[26px] text-white shadow-[0_18px_40px_-22px_rgba(10,95,85,.7)]">
-      <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/[.14]">
-        <Icon size={30}>
-          <path d="M4 5.5a1.5 1.5 0 011.5-1.5H8l1.5 4-2 1.4a12 12 0 005.6 5.6l1.4-2 4 1.5V18a1.5 1.5 0 01-1.5 1.5A15 15 0 014 5.5z" />
-        </Icon>
-      </span>
+  const icon = (
+    <Icon size={30}>
+      <path d="M4 5.5a1.5 1.5 0 011.5-1.5H8l1.5 4-2 1.4a12 12 0 005.6 5.6l1.4-2 4 1.5V18a1.5 1.5 0 01-1.5 1.5A15 15 0 014 5.5z" />
+    </Icon>
+  );
+  const chips = (
+    <div className="mt-3.5 flex flex-wrap gap-2 max-md:mt-0">
+      {["4 этапа", "60 мин", "Оценка по итогам"].map((chip) => (
+        <span
+          key={chip}
+          className="rounded-full bg-white/[.16] px-3 py-[5px] text-xs font-semibold max-md:text-[13px]"
+        >
+          {chip}
+        </span>
+      ))}
+    </div>
+  );
+  const button = (
+    <button
+      type="button"
+      onClick={onStart}
+      disabled={blocked}
+      className={`flex shrink-0 items-center gap-2 rounded-xl px-[30px] py-3.5 text-[16.5px] font-bold transition-colors max-md:min-h-[52px] max-md:w-full max-md:justify-center max-md:py-0 max-md:text-[16px] max-md:font-semibold ${
+        blocked
+          ? "cursor-not-allowed bg-white/40 text-white/80"
+          : "bg-white text-brand-hover hover:bg-brand-panel-meta"
+      }`}
+    >
+      {закрыт ? (
+        ЗАМОК_КНОПКА[закрыт]
+      ) : (
+        <>
+          <span className="inline-block h-2 w-2 rounded-full bg-brand-hover" />
+          Начать
+        </>
+      )}
+    </button>
+  );
 
-      <div className="min-w-0 flex-1">
-        <div className="text-[22.5px] font-bold">{type.title}</div>
-        <p className="mt-1.5 max-w-[560px] text-pretty text-[16px] leading-normal text-white/[.86]">
-          {type.description}
-        </p>
-        <div className="mt-3.5 flex flex-wrap gap-2">
-          {["4 этапа", "60 мин", "Оценка по итогам"].map((chip) => (
-            <span
-              key={chip}
-              className="rounded-full bg-white/[.16] px-3 py-[5px] text-xs font-semibold"
-            >
-              {chip}
-            </span>
-          ))}
+  return (
+    <>
+      <div className="flex items-center gap-6 rounded-2xl bg-gradient-to-br from-brand to-brand-hover px-7 py-[26px] text-white shadow-[0_18px_40px_-22px_rgba(10,95,85,.7)] max-md:hidden">
+        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/[.14]">
+          {icon}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <div className="text-[22.5px] font-bold">{type.title}</div>
+          <p className="mt-1.5 max-w-[560px] text-pretty text-[16px] leading-normal text-white/[.86]">
+            {type.description}
+          </p>
+          {chips}
         </div>
+
+        {button}
       </div>
 
+      {/* Телефон: значок с названием в строку, под ними описание, плашки
+          и кнопка во всю ширину */}
+      <div className="flex flex-col gap-3.5 rounded-2xl bg-gradient-to-br from-brand to-brand-hover p-5 text-white shadow-[0_18px_40px_-22px_rgba(10,95,85,.7)] md:hidden">
+        <div className="flex items-center gap-3.5">
+          <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[14px] bg-white/[.14]">
+            {icon}
+          </span>
+          <div className="text-[20px] font-bold">{type.title}</div>
+        </div>
+        <p className="text-pretty text-[15px] leading-normal text-white/[.88]">
+          {type.description}
+        </p>
+        {chips}
+        {button}
+      </div>
+    </>
+  );
+}
+
+// Этап на телефоне — строка списка: значок, номер с названием и описание,
+// кнопка справа. Карусель 288-пиксельных карточек на 390 px показала бы
+// одну карточку и край следующей — список читается целиком
+function StageRow({
+  type,
+  number,
+  onStart,
+}: CardProps & { number: number }) {
+  const закрыт: Замок = замок(type);
+  const blocked = закрыт !== null;
+
+  return (
+    <div className="flex items-center gap-3 border-t border-line-soft p-3.5 first:border-t-0">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-surface-accent text-brand">
+        <Icon>{STAGE_ICONS[type.id] ?? FALLBACK_ICON}</Icon>
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-[13px] text-ink-placeholder">
+            {String(number).padStart(2, "0")}
+          </span>
+          <span className="text-[16px] font-semibold leading-[1.3] text-ink">
+            {type.title}
+          </span>
+        </div>
+        {закрыт && (
+          <div className="mt-1">
+            <SoonBadge причина={закрыт} />
+          </div>
+        )}
+        <p className="mt-[3px] text-pretty text-[14px] leading-[1.45] text-ink-muted">
+          {type.description}
+        </p>
+      </div>
       <button
         type="button"
         onClick={onStart}
         disabled={blocked}
-        className={`flex shrink-0 items-center gap-2 rounded-xl px-[30px] py-3.5 text-[16.5px] font-bold transition-colors ${
-          blocked
-            ? "cursor-not-allowed bg-white/40 text-white/80"
-            : "bg-white text-brand-hover hover:bg-brand-panel-meta"
+        className={`inline-flex min-h-11 shrink-0 items-center gap-[7px] rounded-[10px] px-3.5 text-[15px] font-semibold text-white ${
+          blocked ? "cursor-not-allowed bg-disabled" : "bg-brand active:bg-brand-hover"
         }`}
       >
         {закрыт ? (
           ЗАМОК_КНОПКА[закрыт]
         ) : (
           <>
-            <span className="inline-block h-2 w-2 rounded-full bg-brand-hover" />
+            <span className="inline-block h-2 w-2 rounded-full bg-white" />
             Начать
           </>
         )}
@@ -422,43 +523,68 @@ function SpecialCard({ type, onStart }: CardProps) {
   const закрыт: Замок = замок(type);
   const blocked = закрыт !== null;
 
-  return (
-    <div className="flex items-center gap-[22px] rounded-[14px] border border-line bg-surface-card px-6 py-[22px]">
-      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px] bg-warn-surface text-warn">
-        <Icon size={27}>
-          <path d="M13 2L4.5 13H11l-1 9 8.5-11H12z" />
-        </Icon>
-      </span>
+  const icon = (
+    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px] bg-warn-surface text-warn max-md:h-[52px] max-md:w-[52px]">
+      <Icon size={27}>
+        <path d="M13 2L4.5 13H11l-1 9 8.5-11H12z" />
+      </Icon>
+    </span>
+  );
+  const title = (
+    <div className="flex items-center gap-2 max-md:flex-wrap">
+      <div className="text-[18.5px] font-semibold text-ink max-md:text-[18px]">{type.title}</div>
+      {закрыт && <SoonBadge причина={закрыт} />}
+    </div>
+  );
+  const button = (
+    <button
+      type="button"
+      onClick={onStart}
+      disabled={blocked}
+      className={`flex shrink-0 items-center gap-2 rounded-input px-7 py-[13px] text-[16.5px] font-semibold text-white transition-colors max-md:min-h-[52px] max-md:w-full max-md:justify-center max-md:rounded-xl max-md:py-0 max-md:text-[16px] ${
+        blocked
+          ? "cursor-not-allowed bg-disabled"
+          : "bg-brand hover:bg-brand-hover"
+      }`}
+    >
+      {закрыт ? (
+        ЗАМОК_КНОПКА[закрыт]
+      ) : (
+        <>
+          <span className="inline-block h-2 w-2 rounded-full bg-white" />
+          Начать
+        </>
+      )}
+    </button>
+  );
 
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <div className="text-[18.5px] font-semibold text-ink">{type.title}</div>
-          {закрыт && <SoonBadge причина={закрыт} />}
+  return (
+    <>
+      <div className="flex items-center gap-[22px] rounded-[14px] border border-line bg-surface-card px-6 py-[22px] max-md:hidden">
+        {icon}
+
+        <div className="min-w-0 flex-1">
+          {title}
+          <p className="mt-1 max-w-[620px] text-pretty text-[15px] leading-normal text-ink-muted">
+            {type.description}
+          </p>
         </div>
-        <p className="mt-1 max-w-[620px] text-pretty text-[15px] leading-normal text-ink-muted">
-          {type.description}
-        </p>
+
+        {button}
       </div>
 
-      <button
-        type="button"
-        onClick={onStart}
-        disabled={blocked}
-        className={`flex shrink-0 items-center gap-2 rounded-input px-7 py-[13px] text-[16.5px] font-semibold text-white transition-colors ${
-          blocked
-            ? "cursor-not-allowed bg-disabled"
-            : "bg-brand hover:bg-brand-hover"
-        }`}
-      >
-        {закрыт ? (
-          ЗАМОК_КНОПКА[закрыт]
-        ) : (
-          <>
-            <span className="inline-block h-2 w-2 rounded-full bg-white" />
-            Начать
-          </>
-        )}
-      </button>
-    </div>
+      {/* Телефон — тем же складом, что полный разговор: значок с названием,
+          описание, кнопка во всю ширину */}
+      <div className="flex flex-col gap-3.5 rounded-2xl border border-line bg-surface-card p-5 md:hidden">
+        <div className="flex items-center gap-3.5">
+          {icon}
+          {title}
+        </div>
+        <p className="text-pretty text-[15px] leading-normal text-ink-muted">
+          {type.description}
+        </p>
+        {button}
+      </div>
+    </>
   );
 }

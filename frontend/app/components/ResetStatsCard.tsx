@@ -69,8 +69,8 @@ export function ResetStatsCard() {
 
   return (
     <>
-      <div className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px]">
-        <div className="flex items-start justify-between gap-4">
+      <div className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px] max-md:px-4 max-md:py-4">
+        <div className="flex items-start justify-between gap-4 max-md:flex-col max-md:items-stretch max-md:gap-3.5">
           <div>
             {/* Именно «менеджера», в единственном числе: «Статистика отдела»
                 читалась так, будто кнопка обнуляет весь отдел разом */}
@@ -88,7 +88,7 @@ export function ResetStatsCard() {
               setPicked(null);
               setOpen(true);
             }}
-            className="shrink-0 whitespace-nowrap rounded-[10px] border border-danger-border bg-surface-card px-[18px] py-2.5 text-[15px] font-semibold text-danger-text transition-colors hover:bg-danger-wash"
+            className="shrink-0 whitespace-nowrap rounded-[10px] border border-danger-border bg-surface-card px-[18px] py-2.5 text-[15px] font-semibold text-danger-text transition-colors hover:bg-danger-wash max-md:min-h-[52px] max-md:rounded-xl max-md:py-0 max-md:text-[16px]"
           >
             Очистить статистику
           </button>
@@ -100,14 +100,14 @@ export function ResetStatsCard() {
           <div className="mt-4 flex flex-col gap-2 border-t border-line-soft pt-3.5">
             {обнулённые.map((m) => (
               <div key={m.id} className="flex items-center gap-3 text-[14.5px]">
-                <span className="min-w-0 flex-1 truncate text-ink-body">
+                <span className="min-w-0 flex-1 truncate text-ink-body max-md:whitespace-normal">
                   {m.name} — статистика считается с {дата(m.statsResetAt!)}
                 </span>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => обнулить(m.id, true)}
-                  className="shrink-0 font-semibold text-brand-hover disabled:opacity-50"
+                  className="shrink-0 font-semibold text-brand-hover disabled:opacity-50 max-md:min-h-11 max-md:px-1 max-md:text-[15px]"
                 >
                   Вернуть
                 </button>
@@ -118,11 +118,12 @@ export function ResetStatsCard() {
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-10">
-          <div className="flex max-h-full w-[520px] flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-2xl">
+        // На телефоне — лист снизу
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-10 max-md:items-end max-md:p-0">
+          <div className="flex max-h-full w-[520px] flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-2xl max-md:max-h-[88dvh] max-md:w-full max-md:rounded-b-none max-md:rounded-t-[24px]">
             {!выбранный ? (
               <>
-                <div className="shrink-0 px-[26px] pb-4 pt-6">
+                <div className="shrink-0 px-[26px] pb-4 pt-6 max-md:px-5 max-md:pt-5">
                   <div className="text-[19.5px] font-semibold text-ink">
                     Очистить статистику
                   </div>
@@ -131,13 +132,13 @@ export function ResetStatsCard() {
                     разговоров
                   </p>
                 </div>
-                <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-[26px] pb-2">
+                <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-[26px] pb-2 max-md:px-5">
                   {managers.map((m) => (
                     <button
                       key={m.id}
                       type="button"
                       onClick={() => setPicked(m.id)}
-                      className={`flex w-full items-center gap-3 rounded-xl border-[1.5px] px-3 py-2.5 text-left transition-colors ${
+                      className={`flex w-full items-center gap-3 rounded-xl border-[1.5px] px-3 py-2.5 text-left transition-colors max-md:min-h-16 ${
                         m.statsResetAt
                           ? "border-line-soft opacity-60"
                           : "border-line-soft hover:border-line-accent"
@@ -150,7 +151,7 @@ export function ResetStatsCard() {
                         <span className="block truncate text-[15.5px] font-semibold text-ink">
                           {m.name}
                         </span>
-                        <span className="block truncate text-[14px] text-ink-muted">
+                        <span className="block truncate text-[14px] text-ink-muted max-md:whitespace-normal">
                           {m.statsResetAt
                             ? `Очищена ${дата(m.statsResetAt)}`
                             : `${m.jobTitle} · ${
@@ -161,11 +162,11 @@ export function ResetStatsCard() {
                     </button>
                   ))}
                 </div>
-                <div className="flex shrink-0 justify-end gap-2.5 border-t border-line-soft px-[26px] pb-5 pt-4">
+                <div className="flex shrink-0 justify-end gap-2.5 border-t border-line-soft px-[26px] pb-5 pt-4 max-md:flex-col-reverse max-md:px-5 max-md:pt-3">
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
-                    className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-2.5 text-[15.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble"
+                    className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-2.5 text-[15.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble max-md:min-h-[52px] max-md:rounded-xl max-md:py-0 max-md:text-[16px]"
                   >
                     Закрыть
                   </button>
@@ -173,7 +174,7 @@ export function ResetStatsCard() {
               </>
             ) : (
               <>
-                <div className="shrink-0 px-[26px] pb-4 pt-6">
+                <div className="shrink-0 px-[26px] pb-4 pt-6 max-md:px-5 max-md:pt-5">
                   <div className="text-[19.5px] font-semibold text-ink">
                     Очистить статистику {выбранный.name}?
                   </div>
@@ -186,11 +187,11 @@ export function ResetStatsCard() {
                     Передумаете — вернёте одним нажатием, ничего не потеряется.
                   </p>
                 </div>
-                <div className="flex shrink-0 justify-end gap-2.5 border-t border-line-soft px-[26px] pb-5 pt-4">
+                <div className="flex shrink-0 justify-end gap-2.5 border-t border-line-soft px-[26px] pb-5 pt-4 max-md:flex-col-reverse max-md:px-5 max-md:pt-3">
                   <button
                     type="button"
                     onClick={() => setPicked(null)}
-                    className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-2.5 text-[15.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble"
+                    className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-2.5 text-[15.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble max-md:min-h-[52px] max-md:rounded-xl max-md:py-0 max-md:text-[16px]"
                   >
                     Назад
                   </button>
@@ -198,7 +199,7 @@ export function ResetStatsCard() {
                     type="button"
                     loading={busy}
                     onClick={() => обнулить(выбранный.id, false)}
-                    className="px-5 py-2.5 text-[15.5px]"
+                    className="px-5 py-2.5 text-[15.5px] max-md:min-h-[52px] max-md:rounded-xl max-md:py-0 max-md:text-[16px]"
                   >
                     Очистить
                   </Button>

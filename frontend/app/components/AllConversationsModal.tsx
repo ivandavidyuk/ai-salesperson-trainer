@@ -2,9 +2,11 @@
 
 // Модалка «Все разговоры»: полный список с прокруткой.
 // Данные грузятся при открытии — на главной достаточно последних трёх.
+// На телефоне — экран целиком со стрелкой назад и разговорами карточками.
 
 import { useEffect, useState } from "react";
 import type { HomeConversation } from "@/lib/home";
+import ConversationCard from "@/app/components/ConversationCard";
 import ConversationRow from "@/app/components/ConversationRow";
 import Loader from "@/app/components/Loader";
 
@@ -53,23 +55,43 @@ export default function AllConversationsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 max-md:px-0"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Все разговоры"
     >
       <div
-        className="flex max-h-[80vh] w-full max-w-[760px] flex-col overflow-hidden rounded-card border border-line bg-surface-card shadow-card"
+        className="flex max-h-[80vh] w-full max-w-[760px] flex-col overflow-hidden rounded-card border border-line bg-surface-card shadow-card max-md:h-dvh max-md:max-h-none max-md:max-w-none max-md:rounded-none max-md:border-0 max-md:bg-surface max-md:shadow-none"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <div className="text-base font-semibold text-ink">Все разговоры</div>
+        <div className="flex items-center justify-between border-b border-line px-5 py-4 max-md:h-14 max-md:shrink-0 max-md:justify-start max-md:gap-1 max-md:bg-surface-card max-md:px-1.5 max-md:py-0">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Назад"
+            className="inline-flex h-11 w-11 items-center justify-center text-ink md:hidden"
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+          </button>
+          <div className="text-base font-semibold text-ink max-md:text-[18px]">Все разговоры</div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Закрыть"
-            className="rounded-input p-1 text-ink-icon transition-colors hover:bg-surface-bubble hover:text-ink"
+            className="rounded-input p-1 text-ink-icon transition-colors hover:bg-surface-bubble hover:text-ink max-md:hidden"
           >
             <svg
               width="20"
@@ -101,17 +123,35 @@ export default function AllConversationsModal({
             </p>
           )}
 
-          {conversations?.map((conversation) => (
-            <ConversationRow
-              key={conversation.id}
-              conversation={{
-                ...conversation,
-                isFavorite:
-                  overrides[conversation.id] ?? conversation.isFavorite,
-              }}
-              onToggleFavorite={onToggleFavorite}
-            />
-          ))}
+          <div className="max-md:hidden">
+            {conversations?.map((conversation) => (
+              <ConversationRow
+                key={conversation.id}
+                conversation={{
+                  ...conversation,
+                  isFavorite:
+                    overrides[conversation.id] ?? conversation.isFavorite,
+                }}
+                onToggleFavorite={onToggleFavorite}
+              />
+            ))}
+          </div>
+
+          {conversations && conversations.length > 0 && (
+            <div className="flex flex-col gap-2.5 p-4 md:hidden">
+              {conversations.map((conversation) => (
+                <ConversationCard
+                  key={conversation.id}
+                  conversation={{
+                    ...conversation,
+                    isFavorite:
+                      overrides[conversation.id] ?? conversation.isFavorite,
+                  }}
+                  onToggleFavorite={onToggleFavorite}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

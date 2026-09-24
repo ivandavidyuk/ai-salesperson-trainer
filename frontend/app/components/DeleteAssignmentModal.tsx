@@ -8,6 +8,7 @@
 // от неначатого отличает одна фраза.
 
 import { useState } from "react";
+import Sheet, { SHEET_SECONDARY } from "@/app/components/Sheet";
 import Spinner from "@/app/components/Spinner";
 import { formatDueDate } from "@/lib/format";
 import type { Assignment } from "@/lib/training";
@@ -45,14 +46,10 @@ export default function DeleteAssignmentModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-10">
-      <div className="w-[520px] rounded-[18px] bg-surface-card px-8 pb-[26px] pt-[30px] shadow-2xl">
-        <div className="text-[20.5px] font-semibold text-ink">
-          Удалить задание?
-        </div>
-
-        <div className="mt-4 rounded-[11px] border border-line-soft bg-surface px-[15px] py-3">
+  // Одно содержимое для карточки на компьютере и листа на телефоне
+  const что = (
+    <>
+        <div className="mt-4 rounded-[11px] border border-line-soft bg-surface px-[15px] py-3 max-md:mt-0">
           <div className="text-[15.5px] font-semibold text-ink">
             {assignment.title}
           </div>
@@ -80,6 +77,18 @@ export default function DeleteAssignmentModal({
         {error && (
           <p className="mt-3 text-sm text-danger-text">{error}</p>
         )}
+    </>
+  );
+
+  return (
+    <>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-10 max-md:hidden">
+      <div className="w-[520px] rounded-[18px] bg-surface-card px-8 pb-[26px] pt-[30px] shadow-2xl">
+        <div className="text-[20.5px] font-semibold text-ink">
+          Удалить задание?
+        </div>
+
+        {что}
 
         <div className="mt-[22px] flex justify-end gap-2.5">
           <button
@@ -101,5 +110,30 @@ export default function DeleteAssignmentModal({
         </div>
       </div>
     </div>
+
+    <Sheet
+      title="Удалить задание?"
+      onClose={onClose}
+      className="md:hidden"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-danger-strong px-5 text-[16px] font-semibold text-white disabled:opacity-70"
+          >
+            {deleting && <Spinner />}
+            Удалить
+          </button>
+          <button type="button" onClick={onClose} className={SHEET_SECONDARY}>
+            Отмена
+          </button>
+        </>
+      }
+    >
+      {что}
+    </Sheet>
+    </>
   );
 }

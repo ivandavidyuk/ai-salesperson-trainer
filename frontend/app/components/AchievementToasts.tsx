@@ -157,7 +157,9 @@ export default function AchievementToasts() {
   return (
     // pointer-events-none на обёртке: невидимая колонка не должна
     // перехватывать клики по странице под собой
-    <div className="pointer-events-none fixed bottom-6 right-6 z-30 flex w-[352px] flex-col items-stretch gap-2">
+    // На телефоне — во всю ширину над нижней панелью: 92 px выше края
+    // хватает и над разделами оболочки, и над кнопками расшифровки
+    <div className="pointer-events-none fixed bottom-6 right-6 z-30 flex w-[352px] flex-col items-stretch gap-2 max-md:bottom-[92px] max-md:left-3 max-md:right-3 max-md:w-auto">
       {наЭкране.map((бейдж, индекс) => (
         <ToastCard
           key={бейдж.id}
@@ -175,7 +177,7 @@ export default function AchievementToasts() {
           <button
             type="button"
             onClick={() => закрыть(наЭкране.map((бейдж) => бейдж.id))}
-            className="text-[14px] font-semibold text-ink-muted transition-colors hover:text-ink"
+            className="text-[14px] font-semibold text-ink-muted transition-colors hover:text-ink max-md:min-h-11 max-md:rounded-full max-md:border max-md:border-line max-md:bg-surface-card max-md:px-4 max-md:text-[15px] max-md:shadow-[0_10px_24px_-14px_rgba(20,40,38,.5)]"
           >
             Скрыть все
           </button>
@@ -188,7 +190,7 @@ export default function AchievementToasts() {
             сделать */}
         <Link
           href="/achievements"
-          className="text-[14px] font-semibold text-brand transition-colors hover:text-brand-hover"
+          className="text-[14px] font-semibold text-brand transition-colors hover:text-brand-hover max-md:inline-flex max-md:min-h-11 max-md:items-center max-md:rounded-full max-md:border max-md:border-line max-md:bg-surface-card max-md:px-4 max-md:text-[15px] max-md:shadow-[0_10px_24px_-14px_rgba(20,40,38,.5)]"
         >
           Все достижения →
         </Link>
@@ -255,7 +257,7 @@ function ToastCard({
         type="button"
         onClick={наЗакрытие}
         aria-label="Скрыть"
-        className="-mr-0.5 -mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center self-start rounded-full text-ink-subtle transition-colors hover:bg-surface hover:text-ink"
+        className="-mr-0.5 -mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center self-start rounded-full text-ink-subtle transition-colors hover:bg-surface hover:text-ink max-md:-my-2 max-md:-mr-2 max-md:h-11 max-md:w-11 max-md:self-center"
       >
         <svg
           width="13"

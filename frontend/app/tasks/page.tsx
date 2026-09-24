@@ -13,6 +13,7 @@ import PatientInfoModal from "@/app/components/PatientInfoModal";
 import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import PatientAvatar from "@/app/components/PatientAvatar";
+import Sheet from "@/app/components/Sheet";
 import { useWords } from "@/app/components/IndustryProvider";
 import { formatDueDate, initials, isOverdue, plural } from "@/lib/format";
 import type { Assignment, DoneAssignment, WizardPatient } from "@/lib/training";
@@ -65,10 +66,10 @@ export default function TasksPage() {
 
   return (
     <AppShell title="Задания">
-      <div className="mx-auto w-full max-w-[980px] px-10 pb-11 pt-[26px]">
-        <div className="mb-5 flex items-start justify-between gap-4">
+      <div className="mx-auto w-full max-w-[980px] px-10 pb-11 pt-[26px] max-md:px-4 max-md:pb-6 max-md:pt-5">
+        <div className="mb-5 flex items-start justify-between gap-4 max-md:mb-4 max-md:flex-col max-md:items-stretch max-md:gap-3.5">
           <div>
-            <h1 className="text-[22.5px] font-semibold tracking-[-.01em] text-ink">
+            <h1 className="text-[22.5px] font-semibold tracking-[-.01em] text-ink max-md:text-[21px]">
               {isHead ? "Выставленные задания" : "От вашего руководителя"}
             </h1>
             <p className="mt-1 text-sm text-ink-muted">
@@ -89,7 +90,7 @@ export default function TasksPage() {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-brand px-[22px] py-3 text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-brand px-[22px] py-3 text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover max-md:min-h-[52px] max-md:justify-center max-md:py-0 max-md:text-[16px]"
             >
               <svg
                 width="18"
@@ -132,7 +133,7 @@ export default function TasksPage() {
           </div>
         )}
 
-        <div className="flex flex-col gap-3.5">
+        <div className="flex flex-col gap-3.5 max-md:gap-3">
           {assignments?.map((item) => (
             <AssignmentCard
               key={item.id}
@@ -175,7 +176,7 @@ export default function TasksPage() {
               <button
                 type="button"
                 onClick={() => setAllDone(true)}
-                className="mt-3 w-full rounded-[12px] border border-line bg-surface-card py-2.5 text-sm font-semibold text-brand-hover transition-colors hover:bg-surface-bubble"
+                className="mt-3 w-full rounded-[12px] border border-line bg-surface-card py-2.5 text-sm font-semibold text-brand-hover transition-colors hover:bg-surface-bubble max-md:min-h-[52px] max-md:text-[16px]"
               >
                 Показать все {done.length}
               </button>
@@ -263,12 +264,12 @@ function AssignmentCard({
 
   return (
     <div
-      className={`overflow-hidden rounded-[14px] border border-line bg-surface-card ${
+      className={`overflow-hidden rounded-[14px] border border-line bg-surface-card max-md:rounded-2xl ${
         assignment.isPriority ? "border-l-[3px] border-l-danger-strong" : ""
       }`}
     >
-      <div className="flex items-stretch">
-        <div className="min-w-0 flex-1 px-[22px] py-5">
+      <div className="flex items-stretch max-md:flex-col">
+        <div className="min-w-0 flex-1 px-[22px] py-5 max-md:px-4 max-md:py-4">
           {/* У приоритетного задания срок уезжает в строку с плашкой,
               у обычного — встаёт рядом с заголовком (как в макете) */}
           {assignment.isPriority && (
@@ -283,14 +284,14 @@ function AssignmentCard({
               )}
               {isHead && (
                 <span className={due ? "" : "ml-auto"}>
-                  <CardMenu onEdit={onEdit} onDelete={onDelete} />
+                  <CardMenu title={assignment.title} onEdit={onEdit} onDelete={onDelete} />
                 </span>
               )}
             </div>
           )}
 
           <div className="flex items-baseline justify-between gap-3">
-            <div className="text-[18px] font-semibold text-ink">
+            <div className="text-[18px] font-semibold text-ink max-md:text-[17px] max-md:leading-snug">
               {assignment.title}
             </div>
             {/* У приоритетного задания срок и меню стоят выше, в строке
@@ -302,7 +303,7 @@ function AssignmentCard({
                     {due}
                   </span>
                 )}
-                {isHead && <CardMenu onEdit={onEdit} onDelete={onDelete} />}
+                {isHead && <CardMenu title={assignment.title} onEdit={onEdit} onDelete={onDelete} />}
               </div>
             )}
           </div>
@@ -340,7 +341,7 @@ function AssignmentCard({
 
             {/* Кому назначено — только у руководителя, у менеджера это он сам */}
             {isHead && assignment.assignee && (
-              <span className="ml-auto inline-flex items-center gap-2.5 rounded-full border border-line-accent bg-surface-accent py-[5px] pl-1.5 pr-3.5">
+              <span className="ml-auto inline-flex items-center gap-2.5 rounded-full border border-line-accent bg-surface-accent py-[5px] pl-1.5 pr-3.5 max-md:ml-0">
                 <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
                   {assignment.assignee.avatarUpdatedAt ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -389,7 +390,7 @@ function AssignmentCard({
                 ? `${слова.Клиент} или тип тренировки пока недоступен`
                 : "Начать тренировку"
             }
-            className={`shrink-0 self-stretch px-[34px] text-base font-semibold text-white transition-colors ${
+            className={`shrink-0 self-stretch px-[34px] text-base font-semibold text-white transition-colors max-md:mx-4 max-md:mb-4 max-md:min-h-[52px] max-md:rounded-xl max-md:text-[16px] ${
               blocked
                 ? "cursor-not-allowed bg-disabled"
                 : "bg-brand hover:bg-brand-hover"
@@ -412,9 +413,12 @@ function AssignmentCard({
  * с переходом к расшифровке.
  */
 function CardMenu({
+  title,
   onEdit,
   onDelete,
 }: {
+  /** Название задания — заголовок листа на телефоне */
+  title: string;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -444,20 +448,76 @@ function CardMenu({
         onClick={() => setOpen((было) => !было)}
         title="Действия с заданием"
         aria-expanded={open}
-        className="rounded-lg px-2 py-0.5 text-[19px] leading-none text-ink-icon transition-colors hover:bg-surface-bubble hover:text-ink-body"
+        className="rounded-lg px-2 py-0.5 text-[19px] leading-none text-ink-icon transition-colors hover:bg-surface-bubble hover:text-ink-body max-md:-my-3 max-md:inline-flex max-md:h-11 max-md:w-11 max-md:items-center max-md:justify-center max-md:p-0"
       >
         ⋯
       </button>
 
+      {/* Телефон: вместо выпадающего меню — лист снизу, как в макете */}
       {open && (
-        <div className="absolute right-0 top-[26px] z-20 w-[190px] overflow-hidden rounded-[12px] border border-line bg-surface-card py-1 shadow-lg">
+        <Sheet title={title} onClose={() => setOpen(false)} className="md:hidden">
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onEdit();
+              }}
+              className="flex min-h-14 items-center gap-3.5 rounded-xl px-2 text-left text-[17px] font-medium text-ink active:bg-surface-bubble"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M4 20h4L19 9l-4-4L4 16z" />
+              </svg>
+              Редактировать
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onDelete();
+              }}
+              className="flex min-h-14 items-center gap-3.5 rounded-xl px-2 text-left text-[17px] font-medium text-danger-strong active:bg-danger-wash"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 7h14" />
+                <path d="M9 7V4h6v3" />
+                <path d="M7 7l1 13h8l1-13" />
+              </svg>
+              Удалить
+            </button>
+          </div>
+        </Sheet>
+      )}
+
+      {open && (
+        <div className="absolute right-0 top-[26px] z-20 w-[190px] overflow-hidden rounded-[12px] border border-line bg-surface-card py-1 shadow-lg max-md:hidden">
           <button
             type="button"
             onClick={() => {
               setOpen(false);
               onEdit();
             }}
-            className="block w-full px-4 py-2.5 text-left text-[15px] text-ink transition-colors hover:bg-surface-bubble"
+            className="block w-full px-4 py-2.5 text-left text-[15px] text-ink transition-colors hover:bg-surface-bubble max-md:min-h-12 max-md:text-[16px]"
           >
             Редактировать
           </button>
@@ -467,7 +527,7 @@ function CardMenu({
               setOpen(false);
               onDelete();
             }}
-            className="block w-full px-4 py-2.5 text-left text-[15px] text-danger-strong transition-colors hover:bg-danger-soft"
+            className="block w-full px-4 py-2.5 text-left text-[15px] text-danger-strong transition-colors hover:bg-danger-soft max-md:min-h-12 max-md:text-[16px]"
           >
             Удалить
           </button>
