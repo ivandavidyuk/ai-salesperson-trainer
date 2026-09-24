@@ -51,6 +51,30 @@ export const saveInputId = (id: string | null) => write(INPUT_KEY, id);
 export const savedOutputId = () => read(OUTPUT_KEY);
 export const saveOutputId = (id: string | null) => write(OUTPUT_KEY, id);
 
+// Входы Chrome на Android. Выход у него там один, «По умолчанию», а куда
+// пойдёт звук, решает выбранный вход: вместе с микрофоном он переключает
+// и динамик. Подписи Chrome английские, и одна прямо обманывает: «Headset
+// earpiece» — это разговорный динамик телефона, а не наушники. 24.09 Иван
+// выбрал его, приняв за Bluetooth-наушники, и пациент зазвучал из телефона
+// мимо наушников. Подписи — те, что Chrome показал на Pixel; незнакомую
+// оставляем как есть.
+const ВХОДЫ_ANDROID: Record<string, string> = {
+  Speakerphone: "Телефон: громкая связь",
+  "Headset earpiece": "Телефон: у уха",
+  "Bluetooth headset": "Bluetooth-наушники",
+  "Wired headset": "Проводные наушники",
+  "USB audio": "USB-гарнитура",
+};
+
+function подписьНаAndroid(device: MediaDeviceInfo): string | null {
+  // Умолчание Chrome само берёт наушники, если они подключены, а без них —
+  // громкую связь. Так звук и голос идут через одно устройство. Подпись
+  // короткая: длинная обрезалась в закрытом списке на 390 px, а что значит
+  // «Автоматически», объясняет строка под списком
+  if (device.deviceId === "default") return "Автоматически";
+  return ВХОДЫ_ANDROID[device.label] ?? null;
+}
+
 /**
  * Списки устройств. Подписи приходят пустыми, пока не выдано разрешение
  * на микрофон, — поэтому вызывать стоит уже после getUserMedia.
@@ -64,13 +88,17 @@ export async function listDevices(): Promise<{
   }
 
   const all = await navigator.mediaDevices.enumerateDevices();
+  const android = наAndroid();
   const pick = (kind: MediaDeviceKind, fallback: string) =>
     all
       .filter((device) => device.kind === kind)
       .map((device, index) => ({
         id: device.deviceId,
-        // Без разрешения подписи пустые — подставляем хоть что-то осмысленное
-        label: device.label || `${fallback} ${index + 1}`,
+        label:
+          (android && kind === "audioinput" && подписьНаAndroid(device)) ||
+          // Без разрешения подписи пустые — подставляем хоть что-то осмысленное
+          device.label ||
+          `${fallback} ${index + 1}`,
       }));
 
   return {
