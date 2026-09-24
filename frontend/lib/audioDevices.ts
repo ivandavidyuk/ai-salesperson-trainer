@@ -143,6 +143,16 @@ function шагиРазрешения(): string[] {
   ];
 }
 
+/**
+ * Android. Там доступ к микрофону двухэтажный: разрешение сайту в Chrome
+ * и разрешение самому Chrome в настройках телефона. Без второго Chrome
+ * отдаёт сайту микрофон, но вместо звука — тишину, а на запрос снова и
+ * снова показывает своё окно с кнопкой «Продолжить» (Иван, Pixel, 24.09).
+ */
+export function наAndroid(): boolean {
+  return typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+}
+
 /** Страница открыта во встроенном браузере Telegram (по ссылке из чата) */
 function внутриTelegram(): boolean {
   return typeof navigator !== "undefined" && /Telegram/i.test(navigator.userAgent);
