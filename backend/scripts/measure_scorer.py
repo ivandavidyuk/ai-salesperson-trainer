@@ -208,7 +208,10 @@ async def прогон(
         начало = time.monotonic()
         семафор = asyncio.Semaphore(параллельно)
 
-        async def один(short, history, ctx, номер):
+        # Переменные шага цикла привязаны явно: функция и так отрабатывает
+        # внутри своего шага (gather ниже), но ruff этого не видит — B023
+        async def один(short, history, ctx, номер,
+                       семафор=семафор, режим=режим, модель=модель):
             async with семафор:
                 if режим == "этапы":
                     return {"short": short, "run": номер,
@@ -302,7 +305,6 @@ def отчёт(путь: str) -> str:
     for cfg in прогоны["configs"]:
         runs = [r for r in cfg["runs"] if not r.get("failed")]
         сбоев = len(cfg["runs"]) - len(runs)
-        n_runs = len(runs)
         строки.append(f"\n## {cfg['config']}\n")
         токены = cfg.get("tokens", {}).get("по_моделям", {}).get(cfg["model"], {})
         вход, выход = _ЦЕНЫ.get(cfg["model"], (0.0, 0.0))
