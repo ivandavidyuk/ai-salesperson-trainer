@@ -27,6 +27,7 @@ import { AudioPlayer, MicRecorder, primeAudioElement } from "@/lib/voiceClient";
 import {
   listDevices,
   describeMicError,
+  наAndroid,
   onDevicesChanged,
   saveInputId,
   saveOutputId,
@@ -183,6 +184,16 @@ function SessionScreen() {
    * появляется, только когда ждать уже нечего.
    */
   const [checkSilent, setCheckSilent] = useState(false);
+  // На проверке звука от микрофона не пришло ни звука — не тихо, а ноль.
+  // На Android это почти всегда запрет у самого Chrome (см. наAndroid)
+  const [checkDead, setCheckDead] = useState(false);
+  // Узнаём в эффекте, а не при рендере: сервер про устройство не знает,
+  // и разметка первого кадра должна совпасть
+  const [android, setAndroid] = useState(false);
+  // Инструкцию для Android можно свернуть: на узком экране она длинная,
+  // а прочитав, человек уходит в настройки и возвращается уже за кнопкой
+  const [инструкцияОткрыта, setИнструкцияОткрыта] = useState(true);
+  useEffect(() => setAndroid(наAndroid()), []);
   // Проверочный захват на экране до разговора
   const previewRef = useRef<MicRecorder | null>(null);
 
@@ -291,9 +302,14 @@ function SessionScreen() {
   useEffect(() => {
     if (screenState !== "check" || micProven) {
       setCheckSilent(false);
+      setCheckDead(false);
       return;
     }
-    const id = setTimeout(() => setCheckSilent(true), CHECK_SILENCE_MS);
+    const id = setTimeout(() => {
+      setCheckSilent(true);
+      // Звука не было ни разу за всё время проверки — не тихий вход, а ноль
+      setCheckDead(Date.now() - lastSoundAtRef.current >= CHECK_SILENCE_MS);
+    }, CHECK_SILENCE_MS);
     return () => clearTimeout(id);
   }, [screenState, micProven, inputId]);
 
@@ -842,7 +858,15 @@ function SessionScreen() {
                 outputId={outputId}
                 onOutputChange={changeOutput}
                 level={level}
-                status={micProven ? "heard" : checkSilent ? "silent" : "waiting"}
+                status={
+                  micProven
+                    ? "heard"
+                    : checkSilent
+                      ? android && checkDead
+                        ? "no-signal"
+                        : "silent"
+                      : "waiting"
+                }
                 onRefresh={() => void refreshDevices()}
               />
               {micError && (
@@ -851,6 +875,65 @@ function SessionScreen() {
                 </p>
               )}
             </div>
+
+            {/* Android: микрофон виден, а звука ноль — значит, телефон не
+                пускает к нему сам Chrome. Разрешение сайту тут не поможет,
+                нужно разрешение приложению в настройках телефона. Упрётся
+                в это любой, кто когда-то нажал «Не разрешать» */}
+            {!micProven && checkSilent && checkDead && android && (
+              <div className="mt-4 w-full max-w-[440px] rounded-xl border border-warn-border bg-warn-surface px-[18px] py-2 text-left">
+                <button
+                  type="button"
+                  onClick={() => setИнструкцияОткрыта((было) => !было)}
+                  aria-expanded={инструкцияОткрыта}
+                  className="flex min-h-11 w-full items-center gap-2 text-left text-[15px] font-semibold text-warn"
+                >
+                  <span className="flex-1">Дайте Chrome доступ к микрофону телефона</span>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={`shrink-0 transition-transform ${инструкцияОткрыта ? "rotate-180" : ""}`}
+                    aria-hidden="true"
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                {инструкцияОткрыта && (
+                <div className="pb-2">
+                <p className="text-[14.5px] leading-normal text-ink-body">
+                  Сайт видит микрофон, но слышит тишину: у самого Chrome нет
+                  разрешения на микрофон. То же бывает, если Chrome раз за разом
+                  показывает окно с кнопкой «Продолжить».
+                </p>
+                <ol className="mt-2.5 list-inside list-decimal text-[14.5px] leading-relaxed text-ink-body">
+                  <li>
+                    Откройте настройки телефона → «Приложения» → «Chrome» →
+                    «Разрешения» → «Микрофон»
+                  </li>
+                  <li>Выберите «Разрешить только во время использования приложения»</li>
+                  <li>
+                    Проверьте в шторке плитку «Доступ к микрофону» — она должна
+                    быть включена
+                  </li>
+                  <li>Вернитесь сюда и обновите страницу</li>
+                </ol>
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-line-strong bg-surface-card px-4 text-[15px] font-semibold text-ink"
+                >
+                  Обновить страницу
+                </button>
+                </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-6 flex items-center gap-3 max-md:hidden">
               {/* Блокируем только когда микрофон работает, но молчит:
