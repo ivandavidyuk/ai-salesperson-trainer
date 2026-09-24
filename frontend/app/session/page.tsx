@@ -190,6 +190,9 @@ function SessionScreen() {
   // Узнаём в эффекте, а не при рендере: сервер про устройство не знает,
   // и разметка первого кадра должна совпасть
   const [android, setAndroid] = useState(false);
+  // Инструкцию для Android можно свернуть: на узком экране она длинная,
+  // а прочитав, человек уходит в настройки и возвращается уже за кнопкой
+  const [инструкцияОткрыта, setИнструкцияОткрыта] = useState(true);
   useEffect(() => setAndroid(наAndroid()), []);
   // Проверочный захват на экране до разговора
   const previewRef = useRef<MicRecorder | null>(null);
@@ -878,11 +881,32 @@ function SessionScreen() {
                 нужно разрешение приложению в настройках телефона. Упрётся
                 в это любой, кто когда-то нажал «Не разрешать» */}
             {!micProven && checkSilent && checkDead && android && (
-              <div className="mt-4 w-full max-w-[440px] rounded-xl border border-warn-border bg-warn-surface px-[18px] py-4 text-left">
-                <div className="text-[15px] font-semibold text-warn">
-                  Дайте Chrome доступ к микрофону телефона
-                </div>
-                <p className="mt-1.5 text-[14.5px] leading-normal text-ink-body">
+              <div className="mt-4 w-full max-w-[440px] rounded-xl border border-warn-border bg-warn-surface px-[18px] py-2 text-left">
+                <button
+                  type="button"
+                  onClick={() => setИнструкцияОткрыта((было) => !было)}
+                  aria-expanded={инструкцияОткрыта}
+                  className="flex min-h-11 w-full items-center gap-2 text-left text-[15px] font-semibold text-warn"
+                >
+                  <span className="flex-1">Дайте Chrome доступ к микрофону телефона</span>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={`shrink-0 transition-transform ${инструкцияОткрыта ? "rotate-180" : ""}`}
+                    aria-hidden="true"
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                {инструкцияОткрыта && (
+                <div className="pb-2">
+                <p className="text-[14.5px] leading-normal text-ink-body">
                   Сайт видит микрофон, но слышит тишину: у самого Chrome нет
                   разрешения на микрофон. То же бывает, если Chrome раз за разом
                   показывает окно с кнопкой «Продолжить».
@@ -906,6 +930,8 @@ function SessionScreen() {
                 >
                   Обновить страницу
                 </button>
+                </div>
+                )}
               </div>
             )}
 
