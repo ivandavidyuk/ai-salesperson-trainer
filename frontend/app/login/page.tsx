@@ -61,9 +61,9 @@ export default function LoginPage() {
   return (
     // Full-bleed split: панель и форма делят экран целиком, без «плавающей»
     // карточки — так макет одинаково держится и на 1440, и на широком мониторе.
-    <main className="flex min-h-screen">
-      {/* Брендовая панель. На узких экранах скрыта — мобильный макет
-          будет сделан отдельно, сейчас форма просто занимает всю ширину. */}
+    <main className="flex min-h-screen max-md:min-h-dvh">
+      {/* Брендовая панель. На телефоне её место занимают логотип и короткий
+          слоган над формой */}
       <aside className="hidden w-[46%] flex-col justify-between bg-brand px-20 py-[72px] text-white md:flex">
         <Logo tone="on-brand" size="lg" />
 
@@ -83,16 +83,29 @@ export default function LoginPage() {
         </p>
       </aside>
 
-      {/* Форма входа: центрируется в оставшейся части экрана */}
-      <div className="flex flex-1 items-center justify-center bg-surface-card p-6 md:p-[60px]">
-        <form onSubmit={handleSubmit} className="w-full max-w-[420px]">
-          {/* Пока панель скрыта на узких экранах — показываем логотип здесь */}
-          <Logo className="mb-8 md:hidden" />
+      {/* Форма входа: центрируется в оставшейся части экрана. На телефоне
+          идёт сверху вниз, а подпись «Инструмент обучения» прижата к низу */}
+      <div className="flex flex-1 items-center justify-center bg-surface-card p-6 max-md:flex-col max-md:items-stretch max-md:justify-start max-md:px-5 max-md:pb-12 max-md:pt-7 md:p-[60px]">
+        <form onSubmit={handleSubmit} className="group w-full max-w-[420px]">
+          <Logo className="mb-8 md:hidden max-md:mb-9" />
 
-          <h1 className="text-[33px] font-semibold tracking-[-0.01em] text-ink">
+          {/* Слоган прячется, пока открыта клавиатура: иначе поля и кнопка
+              «Войти» уезжают под неё */}
+          <div className="md:hidden group-focus-within:hidden">
+            <p className="text-pretty text-[22px] font-semibold leading-[1.3] tracking-[-0.01em] text-ink">
+              Тренируйте живой разговор с&nbsp;клиентом до&nbsp;звонка
+              настоящему.
+            </p>
+            <p className="mt-2.5 text-[15px] leading-normal text-ink-muted">
+              Голосовой ИИ-тренажёр для менеджеров клиники.
+            </p>
+            <div className="my-9 h-px bg-line" aria-hidden="true" />
+          </div>
+
+          <h1 className="text-[33px] font-semibold tracking-[-0.01em] text-ink max-md:text-[24px]">
             Вход в аккаунт
           </h1>
-          <p className="mt-2 text-base text-ink-muted">
+          <p className="mt-2 text-base text-ink-muted max-md:mt-1.5 max-md:text-[15px]">
             Войдите рабочей почтой клиники.
           </p>
 
@@ -109,7 +122,7 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="manager@clinic.ru"
             disabled={loading}
-            className="mt-8"
+            className="mt-8 max-md:mt-[22px]"
           />
 
           <Field
@@ -124,19 +137,19 @@ export default function LoginPage() {
             disabled={loading}
             invalid={Boolean(error)}
             aria-invalid={Boolean(error)}
-            className="mt-5"
+            className="mt-5 max-md:mt-4"
           />
 
           {/* Восстановления пароля пока нет — ссылка-заглушка, как в макете */}
-          <div className="mt-2.5 flex justify-end">
+          <div className="mt-2.5 flex justify-end max-md:mt-0.5">
             {loading ? (
-              <span className="text-[15px] text-ink-placeholder">
+              <span className="text-[15px] text-ink-placeholder max-md:inline-flex max-md:min-h-11 max-md:items-center">
                 Забыли пароль?
               </span>
             ) : (
               <a
                 href="#"
-                className="text-[15px] text-brand hover:text-brand-hover"
+                className="text-[15px] text-brand hover:text-brand-hover max-md:inline-flex max-md:min-h-11 max-md:items-center"
               >
                 Забыли пароль?
               </a>
@@ -147,11 +160,15 @@ export default function LoginPage() {
             type="submit"
             size="lg"
             loading={loading}
-            className="mt-[26px] w-full"
+            className="mt-[26px] w-full max-md:mt-1.5"
           >
             {loading ? "Входим…" : "Войти"}
           </Button>
         </form>
+
+        <p className="mt-auto pt-10 font-mono text-[13px] tracking-[0.04em] text-ink-subtle md:hidden">
+          Инструмент обучения · внутренний доступ
+        </p>
       </div>
     </main>
   );
