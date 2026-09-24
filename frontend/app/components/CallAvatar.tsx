@@ -18,7 +18,11 @@ interface CallAvatarProps {
 
 const SIZES = {
   md: { box: "h-[150px] w-[150px]", ring: "h-[120px] w-[120px]", face: "h-[110px] w-[110px] text-[35px]" },
-  lg: { box: "h-[230px] w-[230px]", ring: "h-[180px] w-[180px]", face: "h-[168px] w-[168px] text-[53px]" },
+  lg: {
+    box: "h-[230px] w-[230px] max-md:h-[190px] max-md:w-[190px]",
+    ring: "h-[180px] w-[180px] max-md:h-[150px] max-md:w-[150px]",
+    face: "h-[168px] w-[168px] text-[53px] max-md:h-[140px] max-md:w-[140px] max-md:text-[44px]",
+  },
 } as const;
 
 // Оформление круга под состояние

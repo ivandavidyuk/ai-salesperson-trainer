@@ -115,6 +115,34 @@ export interface MicErrorInfo {
  * при запрете человек идёт в настройки сайта, а при отсутствии устройства
  * разрешать нечего — сначала надо его подключить.
  */
+function шагиРазрешения(): string[] {
+  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  // iPad с iPadOS 13+ представляется Маком — выдаёт его сенсорный экран
+  const iOS =
+    /iPhone|iPad|iPod/.test(ua) ||
+    (/Macintosh/.test(ua) && typeof navigator !== "undefined" && navigator.maxTouchPoints > 1);
+  if (iOS) {
+    return [
+      "Нажмите «аА» слева от адреса",
+      "Откройте «Настройки веб-сайта»",
+      "В строке «Микрофон» выберите «Разрешить»",
+      "Вернитесь и нажмите «Повторить»",
+    ];
+  }
+  if (/Android/.test(ua)) {
+    return [
+      "Нажмите на значок слева от адреса",
+      "Откройте «Разрешения» и включите «Микрофон»",
+      "Вернитесь и нажмите «Повторить»",
+    ];
+  }
+  return [
+    "Нажмите на значок замка слева от адреса",
+    "Включите «Микрофон»",
+    "Вернитесь и нажмите «Повторить»",
+  ];
+}
+
 export function describeMicError(error: unknown): MicErrorInfo {
   const name =
     error && typeof error === "object" && "name" in error
@@ -130,11 +158,7 @@ export function describeMicError(error: unknown): MicErrorInfo {
         text:
           "Браузер не пустил нас к микрофону. Разрешите доступ в настройках " +
           "сайта — без него разговор не начнётся.",
-        steps: [
-          "Нажмите на значок замка слева от адреса",
-          "Включите «Микрофон»",
-          "Вернитесь и нажмите «Повторить»",
-        ],
+        steps: шагиРазрешения(),
         retryLabel: "Повторить",
         note: null,
       };
