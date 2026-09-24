@@ -37,8 +37,11 @@ interface AudioDevicePickerProps {
    * `no-signal` — только на Android: не тихо, а ни звука вовсе. Там это
    * почти всегда значит, что у Chrome нет доступа к микрофону телефона,
    * и совет «попробуйте другой микрофон» бесполезен.
+   *
+   * `off` — микрофон не захвачен вовсе (отказ, нет устройства): причину
+   * и шаги показывает ошибка под шкалой, строка статуса только путала бы.
    */
-  status?: "waiting" | "heard" | "silent" | "no-signal";
+  status?: "waiting" | "heard" | "silent" | "no-signal" | "off";
   /** Перечитать список устройств: подключили гарнитуру во время выбора */
   onRefresh?: () => void;
   compact?: boolean;
@@ -182,7 +185,7 @@ export default function AudioDevicePicker({
             обновления оно не появится, пока браузер не пришлёт devicechange.
             Показываем, только когда стало ясно, что текущий вход не годится —
             иначе это ещё одна строка в и без того плотной плашке */}
-        {onRefresh && !compact && status === "silent" && (
+        {onRefresh && !compact && (status === "silent" || status === "no-signal") && (
           <div className="mt-2 flex items-baseline gap-2 text-[13.5px] text-ink-placeholder">
             <span>Подключили новое устройство?</span>
             <button
