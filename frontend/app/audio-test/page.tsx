@@ -17,6 +17,11 @@
 // (выбор динамика на телефоне теперь скрыт, но мог остаться с июля, когда
 // телефон видел десктопную вёрстку), захват через MicRecorder с контекстом
 // на 16 кГц и плеер на MediaSource. Кнопки G–J добавляют их по одному.
+//
+// Иван уточнил: после выдачи доступа в списке было четыре микрофона, и он
+// выбрал микрофон наушников. Если это он — наушники уходят в режим звонка,
+// музыкальный канал отключается, и обычный звук Android отдаёт в динамик.
+// K и L проверяют, идёт ли в наушники звук другими путями при их микрофоне.
 
 import { useEffect, useRef, useState } from "react";
 import { AudioPlayer, MicRecorder } from "@/lib/voiceClient";
@@ -90,15 +95,18 @@ interface ВариантТренажёра {
   savedInput: boolean;
   /** Отправлять звук в сохранённый динамик (setSinkId) */
   savedOutput: boolean;
-  /** Играть плеером тренажёра (MediaSource) или простым <audio> */
-  player: boolean;
+  /** Чем играть: плеер тренажёра (MediaSource), простой <audio>,
+   *  поток через MediaStreamDestination (путь звонков) или Web Audio */
+  how: "player" | "element" | "stream" | "webaudio";
 }
 
 const ВАРИАНТЫ_ТРЕНАЖЁРА: ВариантТренажёра[] = [
-  { key: "G", label: "Тренажёр целиком: его захват, его плеер, сохранённые микрофон и динамик", recorder: true, savedInput: true, savedOutput: true, player: true },
-  { key: "H", label: "Тренажёр без сохранённого: его захват и плеер, устройства по умолчанию", recorder: true, savedInput: false, savedOutput: false, player: true },
-  { key: "I", label: "Только сохранённый динамик: обычный микрофон, <audio> в сохранённый динамик", recorder: false, savedInput: false, savedOutput: true, player: false },
-  { key: "J", label: "Только сохранённый микрофон: он же с эхоподавлением, обычный <audio>", recorder: false, savedInput: true, savedOutput: false, player: false },
+  { key: "G", label: "Тренажёр целиком: его захват, его плеер, сохранённые микрофон и динамик", recorder: true, savedInput: true, savedOutput: true, how: "player" },
+  { key: "H", label: "Тренажёр без сохранённого: его захват и плеер, устройства по умолчанию", recorder: true, savedInput: false, savedOutput: false, how: "player" },
+  { key: "I", label: "Только сохранённый динамик: обычный микрофон, <audio> в сохранённый динамик", recorder: false, savedInput: false, savedOutput: true, how: "element" },
+  { key: "J", label: "Только сохранённый микрофон: он же с эхоподавлением, обычный <audio>", recorder: false, savedInput: true, savedOutput: false, how: "element" },
+  { key: "K", label: "Сохранённый микрофон, звук через поток (путь звонков)", recorder: false, savedInput: true, savedOutput: false, how: "stream" },
+  { key: "L", label: "Сохранённый микрофон, звук через Web Audio", recorder: false, savedInput: true, savedOutput: false, how: "webaudio" },
 ];
 
 function base64(buffer: ArrayBuffer): string {
@@ -183,11 +191,27 @@ export default function AudioTestPage() {
       }));
       await new Promise((r) => setTimeout(r, 1200));
       const mp3 = await (await fetch("/audio-test-tone.mp3")).arrayBuffer();
-      if (вариант.player) {
+      if (вариант.how === "player") {
         player.current = new AudioPlayer();
         player.current.setOutputDevice(outputId);
         player.current.pushChunk(base64(mp3));
         player.current.endUtterance();
+      } else if (вариант.how === "stream" || вариант.how === "webaudio") {
+        const ctx = new AudioContext();
+        await ctx.resume();
+        const source = ctx.createBufferSource();
+        source.buffer = await ctx.decodeAudioData(mp3.slice(0));
+        if (вариант.how === "webaudio") {
+          source.connect(ctx.destination);
+        } else {
+          const dest = ctx.createMediaStreamDestination();
+          source.connect(dest);
+          const audio = new Audio();
+          audio.srcObject = dest.stream;
+          await audio.play();
+        }
+        source.onended = () => void ctx.close();
+        source.start();
       } else {
         const audio = new Audio(URL.createObjectURL(new Blob([mp3], { type: "audio/mpeg" })));
         if (outputId && typeof audio.setSinkId === "function") await audio.setSinkId(outputId);
