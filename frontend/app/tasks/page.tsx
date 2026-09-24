@@ -13,6 +13,7 @@ import PatientInfoModal from "@/app/components/PatientInfoModal";
 import Loader from "@/app/components/Loader";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
 import PatientAvatar from "@/app/components/PatientAvatar";
+import Sheet from "@/app/components/Sheet";
 import { useWords } from "@/app/components/IndustryProvider";
 import { formatDueDate, initials, isOverdue, plural } from "@/lib/format";
 import type { Assignment, DoneAssignment, WizardPatient } from "@/lib/training";
@@ -66,7 +67,7 @@ export default function TasksPage() {
   return (
     <AppShell title="Задания">
       <div className="mx-auto w-full max-w-[980px] px-10 pb-11 pt-[26px] max-md:px-4 max-md:pb-6 max-md:pt-5">
-        <div className="mb-5 flex items-start justify-between gap-4 max-md:mb-4">
+        <div className="mb-5 flex items-start justify-between gap-4 max-md:mb-4 max-md:flex-col max-md:items-stretch max-md:gap-3.5">
           <div>
             <h1 className="text-[22.5px] font-semibold tracking-[-.01em] text-ink max-md:text-[21px]">
               {isHead ? "Выставленные задания" : "От вашего руководителя"}
@@ -89,7 +90,7 @@ export default function TasksPage() {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-brand px-[22px] py-3 text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-brand px-[22px] py-3 text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover max-md:min-h-[52px] max-md:justify-center max-md:py-0 max-md:text-[16px]"
             >
               <svg
                 width="18"
@@ -283,7 +284,7 @@ function AssignmentCard({
               )}
               {isHead && (
                 <span className={due ? "" : "ml-auto"}>
-                  <CardMenu onEdit={onEdit} onDelete={onDelete} />
+                  <CardMenu title={assignment.title} onEdit={onEdit} onDelete={onDelete} />
                 </span>
               )}
             </div>
@@ -302,7 +303,7 @@ function AssignmentCard({
                     {due}
                   </span>
                 )}
-                {isHead && <CardMenu onEdit={onEdit} onDelete={onDelete} />}
+                {isHead && <CardMenu title={assignment.title} onEdit={onEdit} onDelete={onDelete} />}
               </div>
             )}
           </div>
@@ -340,7 +341,7 @@ function AssignmentCard({
 
             {/* Кому назначено — только у руководителя, у менеджера это он сам */}
             {isHead && assignment.assignee && (
-              <span className="ml-auto inline-flex items-center gap-2.5 rounded-full border border-line-accent bg-surface-accent py-[5px] pl-1.5 pr-3.5">
+              <span className="ml-auto inline-flex items-center gap-2.5 rounded-full border border-line-accent bg-surface-accent py-[5px] pl-1.5 pr-3.5 max-md:ml-0">
                 <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-soft text-[13px] font-semibold text-brand">
                   {assignment.assignee.avatarUpdatedAt ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -412,9 +413,12 @@ function AssignmentCard({
  * с переходом к расшифровке.
  */
 function CardMenu({
+  title,
   onEdit,
   onDelete,
 }: {
+  /** Название задания — заголовок листа на телефоне */
+  title: string;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -449,8 +453,64 @@ function CardMenu({
         ⋯
       </button>
 
+      {/* Телефон: вместо выпадающего меню — лист снизу, как в макете */}
       {open && (
-        <div className="absolute right-0 top-[26px] z-20 w-[190px] overflow-hidden rounded-[12px] border border-line bg-surface-card py-1 shadow-lg max-md:top-9 max-md:w-[220px]">
+        <Sheet title={title} onClose={() => setOpen(false)} className="md:hidden">
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onEdit();
+              }}
+              className="flex min-h-14 items-center gap-3.5 rounded-xl px-2 text-left text-[17px] font-medium text-ink active:bg-surface-bubble"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M4 20h4L19 9l-4-4L4 16z" />
+              </svg>
+              Редактировать
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onDelete();
+              }}
+              className="flex min-h-14 items-center gap-3.5 rounded-xl px-2 text-left text-[17px] font-medium text-danger-strong active:bg-danger-wash"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 7h14" />
+                <path d="M9 7V4h6v3" />
+                <path d="M7 7l1 13h8l1-13" />
+              </svg>
+              Удалить
+            </button>
+          </div>
+        </Sheet>
+      )}
+
+      {open && (
+        <div className="absolute right-0 top-[26px] z-20 w-[190px] overflow-hidden rounded-[12px] border border-line bg-surface-card py-1 shadow-lg max-md:hidden">
           <button
             type="button"
             onClick={() => {

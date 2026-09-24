@@ -22,6 +22,14 @@ import {
 } from "@/lib/score";
 import type { StatsPeriod, TeamMemberStats } from "@/lib/team";
 
+// Порядок карточек подиума на телефоне: в ряд их ставят «второй, первый,
+// третий», в столбик — сверху вниз с первого места
+const ПОРЯДОК_ТЕЛЕФОН: Record<number, string> = {
+  1: "max-md:order-1",
+  2: "max-md:order-2",
+  3: "max-md:order-3",
+};
+
 /**
  * Как называется каждый период на экране.
  *
@@ -149,7 +157,10 @@ function PodiumCard({
   onOpen: () => void;
 }) {
   return (
-    <div style={{ paddingTop: place === 1 ? 0 : 48 }} className="w-[340px] shrink-0">
+    <div
+      style={{ paddingTop: place === 1 ? 0 : 48 }}
+      className={`w-[340px] shrink-0 max-md:w-auto max-md:!pt-0 ${ПОРЯДОК_ТЕЛЕФОН[place] ?? ""}`}
+    >
       <div className="flex flex-col overflow-hidden rounded-2xl border border-line bg-surface-card shadow-[0_1px_2px_rgba(20,40,38,.04)] transition-[box-shadow,transform] duration-200 hover:-translate-y-[3px] hover:shadow-[0_22px_44px_-26px_rgba(20,40,38,.42)]">
         <div className={`relative h-24 ${PLACE_BANNER[place] ?? "bg-surface-accent"}`}>
           <span
@@ -213,7 +224,7 @@ function PodiumCard({
           <button
             type="button"
             onClick={onOpen}
-            className="mt-[22px] inline-flex w-full items-center justify-center gap-2 rounded-[11px] bg-brand px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-hover"
+            className="mt-[22px] inline-flex w-full items-center justify-center gap-2 rounded-[11px] bg-brand px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-hover max-md:min-h-[52px] max-md:rounded-xl max-md:py-0 max-md:text-[16px]"
           >
             Смотреть статистику
             <svg
@@ -248,31 +259,31 @@ function OtherRow({
   onOpen: () => void;
 }) {
   return (
-    <div className="flex items-center gap-[18px] rounded-[14px] border border-line bg-surface-card px-5 py-3.5">
+    <div className="flex items-center gap-[18px] rounded-[14px] border border-line bg-surface-card px-5 py-3.5 max-md:gap-2.5 max-md:rounded-2xl max-md:px-3 max-md:py-3">
       <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-surface-bubble font-mono text-[14.5px] text-ink-muted">
         {place}
       </span>
       <Avatar manager={manager} size={44} />
 
       <div className="min-w-0 flex-1">
-        <div className="text-[16.5px] font-semibold text-ink">{manager.name}</div>
-        <div className="mt-px text-[14px] text-ink-subtle">{manager.jobTitle}</div>
+        <div className="text-[16.5px] font-semibold text-ink max-md:break-words max-md:text-[15px] max-md:leading-tight">{manager.name}</div>
+        <div className="mt-px text-[14px] text-ink-subtle max-md:hidden">{manager.jobTitle}</div>
       </div>
 
-      <div className="w-24 text-center">
-        <div className={`font-mono text-[20.5px] ${scoreClass(manager.periodScore)}`}>
+      <div className="w-24 text-center max-md:w-auto">
+        <div className={`font-mono text-[20.5px] max-md:text-[17px] ${scoreClass(manager.periodScore)}`}>
           {manager.periodScore ?? "—"}
         </div>
-        <div className="mt-0.5 text-[12.5px] text-ink-subtle">
+        <div className="mt-0.5 text-[12.5px] text-ink-subtle max-md:text-[12px] max-md:leading-tight">
           {manager.periodCount === 0 ? "нет разговоров" : "средняя"}
         </div>
       </div>
-      <div className="w-[84px] text-center">
+      <div className="w-[84px] text-center max-md:hidden">
         <div className="font-mono text-[20.5px] text-ink">{manager.total}</div>
         <div className="mt-0.5 text-[12.5px] text-ink-subtle">разговоров</div>
       </div>
       {подписи.key !== "all" && (
-        <div className="w-[84px] text-center">
+        <div className="w-[84px] text-center max-md:hidden">
           <div className="font-mono text-[20.5px] text-ink">
             {manager.periodCount}
           </div>
@@ -281,8 +292,8 @@ function OtherRow({
           </div>
         </div>
       )}
-      <div className="w-[84px] text-center">
-        <div className="font-mono text-[20.5px] text-ink">
+      <div className="w-[84px] text-center max-md:w-auto">
+        <div className="font-mono text-[20.5px] text-ink max-md:text-[17px]">
           {formatDealsRate(manager.periodPaidDeals, manager.periodDealTotal).label}
         </div>
         <div className="mt-0.5 text-[12.5px] text-ink-subtle">закрыто</div>
@@ -291,9 +302,25 @@ function OtherRow({
       <button
         type="button"
         onClick={onOpen}
-        className="shrink-0 whitespace-nowrap rounded-[10px] border border-line-accent bg-surface-accent px-[18px] py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-brand-soft"
+        aria-label="Смотреть статистику"
+        className="shrink-0 whitespace-nowrap rounded-[10px] border border-line-accent bg-surface-accent px-[18px] py-2.5 text-[15px] font-semibold text-brand-hover transition-colors hover:bg-brand-soft max-md:-mr-1.5 max-md:inline-flex max-md:h-11 max-md:w-11 max-md:items-center max-md:justify-center max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:text-ink-icon"
       >
-        Смотреть статистику
+        {/* На телефоне на слова нет места — стрелка, как у строки списка */}
+        <span className="max-md:hidden">Смотреть статистику</span>
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="md:hidden"
+          aria-hidden="true"
+        >
+          <path d="M9 6l6 6-6 6" />
+        </svg>
       </button>
     </div>
   );
@@ -462,7 +489,7 @@ export default function StatsPage() {
 
   return (
     <AppShell title="Статистика">
-      <div className="mx-auto w-full max-w-[1520px] px-10 pb-9 pt-[30px]">
+      <div className="mx-auto w-full max-w-[1520px] px-10 pb-9 pt-[30px] max-md:px-4 max-md:pb-6 max-md:pt-4">
         {forbidden && (
           <div className="rounded-[14px] border border-line bg-surface-card px-6 py-14 text-center">
             <div className="text-[16.5px] font-semibold text-ink">
@@ -483,8 +510,10 @@ export default function StatsPage() {
 
         {!forbidden && (
           <>
-            <div className="mb-2 flex items-baseline justify-between gap-3">
-              <div>
+            {/* На телефоне заголовок уже в шапке — остаётся переключатель
+                периода во всю ширину */}
+            <div className="mb-2 flex items-baseline justify-between gap-3 max-md:mb-0 max-md:block">
+              <div className="max-md:hidden">
                 <h1 className="text-[22.5px] font-semibold tracking-[-.01em] text-ink">
                   Менеджеры отдела
                 </h1>
@@ -497,14 +526,14 @@ export default function StatsPage() {
               {/* Переключатель периода. Неделя показывает форму сейчас, но
                   отдел, где на неделе тренировался один человек, витрину
                   не наполнит — и посмотреть на людей всё равно нужно */}
-              <div className="flex shrink-0 items-center gap-1 rounded-[11px] border border-line bg-surface-card p-1">
+              <div className="flex shrink-0 items-center gap-1 rounded-[11px] border border-line bg-surface-card p-1 max-md:grid max-md:grid-cols-3 max-md:rounded-xl">
                 {PERIODS.map((item) => (
                   <button
                     key={item.key}
                     type="button"
                     onClick={() => setPeriod(item.key)}
                     aria-pressed={item.key === period}
-                    className={`rounded-[8px] px-3.5 py-1.5 text-[14px] font-semibold transition-colors ${
+                    className={`rounded-[8px] px-3.5 py-1.5 text-[14px] font-semibold transition-colors max-md:min-h-11 max-md:rounded-[9px] max-md:px-1 max-md:text-[15px] ${
                       item.key === period
                         ? "bg-brand text-white"
                         : "text-ink-muted hover:bg-surface-bubble"
@@ -533,16 +562,16 @@ export default function StatsPage() {
             )}
 
             {team && team.length > 0 && (
-              <div className="pt-[22px]">
+              <div className="pt-[22px] max-md:pt-3.5">
                 {/* Сводка: средняя по отделу и награды */}
-                <div className="mx-auto mb-[26px] flex max-w-[1140px] items-stretch gap-6 rounded-2xl border border-line bg-surface-card px-[26px] py-5">
-                  <div className="flex shrink-0 flex-col justify-center border-r border-line-soft pr-[26px]">
-                    <div className="text-[12.5px] uppercase tracking-[.06em] text-ink-subtle">
+                <div className="mx-auto mb-[26px] flex max-w-[1140px] items-stretch gap-6 rounded-2xl border border-line bg-surface-card px-[26px] py-5 max-md:mb-5 max-md:grid max-md:grid-cols-2 max-md:gap-2.5 max-md:border-0 max-md:bg-transparent max-md:p-0">
+                  <div className="flex shrink-0 flex-col justify-center border-r border-line-soft pr-[26px] max-md:min-w-0 max-md:justify-start max-md:rounded-2xl max-md:border max-md:border-line max-md:bg-surface-card max-md:p-3.5">
+                    <div className="text-[12.5px] uppercase tracking-[.06em] text-ink-subtle max-md:text-[12px]">
                       Средняя оценка отдела
                     </div>
                     <div className="mt-1.5 flex items-baseline gap-1.5">
                       <span
-                        className={`font-mono text-[41px] font-medium leading-none ${scoreClass(teamAvg)}`}
+                        className={`font-mono text-[41px] font-medium leading-none max-md:text-[30px] ${scoreClass(teamAvg)}`}
                       >
                         {teamAvg ?? "—"}
                       </span>
@@ -550,7 +579,7 @@ export default function StatsPage() {
                         / 10
                       </span>
                     </div>
-                    <div className="mt-[7px] whitespace-nowrap text-xs text-ink-subtle">
+                    <div className="mt-[7px] whitespace-nowrap text-xs text-ink-subtle max-md:whitespace-normal max-md:text-[13px]">
                       {team.length}{" "}
                       {plural(team.length, "менеджер", "менеджера", "менеджеров")} ·{" "}
                       {подписи.count}
@@ -559,14 +588,14 @@ export default function StatsPage() {
 
                   {/* Процент по отделу — ориентир для менеджера: сравнение
                       идёт с отделом, а не со ста процентами */}
-                  <div className="flex shrink-0 flex-col justify-center border-r border-line-soft pr-[26px]">
-                    <div className="text-[12.5px] uppercase tracking-[.06em] text-ink-subtle">
+                  <div className="flex shrink-0 flex-col justify-center border-r border-line-soft pr-[26px] max-md:min-w-0 max-md:justify-start max-md:rounded-2xl max-md:border max-md:border-line max-md:bg-surface-card max-md:p-3.5">
+                    <div className="text-[12.5px] uppercase tracking-[.06em] text-ink-subtle max-md:text-[12px]">
                       Закрытых сделок
                     </div>
-                    <div className="mt-1.5 font-mono text-[41px] font-medium leading-none text-ink">
+                    <div className="mt-1.5 font-mono text-[41px] font-medium leading-none text-ink max-md:text-[30px]">
                       {teamDeals.label}
                     </div>
-                    <div className="mt-[7px] whitespace-nowrap text-xs text-ink-subtle">
+                    <div className="mt-[7px] whitespace-nowrap text-xs text-ink-subtle max-md:whitespace-normal max-md:text-[13px]">
                       {teamDeals.hint ?? подписи.deals}
                     </div>
                   </div>
@@ -579,11 +608,11 @@ export default function StatsPage() {
                     // ярлык: «Работает над собой» ломался на три строки.
                     // В два столбца на карточку приходится 330px — содержимое
                     // помещается в строку, и высота карточек выравнивается.
-                    <div className="grid flex-1 grid-cols-2 gap-3.5">
+                    <div className="grid flex-1 grid-cols-2 gap-3.5 max-md:col-span-2 max-md:grid-cols-1 max-md:gap-2.5">
                       {awards.map((award) => (
                         <div
                           key={award.label}
-                          className="flex min-w-0 items-center gap-3 rounded-xl border border-line-soft bg-surface px-3.5 py-3"
+                          className="flex min-w-0 items-center gap-3 rounded-xl border border-line-soft bg-surface px-3.5 py-3 max-md:rounded-2xl max-md:border-line max-md:bg-surface-card"
                         >
                           <Avatar manager={award.manager} size={40} />
                           <div className="min-w-0">
@@ -603,7 +632,7 @@ export default function StatsPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="flex flex-1 items-center text-[15px] text-ink-muted">
+                    <div className="flex flex-1 items-center text-[15px] text-ink-muted max-md:col-span-2 max-md:rounded-2xl max-md:border max-md:border-dashed max-md:border-line-strong max-md:p-4">
                       Награды появятся, когда у менеджеров наберутся разговоры.
                     </div>
                   )}
@@ -611,7 +640,7 @@ export default function StatsPage() {
 
                 {/* Подиум: второй, первый, третий */}
                 {hasPodium && (
-                  <div className="mx-auto mb-[30px] flex max-w-[1140px] items-start justify-center gap-[22px]">
+                  <div className="mx-auto mb-[30px] flex max-w-[1140px] items-start justify-center gap-[22px] max-md:mb-5 max-md:flex-col max-md:items-stretch max-md:gap-3">
                     {podium.map((manager) => (
                       <PodiumCard
                         key={manager.id}

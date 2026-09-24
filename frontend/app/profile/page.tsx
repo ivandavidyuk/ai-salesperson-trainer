@@ -1066,7 +1066,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
               </p>
             </div>
           ) : (
-            <div className="mt-5 flex items-center justify-between gap-5 border-t border-line-soft pt-[18px]">
+            <div className="mt-5 flex items-center justify-between gap-5 border-t border-line-soft pt-[18px] max-md:flex-col max-md:items-stretch max-md:gap-3">
               <p className="max-w-[520px] text-[14px] leading-normal text-ink-muted">
                 {!filled
                   ? слова.заполнитеВсё
@@ -1079,7 +1079,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                 onClick={handleSave}
                 loading={busy}
                 disabled={!filled || !changed}
-                className="shrink-0 px-6 py-[11px] text-[16px]"
+                className="shrink-0 px-6 py-[11px] text-[16px] max-md:min-h-[52px] max-md:rounded-xl"
               >
                 Сохранить
               </Button>
@@ -1549,8 +1549,8 @@ function RebuildModal({
   const pct = progress.total > 0 ? Math.round((progress.ready / progress.total) * 100) : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50">
-      <div className="w-[520px] rounded-[18px] bg-surface-card px-[34px] pb-7 pt-8 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 max-md:items-end max-md:p-0">
+      <div className="w-[520px] rounded-[18px] bg-surface-card px-[34px] pb-7 pt-8 shadow-2xl max-md:max-h-[88dvh] max-md:w-full max-md:rounded-b-none max-md:rounded-t-[24px] max-md:px-5 max-md:pb-5 max-md:pt-6">
         <div className="flex items-center gap-4">
           <Loader />
           <div>
@@ -1579,11 +1579,11 @@ function RebuildModal({
           Заглянете сюда позже, прогресс и результат будут на этой странице.
         </p>
 
-        <div className="mt-5 flex justify-end">
+        <div className="mt-5 flex justify-end max-md:mt-3">
           <button
             type="button"
             onClick={onGiveUp}
-            className="text-[15px] font-medium text-ink-muted hover:text-ink"
+            className="text-[15px] font-medium text-ink-muted hover:text-ink max-md:min-h-11 max-md:w-full"
           >
             Перестать ждать
           </button>
@@ -1609,8 +1609,8 @@ function FailedModal({
   const pct = total > 0 ? (ready / total) * 100 : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50">
-      <div className="w-[520px] rounded-[18px] bg-surface-card px-[34px] pb-7 pt-8 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 max-md:items-end max-md:p-0">
+      <div className="w-[520px] rounded-[18px] bg-surface-card px-[34px] pb-7 pt-8 shadow-2xl max-md:max-h-[88dvh] max-md:w-full max-md:rounded-b-none max-md:rounded-t-[24px] max-md:px-5 max-md:pb-5 max-md:pt-6">
         <div className="flex items-center gap-4">
           <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-warn-surface text-[21.5px] text-warn">
             !
@@ -1637,15 +1637,15 @@ function FailedModal({
           продолжит с того места, где остановилась.
         </p>
 
-        <div className="mt-[22px] flex justify-end gap-2.5">
+        <div className="mt-[22px] flex justify-end gap-2.5 max-md:flex-col-reverse">
           <button
             type="button"
             onClick={onLater}
-            className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-[11px] text-[15.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble"
+            className="rounded-[10px] border border-line-strong bg-surface-card px-5 py-[11px] text-[15.5px] font-semibold text-ink transition-colors hover:bg-surface-bubble max-md:min-h-[52px] max-md:rounded-xl max-md:py-0 max-md:text-[16px]"
           >
             Позже
           </button>
-          <Button type="button" onClick={onRetry} className="px-[22px] py-[11px] text-[15.5px]">
+          <Button type="button" onClick={onRetry} className="px-[22px] py-[11px] text-[15.5px] max-md:min-h-[52px] max-md:rounded-xl max-md:py-0 max-md:text-[16px]">
             Собрать заново
           </Button>
         </div>

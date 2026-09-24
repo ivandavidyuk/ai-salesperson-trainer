@@ -26,7 +26,11 @@ export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-surface px-5 pb-20 pt-6 md:px-8">
       <div className="mx-auto max-w-[760px]">
-        <Link href="/start" aria-label="podhod.tech — на главную лендинга">
+        <Link
+          href="/start"
+          aria-label="podhod.tech — на главную лендинга"
+          className="max-md:-my-3 max-md:inline-flex max-md:min-h-11 max-md:items-center"
+        >
           <Logo size="sm" />
         </Link>
 

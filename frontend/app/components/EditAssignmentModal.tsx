@@ -141,11 +141,12 @@ export default function EditAssignmentModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-10">
-        <div className="flex max-h-full w-[620px] flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-2xl">
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line px-6 py-[18px]">
+      {/* На телефоне правка — экран целиком, поля столбиком */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-10 max-md:p-0">
+        <div className="flex max-h-full w-[620px] flex-col overflow-hidden rounded-[18px] bg-surface-card shadow-2xl max-md:h-dvh max-md:max-h-none max-md:w-full max-md:rounded-none">
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line px-6 py-[18px] max-md:gap-2 max-md:py-3 max-md:pl-4 max-md:pr-2">
             <div>
-              <div className="text-[19px] font-semibold text-ink">
+              <div className="text-[19px] font-semibold text-ink max-md:text-[18px]">
                 Правка задания
               </div>
               {черновик.managerName && (
@@ -162,13 +163,13 @@ export default function EditAssignmentModal({
               type="button"
               onClick={onClose}
               title="Закрыть"
-              className="-mr-1 shrink-0 rounded-lg px-2 py-1 text-[22px] leading-none text-ink-icon transition-colors hover:bg-surface-bubble hover:text-ink-body"
+              className="-mr-1 shrink-0 rounded-lg px-2 py-1 text-[22px] leading-none text-ink-icon transition-colors hover:bg-surface-bubble hover:text-ink-body max-md:mr-0 max-md:h-11 max-md:w-11 max-md:p-0 max-md:text-[28px] max-md:text-ink-muted"
             >
               ×
             </button>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-6 py-[22px]">
+          <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-6 py-[22px] max-md:gap-4 max-md:px-4 max-md:py-4">
             <Field
               label="Заголовок"
               value={черновик.title}
@@ -178,7 +179,7 @@ export default function EditAssignmentModal({
               placeholder={слова.примерЗадания}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1 max-md:gap-2">
               <Field
                 label="Срок"
                 type="date"
@@ -187,7 +188,7 @@ export default function EditAssignmentModal({
                   setЧерновик({ ...черновик, dueAt: event.target.value })
                 }
               />
-              <label className="flex cursor-pointer items-end gap-2.5 pb-3">
+              <label className="flex cursor-pointer items-end gap-2.5 pb-3 max-md:min-h-11 max-md:items-center max-md:pb-0">
                 <input
                   type="checkbox"
                   checked={черновик.isPriority}
@@ -197,9 +198,9 @@ export default function EditAssignmentModal({
                       isPriority: event.target.checked,
                     })
                   }
-                  className="h-[18px] w-[18px] accent-brand"
+                  className="h-[18px] w-[18px] accent-brand max-md:h-5 max-md:w-5"
                 />
-                <span className="text-sm text-ink-body">
+                <span className="text-sm text-ink-body max-md:text-[16px]">
                   Приоритетное задание
                 </span>
               </label>
@@ -255,18 +256,18 @@ export default function EditAssignmentModal({
                   setЧерновик({ ...черновик, comment: event.target.value })
                 }
                 placeholder="Например: отвечай выгодой клиента, а не оправданием цены"
-                className="min-h-[96px] w-full resize-y rounded-xl border-[length:1.5px] border-line bg-surface-card px-3.5 py-3 text-sm leading-normal text-ink outline-none transition-colors placeholder:text-ink-placeholder focus:border-brand"
+                className="min-h-[96px] w-full resize-y rounded-xl border-[length:1.5px] border-line bg-surface-card px-3.5 py-3 text-sm leading-normal text-ink outline-none transition-colors placeholder:text-ink-placeholder focus:border-brand max-md:text-[16px]"
               />
             </div>
 
             {error && <p className="text-sm text-danger-text">{error}</p>}
           </div>
 
-          <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-line bg-surface-card px-6 py-[15px]">
+          <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-line bg-surface-card px-6 py-[15px] max-md:px-4 max-md:pb-4 max-md:pt-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-1 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink-body"
+              className="px-1 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink-body max-md:inline-flex max-md:min-h-[52px] max-md:flex-1 max-md:items-center max-md:justify-center max-md:rounded-xl max-md:border max-md:border-line-strong max-md:py-0 max-md:text-[16px] max-md:font-semibold max-md:text-ink"
             >
               Отмена
             </button>
@@ -274,7 +275,7 @@ export default function EditAssignmentModal({
               type="button"
               onClick={handleSave}
               disabled={saving || черновик.title.trim() === ""}
-              className="inline-flex items-center gap-2 rounded-input bg-brand px-[26px] py-[13px] text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted"
+              className="inline-flex items-center gap-2 rounded-input bg-brand px-[26px] py-[13px] text-[16.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-brand-muted max-md:min-h-[52px] max-md:flex-[1.6] max-md:justify-center max-md:rounded-xl max-md:py-0 max-md:text-[16px]"
             >
               {saving && <Spinner />}
               Сохранить
@@ -322,7 +323,7 @@ function ВыборСтрокой({
       <div className="flex items-center gap-3 rounded-xl border-[length:1.5px] border-line bg-surface-card p-3">
         {слева}
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15.5px] font-semibold text-ink">
+          <div className="truncate text-[15.5px] font-semibold text-ink max-md:whitespace-normal">
             {заголовок}
           </div>
           {подпись && (
@@ -332,7 +333,7 @@ function ВыборСтрокой({
         <button
           type="button"
           onClick={onChange}
-          className="shrink-0 rounded-[10px] border border-line-strong bg-surface-card px-[15px] py-2 text-sm font-semibold text-ink transition-colors hover:bg-surface-bubble"
+          className="shrink-0 rounded-[10px] border border-line-strong bg-surface-card px-[15px] py-2 text-sm font-semibold text-ink transition-colors hover:bg-surface-bubble max-md:min-h-11 max-md:text-[15px]"
         >
           Изменить
         </button>

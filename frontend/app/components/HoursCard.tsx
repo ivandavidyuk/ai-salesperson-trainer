@@ -88,8 +88,8 @@ export function HoursCard() {
   }[вид];
 
   return (
-    <div className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px]">
-      <div className="flex items-start justify-between gap-4">
+    <div className="shrink-0 rounded-2xl border border-line bg-surface-card px-6 py-[22px] max-md:px-4 max-md:py-4">
+      <div className="flex items-start justify-between gap-4 max-md:flex-col max-md:gap-2">
         <div>
           <div className="text-[17px] font-semibold text-ink">Часы разговоров</div>
           <p className="mt-1 max-w-[430px] text-[14.5px] leading-normal text-ink-muted">
@@ -102,11 +102,12 @@ export function HoursCard() {
         </span>
       </div>
 
-      <div className="mt-5 flex items-end gap-3">
-        <span className={`font-mono text-[39px] leading-none ${числоЦвет}`}>
+      {/* На телефоне подпись под числом: рядом «58 ч 28 мин» не помещалось в строку */}
+      <div className="mt-5 flex items-end gap-3 max-md:mt-4 max-md:flex-col max-md:items-start max-md:gap-1">
+        <span className={`font-mono text-[39px] leading-none max-md:text-[32px] ${числоЦвет}`}>
           {вид === "out" ? "0 ч" : formatHours(hours.leftSec)}
         </span>
-        <span className="pb-1 text-[14.5px] text-ink-muted">
+        <span className="pb-1 text-[14.5px] text-ink-muted max-md:pb-0">
           {вид === "out" ? "новые разговоры не начинаются" : "осталось в этом месяце"}
         </span>
       </div>
@@ -117,7 +118,7 @@ export function HoursCard() {
           style={{ width: `${Math.max(0, Math.min(100, процент))}%` }}
         />
       </div>
-      <div className="mt-2 flex justify-between gap-3 font-mono text-[13px] text-ink-muted">
+      <div className="mt-2 flex justify-between gap-3 font-mono text-[13px] text-ink-muted max-md:flex-col max-md:gap-0.5">
         <span>
           потрачено {formatHours(hours.usedSec)} из {лимитЧасов} ч
         </span>

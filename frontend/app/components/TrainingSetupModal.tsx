@@ -575,21 +575,21 @@ export default function TrainingSetupModal({
                   placeholder={слова.примерЗадания}
                 />
 
-                <div className="mt-3.5 grid grid-cols-2 gap-4">
+                <div className="mt-3.5 grid grid-cols-2 gap-4 max-md:grid-cols-1 max-md:gap-2">
                   <Field
                     label="Срок"
                     type="date"
                     value={dueAt}
                     onChange={(event) => setDueAt(event.target.value)}
                   />
-                  <label className="flex cursor-pointer items-end gap-2.5 pb-3">
+                  <label className="flex cursor-pointer items-end gap-2.5 pb-3 max-md:min-h-11 max-md:items-center max-md:pb-0">
                     <input
                       type="checkbox"
                       checked={isPriority}
                       onChange={(event) => setIsPriority(event.target.checked)}
-                      className="h-[18px] w-[18px] accent-brand"
+                      className="h-[18px] w-[18px] accent-brand max-md:h-5 max-md:w-5"
                     />
-                    <span className="text-sm text-ink-body">
+                    <span className="text-sm text-ink-body max-md:text-[16px]">
                       Приоритетное задание
                     </span>
                   </label>
