@@ -87,6 +87,80 @@ async def _расход() -> float:
         return float(r.json()["data"]["usage"])
 
 
+async def _по_этапам(history: list[dict], ctx: dict, модель: str) -> dict:
+    """Разбор пятью вызовами параллельно — по одному на этап.
+
+    Идея Ивана 24.09: luna с размышлением точнее, но думает 30 секунд над
+    всеми 25 пунктами сразу. Вызов на этап обдумывает пять — должен быть
+    быстрее, а этапы можно показывать по мере готовности. Исход сделки
+    определяет вызов закрытия: ему нужна та же часть инструкций, что
+    итоговому оценщику. Сверка номеров реплик и подсчёт — функции из боя.
+    Выводы (сильная сторона, точка роста) здесь не меряются: их делает
+    отдельный быстрый вызов после этапов.
+    """
+    from services import checklist, scoring
+    from services.industry import translate as по_отрасли
+
+    industry = ctx["industry"]
+    расшифровка = checklist.format_numbered(history, industry)
+    про_исход = scoring._FINAL_INSTRUCTIONS.split("ВЫВОДЫ для менеджера")[0].strip()
+
+    async def этап(key: str) -> dict:
+        system = scoring.build_rubric(stages=(key,), industry=industry)
+        поля = ""
+        if key == "closing":
+            system += "\n\n" + по_отрасли(про_исход, industry)
+            поля = '"paymentOffered": true | false, "outcome": "paid" | "refused" | "not_asked", '
+        elif key == "objections":
+            поля = '"objectionsRaised": true | false, '
+        user = (
+            по_отрасли("РОЛЬ ПАЦИЕНТА (по ней он и играл, здесь же условия ", industry)
+            + f"его согласия):\n\n{ctx['patient_prompt']}\n\n"
+            "РАСШИФРОВКА РАЗГОВОРА (число в скобках — номер реплики, "
+            "его указывают в evidence):\n\n"
+            f"{расшифровка}\n\n"
+            "Оцени ТОЛЬКО этот этап. Верни JSON: {"
+            f"{поля}{checklist.marks_schema((key,))}}}"
+        )
+        t0 = time.monotonic()
+        result = await scoring.ask_json(
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            model=модель, purpose=f"этап {key}", attempts=3,
+        ) or {}
+        не_измерен = (key,) if key == "objections" and result.get("objectionsRaised") is False else ()
+        marks = checklist.marks_by_stage(result.get("marks"), (key,), unmeasured=не_измерен)
+        marks, msgs, dropped = checklist.ground(marks, result.get("evidence"), history, (key,))
+        return {
+            "key": key, "seconds": round(time.monotonic() - t0, 1), "ok": bool(result),
+            "marks": marks[key], "msgs": msgs[key], "dropped": dropped,
+            "outcome": result.get("outcome"),
+        }
+
+    t0 = time.monotonic()
+    этапы = await asyncio.gather(*[этап(k) for k in checklist.STAGE_KEYS_ALL])
+    по_ключу = {э["key"]: э for э in этапы}
+    оценки = {k: checklist.stage_score(по_ключу[k]["marks"]) for k in checklist.STAGE_KEYS_ALL}
+    marks, msgs = {}, {}
+    for (key, a, _b) in _ЭТАПЫ:
+        for i in range(5):
+            значения = по_ключу[key]["marks"]
+            marks[str(a + i)] = значения[i] if значения is not None else None
+            msgs[str(a + i)] = по_ключу[key]["msgs"][i]
+    outcome = по_ключу["closing"]["outcome"]
+    return {
+        "failed": not all(э["ok"] for э in этапы),
+        "seconds": round(time.monotonic() - t0, 1),
+        "stage_seconds": {э["key"]: э["seconds"] for э in этапы},
+        "outcome": outcome if outcome in ("paid", "refused", "not_asked") else None,
+        "overall": checklist.overall(оценки),
+        "stages": оценки,
+        "marks": marks,
+        "msgs": msgs,
+        "dropped": sum(э["dropped"] for э in этапы),
+        "attempts": len(этапы),
+    }
+
+
 async def прогон(
     конфиги: list[str], прогонов: int, разговоры: list[str], параллельно: int = _ПАРАЛЛЕЛЬНО
 ) -> dict:
@@ -121,7 +195,9 @@ async def прогон(
     итог = {"configs": []}
 
     for конфиг in конфиги:
-        модель, температура, усилие = (конфиг.split("@") + ["", ""])[:3]
+        # «…#этапы» — разбор пятью параллельными вызовами, по этапу на вызов
+        основа, _, режим = конфиг.partition("#")
+        модель, температура, усилие = (основа.split("@") + ["", ""])[:3]
         настройки.final_scorer_model = модель
         scoring.ask_json = functools.partial(
             исходный_ask,
@@ -134,6 +210,9 @@ async def прогон(
 
         async def один(short, history, ctx, номер):
             async with семафор:
+                if режим == "этапы":
+                    return {"short": short, "run": номер,
+                            **await _по_этапам(history, ctx, модель)}
                 попытки.set([])
                 t0 = time.monotonic()
                 review = await scoring.review_conversation(
