@@ -193,6 +193,9 @@ function SessionScreen() {
   // Инструкцию для Android можно свернуть: на узком экране она длинная,
   // а прочитав, человек уходит в настройки и возвращается уже за кнопкой
   const [инструкцияОткрыта, setИнструкцияОткрыта] = useState(true);
+  // «Повторить» на шаге проверки: заново запросить микрофон, не уходя
+  // с экрана, — после того как человек поправил разрешение в настройках
+  const [попыткаПроверки, setПопыткаПроверки] = useState(0);
   useEffect(() => setAndroid(наAndroid()), []);
   // Проверочный захват на экране до разговора
   const previewRef = useRef<MicRecorder | null>(null);
@@ -292,7 +295,7 @@ function SessionScreen() {
       previewRef.current = null;
       void active.stop();
     };
-  }, [screenState, noteLevel, refreshDevices]);
+  }, [screenState, noteLevel, refreshDevices, попыткаПроверки]);
 
   // Устройства втыкают и вынимают прямо во время работы
   useEffect(() => onDevicesChanged(() => void refreshDevices()), [refreshDevices]);
@@ -859,10 +862,12 @@ function SessionScreen() {
                 onOutputChange={changeOutput}
                 level={level}
                 status={
-                  micProven
+                  micError
+                    ? "off"
+                    : micProven
                     ? "heard"
                     : checkSilent
-                      ? android && checkDead
+                      ? android && checkDead && !micError
                         ? "no-signal"
                         : "silent"
                       : "waiting"
@@ -874,13 +879,35 @@ function SessionScreen() {
                   {micError.text}
                 </p>
               )}
+              {/* Шаги — прямо здесь: до 24.09 на шаге проверки была только
+                  строка причины, а шаги жили на экране отказа, куда попадают
+                  лишь по «Начать» */}
+              {micError && micError.steps.length > 0 && (
+                <ol className="mt-2 list-inside list-decimal text-[14px] leading-relaxed text-ink-label">
+                  {micError.steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              )}
+              {micError && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMicError(null);
+                    setПопыткаПроверки((n) => n + 1);
+                  }}
+                  className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-line-strong bg-surface-card px-4 text-[15px] font-semibold text-ink"
+                >
+                  {micError.retryLabel}
+                </button>
+              )}
             </div>
 
             {/* Android: микрофон виден, а звука ноль — значит, телефон не
                 пускает к нему сам Chrome. Разрешение сайту тут не поможет,
                 нужно разрешение приложению в настройках телефона. Упрётся
                 в это любой, кто когда-то нажал «Не разрешать» */}
-            {!micProven && checkSilent && checkDead && android && (
+            {!micProven && checkSilent && checkDead && android && !micError && (
               <div className="mt-4 w-full max-w-[440px] rounded-xl border border-warn-border bg-warn-surface px-[18px] py-2 text-left">
                 <button
                   type="button"
