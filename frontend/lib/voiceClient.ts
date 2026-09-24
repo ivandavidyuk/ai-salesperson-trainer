@@ -180,6 +180,46 @@ function mseSupported(): boolean {
 }
 
 /**
+ * ManagedMediaSource — MSE для iPhone (Safari 17.1+). Обычного MediaSource
+ * там нет вовсе, и до 24.09 плеер уходил в Blob-очередь: задержка на каждом
+ * предложении и новый `new Audio().play()` без жеста, который Safari
+ * блокирует. Возвращает конструктор, только когда обычного MSE нет, —
+ * компьютеры этот путь не видят.
+ */
+type MediaSourceCtor = { new (): MediaSource; isTypeSupported(type: string): boolean };
+function managedMediaSource(): MediaSourceCtor | null {
+  if (typeof window === "undefined" || mseSupported()) return null;
+  const Managed = (window as unknown as { ManagedMediaSource?: MediaSourceCtor })
+    .ManagedMediaSource;
+  if (!Managed || typeof Managed.isTypeSupported !== "function") return null;
+  return Managed.isTypeSupported("audio/mpeg") ? Managed : null;
+}
+
+// Тишина WAV в 44 байта: проиграть её по нажатию — значит разрешить
+// элементу звучать и дальше без жеста
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
+
+/**
+ * Элемент, разрешённый к воспроизведению нажатием человека. Нужен там, где
+ * нет обычного MediaSource (iPhone): звук ответа приходит через секунды
+ * после нажатия, и Safari запрещает `play()` вне жеста. Разблокированный
+ * элемент звучит и потом — если это тот же самый элемент.
+ *
+ * Вызывать синхронно в обработчике нажатия, до первого await. На
+ * компьютере возвращает null и ничего не проигрывает: там MSE, и прежний
+ * путь не меняется.
+ */
+export function primeAudioElement(): HTMLAudioElement | null {
+  if (typeof window === "undefined" || mseSupported()) return null;
+  const audio = new Audio();
+  audio.src = SILENT_WAV;
+  const started = audio.play();
+  if (started && typeof started.catch === "function") started.catch(() => {});
+  return audio;
+}
+
+/**
  * Снимок состояния плеера для серверного лога.
  *
  * Появился после разбора сессии 37f584df: ИИ четыре минуты «молчал», хотя
@@ -245,6 +285,13 @@ export class AudioPlayer {
   // Позиция на прошлом timeupdate — чтобы отличить продвижение от застревания
   private lastPlaybackTime = -1;
 
+  // --- iPhone: ManagedMediaSource на разблокированном элементе ---
+  private managed: MediaSourceCtor | null = null;
+  /** Элемент, разблокированный нажатием «Начать» (см. primeAudioElement) */
+  private primed: HTMLAudioElement | null = null;
+  /** Обработчики на разблокированный элемент вешаем один раз: он переживает пересборку */
+  private primedWired = false;
+
   // --- Фолбэк: сборка Blob по предложениям ---
   private pending: Uint8Array[] = [];
   private queue: Blob[] = [];
@@ -263,14 +310,25 @@ export class AudioPlayer {
   private rebuilds = 0;
   private lastRebuildAt = 0;
 
-  constructor(onDiagnostic?: (data: PlayerDiagnostic) => void) {
+  constructor(
+    onDiagnostic?: (data: PlayerDiagnostic) => void,
+    /** Разблокированный элемент для iPhone; на компьютере null */
+    primed: HTMLAudioElement | null = null
+  ) {
     this.onDiagnostic = onDiagnostic;
-    this.useMse = mseSupported();
+    this.primed = primed;
+    // На iPhone тот же MSE-путь со всеми его сторожами, только источник
+    // ManagedMediaSource и элемент — разблокированный нажатием
+    this.managed = managedMediaSource();
+    this.useMse = mseSupported() || this.managed !== null;
     if (this.useMse) {
       this._initMse();
       this.watchdog = setInterval(() => this._watch(), WATCHDOG_TICK_MS);
     }
-    this._report("init", this.useMse ? "mse" : "blob-fallback");
+    this._report(
+      "init",
+      this.managed ? "managed-mse" : this.useMse ? "mse" : "blob-fallback"
+    );
   }
 
   /** Снимок состояния — уходит в серверный лог рядом с таймингами хода. */
@@ -570,11 +628,30 @@ export class AudioPlayer {
   // --- Внутренности MSE-пути ---
 
   private _initMse(): void {
-    this.mediaSource = new MediaSource();
+    this.mediaSource = this.managed ? new this.managed() : new MediaSource();
     this.objectUrl = URL.createObjectURL(this.mediaSource);
-    const audio = new Audio(this.objectUrl);
+    let audio: HTMLAudioElement;
+    if (this.managed && this.primed) {
+      // iPhone: тот же разблокированный элемент и после пересборки — новый
+      // Safari снова потребовал бы жеста. Без disableRemotePlayback
+      // ManagedMediaSource не открывается (ждёт альтернативу для AirPlay),
+      // и ставить его нужно до src
+      audio = this.primed;
+      audio.disableRemotePlayback = true;
+      audio.src = this.objectUrl;
+    } else {
+      audio = new Audio(this.objectUrl);
+    }
     this.audio = audio;
     void this._applySink(audio);
+    if (audio === this.primed) {
+      // Обработчики — один раз: элемент переживает пересборку
+      if (this.primedWired) {
+        this._wireSource();
+        return;
+      }
+      this.primedWired = true;
+    }
     // Единственный надёжный признак речи — что позиция реально растёт
     audio.addEventListener("timeupdate", () => this._notePlaybackProgress());
 
@@ -596,6 +673,12 @@ export class AudioPlayer {
     audio.addEventListener("stalled", () => this._report("stalled"));
     audio.addEventListener("ended", () => this._report("ended"));
 
+    this._wireSource();
+  }
+
+  /** Подписка на открытие источника и создание SourceBuffer */
+  private _wireSource(): void {
+    if (!this.mediaSource) return;
     this.mediaSource.addEventListener("sourceopen", () => {
       if (this.destroyed || !this.mediaSource) return;
       const sb = this.mediaSource.addSourceBuffer("audio/mpeg");
@@ -828,7 +911,10 @@ export class AudioPlayer {
     }
     this.playing = true;
     const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+    // Старый iPhone (без ManagedMediaSource): играем в разблокированный
+    // элемент — новый `new Audio()` вне нажатия Safari не пустит звучать
+    const audio = this.primed ?? new Audio(url);
+    if (audio === this.primed) audio.src = url;
     this.current = audio;
     void this._applySink(audio);
 
@@ -842,8 +928,11 @@ export class AudioPlayer {
 
     try {
       await audio.play();
-    } catch {
-      // автоплей мог быть заблокирован — переходим к следующему
+    } catch (error) {
+      // Отказ больше не глотаем молча: «пациент молчит» на телефоне иначе
+      // не отличить от сбоя на сервере
+      const name = (error as { name?: string } | null)?.name ?? "unknown";
+      this._report("play-rejected", `blob:${name}`);
       cleanup();
     }
   }

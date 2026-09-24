@@ -143,7 +143,23 @@ function шагиРазрешения(): string[] {
   ];
 }
 
+/** Страница открыта во встроенном браузере Telegram (по ссылке из чата) */
+function внутриTelegram(): boolean {
+  return typeof navigator !== "undefined" && /Telegram/i.test(navigator.userAgent);
+}
+
+const ПОДСКАЗКА_TELEGRAM =
+  "Похоже, страница открыта внутри Telegram — там микрофон часто недоступен. " +
+  "Откройте её в Chrome или Safari: меню «⋯» → «Открыть в браузере».";
+
 export function describeMicError(error: unknown): MicErrorInfo {
+  const info = описатьОтказ(error);
+  // Во встроенном браузере Telegram причина почти всегда в нём самом —
+  // говорим это прямо, вместо общих шагов про настройки сайта
+  return внутриTelegram() ? { ...info, note: ПОДСКАЗКА_TELEGRAM } : info;
+}
+
+function описатьОтказ(error: unknown): MicErrorInfo {
   const name =
     error && typeof error === "object" && "name" in error
       ? String((error as { name: unknown }).name)

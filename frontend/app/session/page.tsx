@@ -23,7 +23,7 @@ import PatientAvatar from "@/app/components/PatientAvatar";
 import SpeakerPill from "@/app/components/SpeakerPill";
 import Timer from "@/app/components/Timer";
 import type { CaseService } from "@/lib/caseService";
-import { AudioPlayer, MicRecorder } from "@/lib/voiceClient";
+import { AudioPlayer, MicRecorder, primeAudioElement } from "@/lib/voiceClient";
 import {
   listDevices,
   describeMicError,
@@ -391,6 +391,9 @@ function SessionScreen() {
 
   // «Начать тренировку»: создаём сессию, подключаем WebSocket, микрофон и плеер
   async function handleStart() {
+    // Строго до первого await: на iPhone звук разрешается только элементу,
+    // проигранному в обработчике нажатия. На компьютере — null
+    const primed = primeAudioElement();
     setBusy(true);
     setErrorMsg("");
     setScreenState("connecting");
@@ -467,8 +470,9 @@ function SessionScreen() {
       // Готовим плеер для голосовых ответов ИИ
       // Диагностика плеера уходит в тот же серверный лог, что и тайминги
       // ходов: клиентский сбой воспроизведения иначе неотличим от серверного
-      playerRef.current = new AudioPlayer((data) =>
-        sendWs({ type: "client_audio", ...data })
+      playerRef.current = new AudioPlayer(
+        (data) => sendWs({ type: "client_audio", ...data }),
+        primed
       );
       playerRef.current.setOutputDevice(outputId);
 
@@ -565,6 +569,18 @@ function SessionScreen() {
 
       ws.onerror = () => {
         console.warn("Ошибка WebSocket-соединения");
+      };
+
+      // Сервер сам закрывает сокет только после нашего «стоп» — а своё
+      // закрытие handleStop снимает сокет из ref раньше, чем придёт это
+      // событие. Всё прочее — настоящий обрыв: пропала сеть, телефон усыпил
+      // вкладку. Раньше экран в этом случае продолжал «идти» и молчал
+      ws.onclose = () => {
+        if (wsRef.current !== ws) return;
+        wsRef.current = null;
+        setErrorMsg(
+          "Связь с тренажёром прервалась. Завершите разговор — всё сказанное сохранится в расшифровке."
+        );
       };
     } finally {
       setBusy(false);
@@ -673,6 +689,34 @@ function SessionScreen() {
   }, []);
 
   const inCall = screenState === "active" || screenState === "paused";
+
+  // Пока идёт разговор, экран не гаснет: телефон, погасивший экран, усыпляет
+  // вкладку, и разговор обрывается. Блокировка снимается системой, когда
+  // вкладку сворачивают, — берём её заново, когда вкладка снова на виду.
+  // На компьютере то же самое: не уходить в сон посреди звонка
+  useEffect(() => {
+    if (!inCall || typeof navigator === "undefined" || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+    const take = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const next = await navigator.wakeLock.request("screen");
+        if (cancelled) void next.release();
+        else lock = next;
+      } catch {
+        // Отказали (режим энергосбережения) — разговор идёт и так
+      }
+    };
+    void take();
+    const onVisible = () => void take();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      void lock?.release();
+    };
+  }, [inCall]);
   // Уйти со страницы можно, пока разговор не начался. Проверка звука сюда
   // тоже входит: с неё есть своя «Назад», но и общий выход должен работать
   const canLeave =
