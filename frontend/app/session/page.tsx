@@ -120,6 +120,11 @@ function SessionScreen() {
   const fullConversation = !chosenType || chosenType === "full";
   // Задание, по которому запущен разговор: закроется при завершении
   const assignmentId = searchParams.get("assignment");
+  // Модель голоса со стенда сравнения (/stand). Без параметра — обычный
+  // разговор на модели из настроек сервера, как у всех
+  const ttsParam = searchParams.get("tts");
+  const стендовыйГолос =
+    ttsParam === "v4" ? "v4 Turbo" : ttsParam === "flash" ? "Flash" : null;
 
   const [screenState, setScreenState] = useState<ScreenState>("idle");
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -502,8 +507,11 @@ function SessionScreen() {
         previewRef.current = null;
       }
 
-      // Открываем WebSocket с ws-токеном в query
-      const url = `${wsUrl}?token=${encodeURIComponent(wsToken)}`;
+      // Открываем WebSocket с ws-токеном в query. tts=v4 — только со стенда:
+      // сервер откроет сокет v4 Turbo, без параметра — модель из настроек
+      const url = `${wsUrl}?token=${encodeURIComponent(wsToken)}${
+        ttsParam === "v4" ? "&tts=v4" : ""
+      }`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
@@ -753,6 +761,12 @@ function SessionScreen() {
           <Link href="/" title="На главную" className="shrink-0 max-md:inline-flex max-md:min-h-11 max-md:items-center">
             <Logo size="sm" />
           </Link>
+          {/* Разговор со стенда: видно, на какой модели звучит пациент */}
+          {стендовыйГолос && (
+            <span className="rounded-full border border-line px-2.5 py-0.5 text-[13px] font-semibold text-ink-muted">
+              Голос: {стендовыйГолос}
+            </span>
+          )}
           {/* Уйти можно только до начала разговора: во время него переход
               оборвал бы живую сессию, поэтому ссылки там нет */}
           {canLeave && (

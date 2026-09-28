@@ -415,7 +415,7 @@ class TurnManager:
         self,
         ws: WebSocket,
         session_id: str,
-        tts_stream: "tts.TtsWsStream",
+        tts_stream: "tts.SpeechWsStream",
         system_prompt: str,
         scores_deal: bool = True,
         industry: str = "",
@@ -970,6 +970,11 @@ class TurnManager:
                 return strip_for_speech(full_reply)
 
             first_audio_ms: float | None = None
+            # Когда у клиента набралось полсекунды звука. Первый чанк у моделей
+            # разный: Flash шлёт сразу ~0,9 с звука, v4 Turbo — сперва заголовок
+            # в 45 байт и крохи. Сравнивать модели по первому чанку нечестно
+            half_second_ms: float | None = None
+            audio_bytes = 0
 
             async def synthesize_sentence(sentence: str) -> AsyncIterator[bytes]:
                 """Постоянный WS-канал TTS; при сбое — HTTP-фолбэк."""
@@ -988,16 +993,16 @@ class TurnManager:
                     logger.warning(
                         "TTS WS не сработал (%s), фолбэк на HTTP", exc
                     )
-                    # Голос тот же, что у сокета: иначе на сбое пациент
-                    # посреди разговора сменил бы пол
+                    # Голос и модель те же, что у сокета: иначе на сбое
+                    # пациент посреди разговора сменил бы пол или модель
                     async for chunk in tts.synthesize_stream(
-                        sentence, self.tts_stream.voice_id
+                        sentence, self.tts_stream.voice_id, self.tts_stream.model
                     ):
                         yield chunk
 
             async def consume_sentences() -> None:
                 """Синтезирует предложения по очереди и стримит аудио клиенту."""
-                nonlocal first_audio_ms
+                nonlocal first_audio_ms, half_second_ms, audio_bytes
                 while True:
                     sentence = await sentences.get()
                     if sentence is None:
@@ -1005,6 +1010,12 @@ class TurnManager:
                     async for chunk in synthesize_sentence(sentence):
                         if first_audio_ms is None:
                             first_audio_ms = (time.perf_counter() - t_start) * 1000
+                        audio_bytes += len(chunk)
+                        if (
+                            half_second_ms is None
+                            and audio_bytes >= _MP3_BYTES_PER_SEC / 2
+                        ):
+                            half_second_ms = (time.perf_counter() - t_start) * 1000
                         self.audio_started = True
                         # Оценка, когда клиент доиграет отправленное аудио
                         # (для barge-in и фильтра эха)
@@ -1050,15 +1061,19 @@ class TurnManager:
                 self.schedule_scoring()
 
             total_ms = (time.perf_counter() - t_start) * 1000
+            # Модель и полсекунды звука в конце строки: по ним сравниваются
+            # задержки стенда, а разбор старых логов по «аудио=» не ломается
             logger.info(
                 "ТАЙМИНГ сессия %s: промпт=%.0f токен=%s предложение=%s "
-                "аудио=%.0f | всего(после STT)=%.0f мс",
+                "аудио=%.0f | всего(после STT)=%.0f мс | tts=%s полсекунды=%s",
                 session_id,
                 t_prompt_ms,
                 "—" if first_token_ms is None else f"{first_token_ms:.0f}",
                 "—" if first_sentence_ms is None else f"{first_sentence_ms:.0f}",
                 first_audio_ms or 0,
                 total_ms,
+                self.tts_stream.model,
+                "—" if half_second_ms is None else f"{half_second_ms:.0f}",
             )
 
             # Реплики, пришедшие пока ИИ говорил, — следующий ход
@@ -1291,9 +1306,14 @@ async def session_ws(ws: WebSocket, session_id: str):
     # Голос берём до подключения: он вшит в адрес сокета, и сменить его
     # у поднятого соединения нельзя. Пусто — общий из настроек
     voice_id = await store.get_patient_voice(session_id)
-    tts_stream = tts.TtsWsStream(voice_id)
+    # Модель голоса: ?tts=v4 приходит со стенда сравнения моделей,
+    # без параметра — модель из настроек, как у всех
+    tts_stream = tts.stream_for(ws.query_params.get("tts"), voice_id)
     logger.info(
-        "Сессия %s: голос %s", session_id, voice_id or "общий из настроек"
+        "Сессия %s: голос %s, модель %s",
+        session_id,
+        voice_id or "общий из настроек",
+        tts_stream.model,
     )
     try:
         await tts_stream.start()
