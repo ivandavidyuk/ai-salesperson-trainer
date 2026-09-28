@@ -1,4 +1,4 @@
-// Стенд сравнения моделей голоса: Тамара Михайловна на Flash или на
+// Стенд сравнения моделей голоса: любой пациент клиники на Flash или на
 // ElevenLabs v4 Turbo. Разговор идёт через обычную страницу /session —
 // та же проверка микрофона, тот же плеер, тот же разбор, — отличается только
 // модель голоса. Иначе сравнение было бы нечестным.
@@ -28,12 +28,24 @@ export default async function StandPage() {
   const user = await getAuthUser({ cookies: cookies() });
   if (!user || !стендОткрыт(user.email)) notFound();
 
-  // Id у пациентов случайные: ищем по имени, как сиды (lib/demoScope.ts)
-  const тамара = await prisma.patient.findFirst({
-    where: { name: "Тамара Михайловна" },
-    select: { id: true },
+  const пользователь = await prisma.user.findUnique({
+    where: { id: user.sub },
+    select: { organizationId: true },
   });
-  if (!тамара) notFound();
+  if (!пользователь?.organizationId) notFound();
 
-  return <StandForm patientId={тамара.id} />;
+  // Те же условия, что проверяет sessions/start: пациент активен и у клиники
+  // есть его случай с промптом. Порядок — как в сиде, первой идёт Тамара
+  const случаи = await prisma.patientCase.findMany({
+    where: {
+      organizationId: пользователь.organizationId,
+      prompt: { not: "" },
+      patient: { isActive: true },
+    },
+    select: { patient: { select: { id: true, name: true } } },
+    orderBy: { patient: { createdAt: "asc" } },
+  });
+  if (случаи.length === 0) notFound();
+
+  return <StandForm patients={случаи.map((случай) => случай.patient)} />;
 }

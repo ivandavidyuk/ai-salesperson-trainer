@@ -1,7 +1,8 @@
 "use client";
 
-// Тумблер модели голоса и «Начать»: дальше обычный разговор на /session
-// с параметром tts, по которому backend открывает сокет нужной модели.
+// Выбор пациента, тумблер модели голоса и «Начать»: дальше обычный разговор
+// на /session с параметром tts, по которому backend открывает сокет нужной
+// модели.
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -15,13 +16,26 @@ const МОДЕЛИ: { key: Модель; label: string }[] = [
   { key: "v4", label: "Новая модель (v4 Turbo)" },
 ];
 
-export default function StandForm({ patientId }: { patientId: string }) {
+interface Пациент {
+  id: string;
+  name: string;
+}
+
+// Кнопка выбора: тот же вид, что у переключателя периода в статистике
+function выбор(активна: boolean): string {
+  return `rounded-[8px] px-3 py-2 text-[14px] font-semibold transition-colors max-md:min-h-11 max-md:text-[15px] ${
+    активна ? "bg-brand text-white" : "text-ink-muted hover:bg-surface-bubble"
+  }`;
+}
+
+export default function StandForm({ patients }: { patients: Пациент[] }) {
   const router = useRouter();
+  const [пациент, setПациент] = useState(patients[0].id);
   const [модель, setМодель] = useState<Модель>("flash");
 
   function начать() {
     const params = new URLSearchParams({
-      patient: patientId,
+      patient: пациент,
       type: "full",
       tts: модель,
     });
@@ -31,17 +45,34 @@ export default function StandForm({ patientId }: { patientId: string }) {
   return (
     <AppShell title="Стенд голоса">
       <div className="mx-auto w-full max-w-[1760px] px-10 pb-11 pt-[26px] max-md:px-4 max-md:pb-6 max-md:pt-4">
-        <div className="max-w-[560px] rounded-xl border border-line bg-surface-card p-6 shadow-card max-md:p-5">
-          <h2 className="text-[19px] font-semibold text-ink">
-            Тамара Михайловна
-          </h2>
-          <p className="mt-1.5 text-[15px] leading-snug text-ink-muted">
+        <div className="max-w-[720px] rounded-xl border border-line bg-surface-card p-6 shadow-card max-md:p-5">
+          <p className="text-[15px] leading-snug text-ink-muted">
             Полный разговор, как в обычной тренировке. Отличается только
             модель, которой звучит пациент.
           </p>
 
+          <h2 className="mt-5 text-[15px] font-semibold text-ink">Пациент</h2>
           <div
-            className="mt-5 grid grid-cols-2 gap-1 rounded-[11px] border border-line bg-surface-card p-1"
+            className="mt-2 grid grid-cols-3 gap-1 rounded-[11px] border border-line bg-surface-card p-1 max-md:grid-cols-2"
+            role="group"
+            aria-label="Пациент"
+          >
+            {patients.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setПациент(item.id)}
+                aria-pressed={item.id === пациент}
+                className={выбор(item.id === пациент)}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+
+          <h2 className="mt-5 text-[15px] font-semibold text-ink">Модель голоса</h2>
+          <div
+            className="mt-2 grid grid-cols-2 gap-1 rounded-[11px] border border-line bg-surface-card p-1"
             role="group"
             aria-label="Модель голоса"
           >
@@ -51,11 +82,7 @@ export default function StandForm({ patientId }: { patientId: string }) {
                 type="button"
                 onClick={() => setМодель(item.key)}
                 aria-pressed={item.key === модель}
-                className={`rounded-[8px] px-3 py-2 text-[14px] font-semibold transition-colors max-md:min-h-11 max-md:text-[15px] ${
-                  item.key === модель
-                    ? "bg-brand text-white"
-                    : "text-ink-muted hover:bg-surface-bubble"
-                }`}
+                className={выбор(item.key === модель)}
               >
                 {item.label}
               </button>
