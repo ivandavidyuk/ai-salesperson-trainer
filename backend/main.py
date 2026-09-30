@@ -1418,9 +1418,13 @@ async def session_ws(ws: WebSocket, session_id: str):
                 # здесь — это потерянная строка лога, а не оборванная сессия
                 try:
                     detail = message.get("detail")
+                    # Громкость, аудиосессия и видимость страницы — после
+                    # iPhone 29.09: позиция шла, а звука не было, и по логу
+                    # не понять, что стало со звуком в самом телефоне
                     logger.info(
                         "ПЛЕЕР сессия %s: %s%s поз=%s пауза=%s ready=%s "
-                        "буфер=%s диапазонов=%s очередь=%s",
+                        "буфер=%s диапазонов=%s очередь=%s "
+                        "muted=%s громкость=%s аудиосессия=%s вид=%s",
                         session_id,
                         message.get("event"),
                         f" ({detail})" if detail else "",
@@ -1430,6 +1434,10 @@ async def session_ws(ws: WebSocket, session_id: str):
                         message.get("bufferedEnd"),
                         message.get("ranges"),
                         message.get("queued"),
+                        message.get("muted"),
+                        message.get("volume"),
+                        message.get("session"),
+                        message.get("visible"),
                     )
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Не удалось записать состояние плеера: %s", exc)

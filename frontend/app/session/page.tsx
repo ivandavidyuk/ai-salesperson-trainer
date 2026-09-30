@@ -493,11 +493,19 @@ function SessionScreen() {
 
       // Готовим плеер для голосовых ответов ИИ
       // Диагностика плеера уходит в тот же серверный лог, что и тайминги
-      // ходов: клиентский сбой воспроизведения иначе неотличим от серверного
-      playerRef.current = new AudioPlayer(
-        (data) => sendWs({ type: "client_audio", ...data }),
-        primed
-      );
+      // ходов: клиентский сбой воспроизведения иначе неотличим от серверного.
+      // Плеер создаётся раньше сокета, и его первые сообщения — строка «init»
+      // с режимом плеера — терялись: копим их и досылаем при открытии
+      const ранняяДиагностика: Record<string, unknown>[] = [];
+      playerRef.current = new AudioPlayer((data) => {
+        const message = { type: "client_audio", ...data };
+        const current = wsRef.current;
+        if (current && current.readyState === WebSocket.OPEN) {
+          current.send(JSON.stringify(message));
+        } else if (ранняяДиагностика.length < 20) {
+          ранняяДиагностика.push(message);
+        }
+      }, primed);
       playerRef.current.setOutputDevice(outputId);
 
       // Проверочный захват больше не нужен — освобождаем устройство,
@@ -517,6 +525,7 @@ function SessionScreen() {
 
       // При открытии соединения запрашиваем микрофон и переходим в разговор
       ws.onopen = async () => {
+        for (const message of ранняяДиагностика.splice(0)) sendWs(message);
         try {
           const recorder = new MicRecorder();
           recorderRef.current = recorder;
@@ -532,6 +541,8 @@ function SessionScreen() {
             }
           );
           setScreenState("active");
+          // Микрофон разрешён — теперь у устройств есть названия
+          void playerRef.current?.reportDevices();
         } catch (error) {
           // Без микрофона разговор невозможен — показываем причину отказа,
           // а не общий экран, из которого ничего не понять
