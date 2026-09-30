@@ -235,6 +235,21 @@ export interface PlayerDiagnostic {
   bufferedEnd?: number;
   ranges?: number;
   queued?: number;
+  // Поля ниже — после iPhone Димы 29.09: позиция шла, а звука не было,
+  // и понять по логу, что стало со звуком в телефоне, было нельзя
+  muted?: boolean;
+  volume?: number;
+  /** Аудиосессия Safari (navigator.audioSession): «тип/состояние» */
+  session?: string;
+  /** Видна ли страница: visible или hidden */
+  visible?: string;
+}
+
+/** Аудиосессия Safari 16.4+: у остальных браузеров её нет */
+type AudioSessionLike = EventTarget & { state?: string; type?: string };
+function audioSession(): AudioSessionLike | undefined {
+  if (typeof navigator === "undefined") return undefined;
+  return (navigator as unknown as { audioSession?: AudioSessionLike }).audioSession;
 }
 
 // Как часто сторож проверяет, идёт ли воспроизведение на самом деле
@@ -309,6 +324,8 @@ export class AudioPlayer {
   private ticks = 0;
   private rebuilds = 0;
   private lastRebuildAt = 0;
+  /** Отписки от событий окружения (аудиосессия, устройства, видимость) */
+  private envCleanup: (() => void)[] = [];
 
   constructor(
     onDiagnostic?: (data: PlayerDiagnostic) => void,
@@ -329,6 +346,7 @@ export class AudioPlayer {
       "init",
       this.managed ? "managed-mse" : this.useMse ? "mse" : "blob-fallback"
     );
+    this._watchEnvironment();
   }
 
   /** Снимок состояния — уходит в серверный лог рядом с таймингами хода. */
@@ -349,6 +367,7 @@ export class AudioPlayer {
       // буфер могли пересобрать между проверкой и чтением
     }
 
+    const session = audioSession();
     this.onDiagnostic({
       event,
       detail,
@@ -358,7 +377,58 @@ export class AudioPlayer {
       bufferedEnd,
       ranges,
       queued: this.appendQueue.length,
+      muted: audio?.muted,
+      volume: audio ? round(audio.volume) : undefined,
+      session: session ? `${session.type ?? "?"}/${session.state ?? "?"}` : undefined,
+      visible: typeof document !== "undefined" ? document.visibilityState : undefined,
     });
+  }
+
+  /**
+   * Следит за тем, что происходит со звуком вокруг плеера: аудиосессия
+   * Safari (прерывания), подключение и отключение аудиоустройств, уход
+   * страницы в фон. Позиция воспроизведения этого не показывает — у Димы
+   * 29.09 она шла, а звук до ушей не доходил.
+   */
+  private _watchEnvironment(): void {
+    if (typeof window === "undefined") return;
+
+    const onVisibility = () => this._report("visibility", document.visibilityState);
+    document.addEventListener("visibilitychange", onVisibility);
+    this.envCleanup.push(() => document.removeEventListener("visibilitychange", onVisibility));
+
+    const session = audioSession();
+    if (session && typeof session.addEventListener === "function") {
+      const onSession = () => this._report("audio-session", session.state);
+      session.addEventListener("statechange", onSession);
+      this.envCleanup.push(() => session.removeEventListener("statechange", onSession));
+    }
+
+    const devices = typeof navigator !== "undefined" ? navigator.mediaDevices : undefined;
+    if (devices && typeof devices.addEventListener === "function") {
+      const onDevices = () => void this.reportDevices();
+      devices.addEventListener("devicechange", onDevices);
+      this.envCleanup.push(() => devices.removeEventListener("devicechange", onDevices));
+    }
+  }
+
+  /**
+   * Список аудиоустройств в лог. Вызывать после разрешения микрофона:
+   * до него браузер отдаёт устройства без названий.
+   */
+  async reportDevices(): Promise<void> {
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      const audio = list
+        .filter((d) => d.kind === "audioinput" || d.kind === "audiooutput")
+        .map(
+          (d) =>
+            `${d.kind === "audioinput" ? "вход" : "выход"}:${(d.label || "без названия").slice(0, 40)}`
+        );
+      this._report("devices", audio.join(", ") || "нет");
+    } catch {
+      this._report("devices", "список недоступен");
+    }
   }
 
   /**
@@ -495,6 +565,7 @@ export class AudioPlayer {
       clearInterval(this.watchdog);
       this.watchdog = null;
     }
+    for (const cleanup of this.envCleanup.splice(0)) cleanup();
     this.seekToBufferEndAfterUpdate = false;
     this.lastActivePlaybackAt = 0;
     this.lastPlaybackTime = -1;
@@ -672,6 +743,7 @@ export class AudioPlayer {
     });
     audio.addEventListener("stalled", () => this._report("stalled"));
     audio.addEventListener("ended", () => this._report("ended"));
+    audio.addEventListener("volumechange", () => this._report("volumechange"));
 
     this._wireSource();
   }
@@ -834,6 +906,11 @@ export class AudioPlayer {
    */
   private _kickIfIdle(): void {
     if (this.destroyed || !this.useMse) return;
+    // iPhone продолжает сам: в разговоре Димы 29.09 простои по 60 и 70 с
+    // кончились без толчка, и звук был. А единственный толчок после долгого
+    // простоя (42 с) совпал с моментом, когда позиция пошла, а звук пропал
+    // до конца разговора. Толчок придуман под Chromium — iPhone он не нужен
+    if (this.managed) return;
     const audio = this.audio;
     const sb = this.sourceBuffer;
     if (!audio || !sb) return;
@@ -877,6 +954,13 @@ export class AudioPlayer {
     // На паузе достаточно запустить — перемотка тут только съела бы звук
     if (audio.paused) {
       this._ensurePlaying();
+      return;
+    }
+
+    // iPhone не толкаем (см. _kickIfIdle): если позиция и правда встала,
+    // сторож через STALL_REBUILD_AFTER_MS пересоберёт источник целиком
+    if (this.managed) {
+      this._report("nudge-skipped", reason);
       return;
     }
 
