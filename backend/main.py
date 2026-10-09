@@ -1306,8 +1306,8 @@ async def session_ws(ws: WebSocket, session_id: str):
     # Голос берём до подключения: он вшит в адрес сокета, и сменить его
     # у поднятого соединения нельзя. Пусто — общий из настроек
     voice_id = await store.get_patient_voice(session_id)
-    # Модель голоса: ?tts=v4 приходит со стенда сравнения моделей,
-    # без параметра — модель из настроек, как у всех
+    # Модель голоса: по умолчанию v4 Turbo; ?tts=flash приходит со стенда
+    # сравнения моделей и включает прежнюю
     tts_stream = tts.stream_for(ws.query_params.get("tts"), voice_id)
     logger.info(
         "Сессия %s: голос %s, модель %s",
