@@ -8,13 +8,14 @@
 
 Фолбэк — synthesize_stream (HTTP /stream), если WebSocket недоступен.
 
-Модель задаётся через ELEVENLABS_TTS_MODEL:
-  eleven_flash_v2_5 — минимальная задержка (по умолчанию);
-  eleven_v3         — эмоции и audio-теги ([sighs], [hesitant]), но медленнее.
+Пациенты говорят Eleven v4 Turbo (с 09.10): голос живее, чем у Flash,
+ценой ~120 мс к ответу. Наш TTS-сокет v3/v4 не принимает, поэтому у
+v4 Turbo свой сокет — DialogueWsStream через Text to Dialogue — с тем же
+устройством «предложение = контекст».
 
-DialogueWsStream — Eleven v4 Turbo для стенда сравнения моделей. Наш
-TTS-сокет v3/v4 не принимает, поэтому у v4 Turbo свой сокет — Text to
-Dialogue — с тем же устройством «предложение = контекст».
+TtsWsStream — прежний путь на модели из ELEVENLABS_TTS_MODEL
+(eleven_flash_v2_5). Остался для стенда (?tts=flash) и как запасной:
+вернуть Flash всем — поменять выбор по умолчанию в stream_for.
 """
 
 import asyncio
@@ -59,14 +60,15 @@ WS_RECV_TIMEOUT = 15
 # персонажа. Выше 0.7 голос становится монотонным.
 VOICE_SETTINGS = {"stability": 0.65, "similarity_boost": 0.75}
 
-# Eleven v4 Turbo — модель стенда сравнения. Similarity сокет диалогов
-# не принимает, Stability та же, что у Flash, — чтобы голоса отличались
-# моделью, а не настройкой
+# Eleven v4 Turbo — модель пациентов. Similarity сокет диалогов не
+# принимает, Stability та же, что у Flash, — чтобы на стенде голоса
+# отличались моделью, а не настройкой
 DIALOGUE_MODEL = "eleven_v4_turbo"
 DIALOGUE_VOICE_SETTINGS = {"stability": VOICE_SETTINGS["stability"]}
 
-# Значение параметра подключения ?tts=, которое включает v4 Turbo
-DIALOGUE_PARAM = "v4"
+# Значение параметра подключения ?tts=, которое включает прежнюю модель:
+# им пользуется стенд, чтобы сравнивать голоса
+FLASH_PARAM = "flash"
 
 # Общий HTTP-клиент на модуль: переиспользует TCP/TLS-соединения
 _client = httpx.AsyncClient(timeout=60)
@@ -241,8 +243,10 @@ def parse_dialogue_message(msg: dict, ctx: str) -> tuple[Optional[bytes], bool]:
 class DialogueWsStream(SpeechWsStream):
     """Eleven v4 Turbo через multi-context Text to Dialogue WebSocket.
 
-    В справке ElevenLabs этот сокет описан как «только eleven_v3», но
-    v4 Turbo на нём работает — проверено 28.09 на DE. Контексты и перебивание
+    Основной голос пациентов с 09.10. В справке ElevenLabs этот сокет описан
+    как «только eleven_v3», но v4 Turbo на нём работает — проверено 28.09
+    на DE. Если ElevenLabs это закроет, сокет перестанет подниматься, и
+    каждое предложение уйдёт в HTTP-фолбэк той же моделью (~270 мс). Контексты и перебивание
     устроены как у TtsWsStream. Отличия протокола: поля в snake_case, голос
     регистрируется в первом сообщении контекста.
 
@@ -301,14 +305,15 @@ class DialogueWsStream(SpeechWsStream):
 
 
 def stream_for(param: Optional[str], voice_id: Optional[str]) -> SpeechWsStream:
-    """Сокет синтеза по параметру подключения: ?tts=v4 — v4 Turbo, иначе Flash.
+    """Сокет синтеза по параметру подключения: ?tts=flash — прежняя модель
+    для стенда, всё остальное — v4 Turbo.
 
-    Любое другое значение и его отсутствие — модель из настроек, как было
-    до стенда: опечатка в адресе не должна менять голос пациента.
+    Опечатка в адресе и отсутствие параметра дают основной голос: случайный
+    параметр не должен менять голос пациента.
     """
-    if param == DIALOGUE_PARAM:
-        return DialogueWsStream(voice_id)
-    return TtsWsStream(voice_id)
+    if param == FLASH_PARAM:
+        return TtsWsStream(voice_id)
+    return DialogueWsStream(voice_id)
 
 
 def _request_parts(
