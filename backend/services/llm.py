@@ -40,6 +40,15 @@ _client = httpx.AsyncClient(timeout=30)
 _FIRST_TOKEN_TIMEOUT_SEC = 2.0
 _STREAM_ATTEMPTS = 2
 
+# Потолок последнего захода. Короткий потолок нужен, чтобы успеть сходить
+# к резерву, а после последнего захода идти некуда: обрыв на двух секундах
+# превращал медленный ответ в пропавший ход. Так было 24.09: Gemini дала
+# пустой ответ, Haiku не уложилась в 2 с — менеджер получил ошибку, а его
+# минута речи пропала. Медленный ход у Haiku — обычный хвост, а не сбой:
+# в замере 14.10 с DE максимум 3,8 с на 45 вызовов. Восемь секунд с запасом
+# покрывают хвост; LiveKit держит на попытку 5–10 с
+_LAST_ATTEMPT_TIMEOUT_SEC = 8.0
+
 
 class ProviderRefused(RuntimeError):
     """Провайдер ответил HTTP 200, но текста не дал.
@@ -160,6 +169,29 @@ def reasoning_for(model: str) -> dict:
     return _РАЗМЫШЛЕНИЕ_ПО_УМОЛЧАНИЮ
 
 
+# Маршрут по провайдерам OpenRouter. Одну и ту же модель держат несколько
+# провайдеров, и разница между ними больше, чем между моделями: у Haiku 4.5
+# 14.10 медиана первого токена была от 0,33 с до 2,6 с в зависимости от того,
+# кто ответил. Без поля provider OpenRouter выбирает сам — замер с DE
+# на промпте Тамары: Amazon Bedrock 15 из 15, медиана 1026 мс, p90 1424;
+# с сортировкой по задержке — Anthropic, медиана ~740, p90 ~1000.
+#
+# Google исключён намеренно: Haiku — резерв на сбой Gemini, и стоять
+# в том же облаке ему незачем. У Gemini маршрута нет — основную модель
+# этим не трогали
+_МАРШРУТ: dict[str, dict] = {
+    "anthropic/": {"sort": "latency", "ignore": ["google-vertex"]},
+}
+
+
+def route_for(model: str) -> dict | None:
+    """Маршрут по провайдерам под модель; None — пусть выбирает OpenRouter."""
+    for префикс, значение in _МАРШРУТ.items():
+        if model.startswith(префикс):
+            return значение
+    return None
+
+
 def _build_request(
     history: list[dict], system_prompt: str, stream: bool
 ) -> tuple[str, dict, dict]:
@@ -224,10 +256,13 @@ async def stream_reply(history: list[dict], system_prompt: str) -> AsyncIterator
         # Потолок вешаем только на первый токен: дальше модель уже говорит,
         # и обрывать её на середине фразы нельзя. Повтор при этом безопасен
         # по построению — до первой дельты в синтез ничего не ушло
+        потолок = (
+            _LAST_ATTEMPT_TIMEOUT_SEC
+            if attempt == _STREAM_ATTEMPTS
+            else _FIRST_TOKEN_TIMEOUT_SEC
+        )
         try:
-            first = await asyncio.wait_for(
-                stream.__anext__(), _FIRST_TOKEN_TIMEOUT_SEC
-            )
+            first = await asyncio.wait_for(stream.__anext__(), потолок)
         except StopAsyncIteration:
             await stream.aclose()
             # Пустой ответ без ошибки. Раньше здесь стоял выход по причине
@@ -263,13 +298,13 @@ async def stream_reply(history: list[dict], system_prompt: str) -> AsyncIterator
                 logger.warning(
                     "LLM (%s) молчала дольше %.1f с и на повторе",
                     model,
-                    _FIRST_TOKEN_TIMEOUT_SEC,
+                    потолок,
                 )
                 raise
             logger.warning(
                 "LLM (%s) молчит дольше %.1f с — идём к резерву (%s)",
                 model,
-                _FIRST_TOKEN_TIMEOUT_SEC,
+                потолок,
                 модели[attempt],
             )
             continue
@@ -289,6 +324,9 @@ async def _stream_once(
         # Резервная модель другого вендора — и ручка размышления у неё своя
         payload["model"] = model
         payload["reasoning"] = reasoning_for(model)
+    маршрут = route_for(payload.get("model", ""))
+    if маршрут:
+        payload["provider"] = маршрут
 
     total_chars = 0
     async with _client.stream("POST", url, json=payload, headers=headers) as response:

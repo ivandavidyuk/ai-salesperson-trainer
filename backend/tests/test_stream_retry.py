@@ -49,9 +49,30 @@ def test_молчание_в_обеих_попытках_пробрасывае�
 
     monkeypatch.setattr(llm, "_stream_once", fake_stream)
     monkeypatch.setattr(llm, "_FIRST_TOKEN_TIMEOUT_SEC", 0.05)
+    monkeypatch.setattr(llm, "_LAST_ATTEMPT_TIMEOUT_SEC", 0.1)
 
     with pytest.raises(asyncio.TimeoutError):
         _run(_collect([], "роль"))
+
+
+def test_последний_заход_ждёт_дольше_первого(monkeypatch):
+    """После последнего захода идти некуда — обрыв на двух секундах
+    превращал медленный ответ резерва в пропавший ход (24.09)."""
+
+    async def fake_stream(history, prompt, model=None):
+        if model == llm.get_settings().llm_model:
+            await asyncio.sleep(10)  # основная молчит
+            yield "не должно прозвучать"
+        else:
+            await asyncio.sleep(0.2)  # резерв медленнее первого потолка
+            yield "Здравствуйте."
+
+    monkeypatch.setattr(llm, "_stream_once", fake_stream)
+    monkeypatch.setattr(llm, "_FIRST_TOKEN_TIMEOUT_SEC", 0.05)
+    monkeypatch.setattr(llm, "_LAST_ATTEMPT_TIMEOUT_SEC", 1.0)
+    monkeypatch.setattr(llm.get_settings(), "fallback_model", "anthropic/claude-haiku-4.5")
+
+    assert _run(_collect([], "роль")) == ["Здравствуйте."]
 
 
 def test_обрыв_после_первого_токена_не_повторяется(monkeypatch):
@@ -214,6 +235,44 @@ def test_обрыв_после_текста_не_поднимает_отказ(m
         "data: [DONE]",
     ]
     assert _прогнать_поток(строки, monkeypatch) == ["Здравствуйте"]
+
+
+def test_маршрут_только_у_резерва():
+    # Haiku — к быстрому провайдеру и мимо облака Google, Gemini — как была
+    assert llm.route_for("anthropic/claude-haiku-4.5") == {
+        "sort": "latency",
+        "ignore": ["google-vertex"],
+    }
+    assert llm.route_for("google/gemini-3.5-flash-lite") is None
+
+
+class _КлиентЗапоминает(_КлиентЗаглушка):
+    def __init__(self, строки):
+        super().__init__(строки)
+        self.тела = []
+
+    def stream(self, *args, **kwargs):
+        self.тела.append(kwargs.get("json"))
+        return super().stream(*args, **kwargs)
+
+
+def test_поле_provider_уходит_только_резерву(monkeypatch):
+    monkeypatch.setattr(
+        llm,
+        "_build_request",
+        lambda *a, **kw: ("http://ключ-не-нужен", {"model": "google/gemini-3.5-flash-lite"}, {}),
+    )
+    клиент = _КлиентЗапоминает(['data: {"choices":[{"delta":{"content":"Да."}}]}'])
+    monkeypatch.setattr(llm, "_client", клиент)
+
+    async def go(model):
+        return [d async for d in llm._stream_once([], "роль", model)]
+
+    _run(go("google/gemini-3.5-flash-lite"))
+    _run(go("anthropic/claude-haiku-4.5"))
+    основная, резерв = клиент.тела
+    assert "provider" not in основная
+    assert резерв["provider"] == {"sort": "latency", "ignore": ["google-vertex"]}
 
 
 def test_ручка_размышления_зависит_от_модели():
