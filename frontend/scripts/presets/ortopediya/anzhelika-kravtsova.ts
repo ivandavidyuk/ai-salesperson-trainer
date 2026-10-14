@@ -8,7 +8,7 @@ import type { PresetCase } from "../types";
 
 export const СЛУЧАЙ: PresetCase = {
   patientName: "Анжелика Сергеевна",
-  service: "Курс восстановления колена",
+  service: "Курс при кисте Бейкера",
   picture: {
     diagnosis: "Киста Бейкера",
     onsetFrom: 30,
