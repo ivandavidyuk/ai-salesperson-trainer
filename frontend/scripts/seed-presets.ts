@@ -16,7 +16,7 @@
 // случаи кладёт upsert-ом по составному ключу.
 
 import { PrismaClient, Prisma } from "@prisma/client";
-import { buildRolePrompt, industryRules } from "./patient-prompt";
+import { buildRolePrompt, правилаОрганизации } from "./patient-prompt";
 import { PROFILES, составОтрасли } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
 import { клиническая, type Preset } from "./presets/types";
@@ -81,6 +81,9 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
     industry,
     // Ключ отрасли пресета: его унаследует организация, заведённая из него
     industryKey: clinic.отрасль,
+    // Вариант правил — туда же, куда ключ: его унаследует организация
+    // из пресета, а пересборка промптов возьмёт его из базы
+    rulesVariant: clinic.вариантПравил ?? null,
     isPreset: true,
     // Людей у пресета нет, разговоров тоже — лимит часов здесь ничего
     // не значит и стоит просто ненулевым
@@ -151,7 +154,7 @@ async function залитьОтрасль(пресет: Preset): Promise<void> {
 
     const prompt = buildRolePrompt(
       { personality: личность, case: пресетныйСлучай.case },
-      industryRules(clinic.отрасль),
+      правилаОрганизации(clinic.отрасль, clinic.вариантПравил),
     );
     const строка = {
       prompt,

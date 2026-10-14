@@ -22,7 +22,13 @@
 // Поэтому источник истины для них один: репозиторий.
 
 import { Prisma, PrismaClient } from "@prisma/client";
-import { buildRolePrompt, industryRules, ключОтрасли, type PatientCase } from "./patient-prompt";
+import {
+  buildRolePrompt,
+  ключВарианта,
+  ключОтрасли,
+  правилаОрганизации,
+  type PatientCase,
+} from "./patient-prompt";
 import { PROFILES } from "./patients";
 import { пресетныйСлучай } from "./presets";
 
@@ -78,7 +84,7 @@ async function пересобратьКлиентские(): Promise<Итог> {
       prompt: true,
       caseData: true,
       patient: { select: { name: true } },
-      organization: { select: { industry: true, industryKey: true } },
+      organization: { select: { industry: true, industryKey: true, rulesVariant: true } },
     },
   });
 
@@ -105,7 +111,12 @@ async function пересобратьКлиентские(): Promise<Итог> {
     const дополненный = дополнитьИзПресета(строка.caseData, отрасль, имя);
     const свежий = buildRolePrompt(
       { personality: личность, case: дополненный ?? строка.caseData },
-      industryRules(ключОтрасли(строка.organization.industryKey)),
+      // Вариант правил — из базы, как и ключ: без него пересборка на каждом
+      // деплое возвращала бы клинике с акцией медицинский абзац о деньгах
+      правилаОрганизации(
+        ключОтрасли(строка.organization.industryKey),
+        ключВарианта(строка.organization.rulesVariant),
+      ),
     );
     if (строка.prompt === свежий && !дополненный) {
       итог.бездела += 1;

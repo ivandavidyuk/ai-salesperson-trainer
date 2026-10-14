@@ -12,7 +12,13 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { signToken } from "@/lib/auth";
-import { buildRolePrompt, industryRules, type PatientCase } from "@/scripts/patient-prompt";
+import {
+  buildRolePrompt,
+  ключВарианта,
+  правилаОрганизации,
+  type IndustryRules,
+  type PatientCase,
+} from "@/scripts/patient-prompt";
 import { медицинскаяОтрасль } from "@/lib/industry";
 import { ключОтрасли, type IndustryKey } from "@/scripts/industry-key";
 import { PROFILES, составОтрасли } from "@/scripts/patients";
@@ -240,6 +246,7 @@ export async function rebuildCases(organizationId: string, headId: string): Prom
       city: true,
       industry: true,
       industryKey: true,
+      rulesVariant: true,
       services: {
         orderBy: { position: "asc" },
         select: { name: true, price: true, description: true },
@@ -307,7 +314,11 @@ export async function rebuildCases(organizationId: string, headId: string): Prom
 
   const остановитьПульс = запуститьПульс(organizationId);
   try {
-    await generateAll(цели, organizationId, clinic, отрасль, token, занятые);
+    // Правила промпта — отрасли и варианта клиники, как при пересборке
+    // на деплое: иначе собранный здесь случай жил бы до первого рестарта
+    // с другим абзацем о деньгах
+    const правила = правилаОрганизации(отрасль, ключВарианта(organization.rulesVariant));
+    await generateAll(цели, organizationId, clinic, правила, token, занятые);
   } finally {
     // Гасим ДО снятия флага: живой таймер после этого двигал бы пульс
     // у сборки, которой уже нет
@@ -324,7 +335,7 @@ async function generateAll(
   patients: { id: string; name: string }[],
   organizationId: string,
   clinic: ClinicPayload,
-  отрасль: IndustryKey,
+  правила: IndustryRules,
   token: string,
   занятые: string[]
 ): Promise<number> {
@@ -372,7 +383,7 @@ async function generateAll(
       };
       const prompt = buildRolePrompt(
         { personality: role.personality, case: patientCase },
-        industryRules(отрасль),
+        правила,
       );
 
       await prisma.patientCase.upsert({
