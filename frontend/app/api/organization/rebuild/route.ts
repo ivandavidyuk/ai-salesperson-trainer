@@ -19,6 +19,7 @@ import { prisma } from "@/lib/db";
 import { requireHead } from "@/lib/access";
 import { rebuildCases, идётСборка, целиПересборки } from "@/lib/cases";
 import { ГЕНЕРАЦИЯ_ЗАКРЫТА, этоДемо } from "@/lib/demoAccess";
+import { КАРТОЧКА_ЗАКРЫТА, карточкаЗакрыта } from "@/lib/formLock";
 import { ГЕНЕРАЦИЯ_НЕ_ДЛЯ_ОТРАСЛИ, медицинскаяОтрасль } from "@/lib/industry";
 import { ключОтрасли } from "@/scripts/industry-key";
 
@@ -55,6 +56,11 @@ export async function POST(request: NextRequest) {
     // обходился бы одним нажатием «Собрать заново»
     if (await этоДемо(head.organizationId)) {
       return NextResponse.json({ error: ГЕНЕРАЦИЯ_ЗАКРЫТА }, { status: 403 });
+    }
+    // Тот же замок, что у сохранения формы, для карточки, закрытой нами:
+    // пересборка напрямую заменила бы вычитанных пациентов (lib/formLock.ts)
+    if (await карточкаЗакрыта(head.organizationId)) {
+      return NextResponse.json({ error: КАРТОЧКА_ЗАКРЫТА }, { status: 403 });
     }
 
     // Вторую сборку поверх живой не запускаем. Кнопка нажимается там же,

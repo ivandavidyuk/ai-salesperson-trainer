@@ -18,6 +18,7 @@ import {
 import { ключ } from "@/lib/caseStaleness";
 import { затронутыеСлучаи } from "@/lib/caseStaleness";
 import { генерацияЗакрыта, этоДемо } from "@/lib/demoAccess";
+import { КАРТОЧКА_ЗАКРЫТА, карточкаЗакрыта } from "@/lib/formLock";
 import { медицинскаяОтрасль } from "@/lib/industry";
 import { поставитьОтрасль } from "@/lib/industryCookie";
 import { словаДляКлюча } from "@/lib/industryWords";
@@ -96,6 +97,9 @@ async function organizationForForm(id: string) {
       // Ключ отрасли — форма берёт по нему слова и разделы
       industryKey: true,
       isDemo: true,
+      // Карточка, закрытая нами для правки (lib/formLock.ts): форма
+      // показывает её так же, как демо, — видно всё, сохранить нельзя
+      formLocked: true,
       casesTotal: true,
       casesReady: true,
       casesUpdatedAt: true,
@@ -201,6 +205,13 @@ export async function PUT(request: NextRequest) {
         { error: генерацияЗакрыта(ключОтрасли(демо?.industryKey)) },
         { status: 403 }
       );
+    }
+
+    // Карточку, которую мы настроили вместе с клиникой, руководитель видит,
+    // но не правит: сохранение запустило бы пересборку и заменило
+    // вычитанных пациентов сгенерированными (lib/formLock.ts)
+    if (head.organizationId && (await карточкаЗакрыта(head.organizationId))) {
+      return NextResponse.json({ error: КАРТОЧКА_ЗАКРЫТА }, { status: 403 });
     }
 
     // Сохранение во время сборки отклоняем целиком, а не «сохраним, но

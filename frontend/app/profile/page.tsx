@@ -60,6 +60,9 @@ interface Organization {
   /** Демо-клиника: данные видны, но менять их нельзя — сохранение
       запускает платную пересборку, и сервер его отклоняет */
   isDemo: boolean;
+  /** Карточка, закрытая нами для правки (lib/formLock.ts): видна целиком,
+      но сохранить и пересобрать нельзя — сервер отклоняет оба */
+  formLocked: boolean;
   /** Сколько пациентов пересобирается сейчас — не сколько их всего.
       Правка, никого не задевшая, оставляет здесь ноль */
   casesTotal: number;
@@ -807,6 +810,11 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
   const done = saved && saved.casesTotal > 0 && saved.casesReady >= saved.casesTotal;
   const partial = saved && saved.casesTotal > 0 && saved.casesReady < saved.casesTotal;
   const demo = Boolean(saved?.isDemo);
+  // Карточка, закрытая нами (lib/formLock.ts): как демо — видно всё,
+  // сохранить и пересобрать нельзя; подпись внизу своя
+  const закрыта = Boolean(saved?.formLocked);
+  // Правка недоступна ни демо, ни закрытой карточке
+  const безПравки = demo || закрыта;
   // Пустые строки списков и кнопки правки — только тому, кто правит
   const editable = !readOnly;
   // Сколько пациентов у диагноза — из последнего ответа сервера, а не из
@@ -846,7 +854,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
         {/* Недособранность — забота того, кто может дособрать. Менеджеру
             баннер с «Собрать заново» ни к чему: кнопка ведёт в API,
             закрытое для него, и упёрлась бы в 403 */}
-        {editable && partial && !progress && (
+        {editable && !закрыта && partial && !progress && (
           <div className="flex items-start gap-2.5 border-b border-warn-border bg-warn-surface px-6 py-[13px] text-[15px] leading-normal text-warn max-md:px-4">
             <div>
               <span className="font-semibold">
@@ -883,7 +891,9 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
 
           {/* Город узкой колонкой: в него влезает «Нижний Новгород», а тянуть
               его в половину строки незачем — размер диктует содержимое */}
-          {editable ? (
+          {/* У закрытой карточки поля текстом, как у менеджера: сохранить
+              их нельзя, а поле ввода без сохранения выглядит поломкой */}
+          {editable && !закрыта ? (
             <div className="mt-[18px] grid grid-cols-[1fr_232px] items-start gap-x-4 gap-y-3.5 max-md:grid-cols-1">
               <div>
                 <FieldLabel>{слова.названиеОрганизации}</FieldLabel>
@@ -966,7 +976,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                     {editable ? слова.добавьтеУслуги : слова.прайсНеЗаполнен}
                   </div>
                 </div>
-                {editable && !demo && (
+                {editable && !безПравки && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1028,7 +1038,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                         : "Руководитель ещё не заполнил диагнозы клиники"}
                     </div>
                   </div>
-                  {editable && !demo && (
+                  {editable && !безПравки && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1065,6 +1075,13 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
                 {слова.демоПодвал}
               </p>
             </div>
+          ) : закрыта ? (
+            <div className="mt-5 border-t border-line-soft pt-[18px]">
+              <p className="max-w-[560px] text-[14px] leading-normal text-ink-muted">
+                Карточка настроена вместе с нами под ваши назначения. Чтобы
+                что-то поменять, напишите нам — поправим и пересоберём пациентов.
+              </p>
+            </div>
           ) : (
             <div className="mt-5 flex items-center justify-between gap-5 border-t border-line-soft pt-[18px] max-md:flex-col max-md:items-stretch max-md:gap-3">
               <p className="max-w-[520px] text-[14px] leading-normal text-ink-muted">
@@ -1092,7 +1109,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
               услугу не появятся сами никогда */}
           {/* У немедицинской отрасли пересобирать нечего: сервер откажет,
               и ссылка обещала бы то, чего не будет */}
-          {editable && !demo && saved && !progress && медицина && (
+          {editable && !безПравки && saved && !progress && медицина && (
             <p className="mt-3 text-[13.5px] leading-normal text-ink-muted">
               Добавили услугу или диагноз и хотите, чтобы пациенты приходили
               и с ними?{" "}
@@ -1127,7 +1144,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
           services={services}
           onChange={setServices}
           onClose={() => setModalOpen(false)}
-          readOnly={demo || !editable}
+          readOnly={безПравки || !editable}
           слова={слова}
         />
       )}
@@ -1137,7 +1154,7 @@ function ClinicForm({ readOnly = false }: { readOnly?: boolean }) {
           patientsByName={пациентовУ}
           onChange={setDiagnoses}
           onClose={() => setDiagsOpen(false)}
-          readOnly={demo || !editable}
+          readOnly={безПравки || !editable}
           showCoverage={editable && случаиЕсть}
         />
       )}
