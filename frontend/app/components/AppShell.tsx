@@ -684,7 +684,10 @@ function PhoneTab({
   badge: number | null;
   onClick?: () => void;
 }) {
-  const className = `flex min-h-[52px] min-w-[56px] flex-none flex-col items-center justify-center gap-[3px] px-0.5 ${
+  // Уже 360 px (маленький телефон, крупный масштаб Android) пять вкладок
+  // с подписями 13 px не помещались, и у крайних срезались буквы: там
+  // вкладки делят ширину поровну, а подпись мельче (14.10, перед Jamaica)
+  const className = `flex min-h-[52px] min-w-[56px] flex-none flex-col items-center justify-center gap-[3px] px-0.5 max-[359px]:min-w-0 max-[359px]:flex-1 max-[359px]:px-0 ${
     active ? "text-brand-hover" : "text-ink-muted"
   }`;
   const inner = (
@@ -702,7 +705,7 @@ function PhoneTab({
         )}
       </span>
       <span
-        className={`whitespace-nowrap text-[13px] leading-[1.1] tracking-[-.02em] ${
+        className={`whitespace-nowrap text-[13px] leading-[1.1] tracking-[-.02em] max-[359px]:text-[10.5px] max-[359px]:tracking-[-.04em] ${
           active ? "font-semibold" : "font-medium"
         }`}
       >

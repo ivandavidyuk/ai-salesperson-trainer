@@ -265,38 +265,46 @@ function OtherRow({
       </span>
       <Avatar manager={manager} size={44} />
 
-      <div className="min-w-0 flex-1">
-        <div className="text-[16.5px] font-semibold text-ink max-md:break-words max-md:text-[15px] max-md:leading-tight">{manager.name}</div>
-        <div className="mt-px text-[14px] text-ink-subtle max-md:hidden">{manager.jobTitle}</div>
-      </div>
+      {/* Телефон: имя первой строкой, цифры второй. В одну строку имени
+          оставалось 30–70 px, и «Алексей Морозов» шёл столбиком по буквам
+          (14.10, перед Jamaica). На десктопе обёртки `contents` — разметка
+          колонок прежняя */}
+      <div className="min-w-0 flex-1 md:contents">
+        <div className="min-w-0 flex-1">
+          <div className="text-[16.5px] font-semibold text-ink max-md:break-words max-md:text-[15px] max-md:leading-tight">{manager.name}</div>
+          <div className="mt-px text-[14px] text-ink-subtle max-md:hidden">{manager.jobTitle}</div>
+        </div>
 
-      <div className="w-24 text-center max-md:w-auto">
-        <div className={`font-mono text-[20.5px] max-md:text-[17px] ${scoreClass(manager.periodScore)}`}>
-          {manager.periodScore ?? "—"}
-        </div>
-        <div className="mt-0.5 text-[12.5px] text-ink-subtle max-md:text-[12px] max-md:leading-tight">
-          {manager.periodCount === 0 ? "нет разговоров" : "средняя"}
-        </div>
-      </div>
-      <div className="w-[84px] text-center max-md:hidden">
-        <div className="font-mono text-[20.5px] text-ink">{manager.total}</div>
-        <div className="mt-0.5 text-[12.5px] text-ink-subtle">разговоров</div>
-      </div>
-      {подписи.key !== "all" && (
-        <div className="w-[84px] text-center max-md:hidden">
-          <div className="font-mono text-[20.5px] text-ink">
-            {manager.periodCount}
+        <div className="max-md:mt-1 max-md:flex max-md:flex-wrap max-md:items-baseline max-md:gap-x-3 max-md:gap-y-0.5 md:contents">
+          <div className="w-24 text-center max-md:flex max-md:w-auto max-md:items-baseline max-md:gap-1 max-md:text-left">
+            <div className={`font-mono text-[20.5px] max-md:text-[15px] ${scoreClass(manager.periodScore)}`}>
+              {manager.periodScore ?? "—"}
+            </div>
+            <div className="mt-0.5 text-[12.5px] text-ink-subtle max-md:mt-0 max-md:text-[12.5px] max-md:leading-tight">
+              {manager.periodCount === 0 ? "нет разговоров" : "средняя"}
+            </div>
           </div>
-          <div className="mt-0.5 text-[12.5px] text-ink-subtle">
-            {подписи.count}
+          <div className="w-[84px] text-center max-md:hidden">
+            <div className="font-mono text-[20.5px] text-ink">{manager.total}</div>
+            <div className="mt-0.5 text-[12.5px] text-ink-subtle">разговоров</div>
+          </div>
+          {подписи.key !== "all" && (
+            <div className="w-[84px] text-center max-md:hidden">
+              <div className="font-mono text-[20.5px] text-ink">
+                {manager.periodCount}
+              </div>
+              <div className="mt-0.5 text-[12.5px] text-ink-subtle">
+                {подписи.count}
+              </div>
+            </div>
+          )}
+          <div className="w-[84px] text-center max-md:flex max-md:w-auto max-md:items-baseline max-md:gap-1 max-md:text-left">
+            <div className="font-mono text-[20.5px] text-ink max-md:text-[15px]">
+              {formatDealsRate(manager.periodPaidDeals, manager.periodDealTotal).label}
+            </div>
+            <div className="mt-0.5 text-[12.5px] text-ink-subtle max-md:mt-0">закрыто</div>
           </div>
         </div>
-      )}
-      <div className="w-[84px] text-center max-md:w-auto">
-        <div className="font-mono text-[20.5px] text-ink max-md:text-[17px]">
-          {formatDealsRate(manager.periodPaidDeals, manager.periodDealTotal).label}
-        </div>
-        <div className="mt-0.5 text-[12.5px] text-ink-subtle">закрыто</div>
       </div>
 
       <button
