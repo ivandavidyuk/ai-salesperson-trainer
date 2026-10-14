@@ -9,8 +9,9 @@ import type { Preset } from "./types";
 import { ПРЕСЕТ as СТОМАТОЛОГИЯ } from "./stomatologiya";
 import { ПРЕСЕТ as ОФТАЛЬМОЛОГИЯ } from "./oftalmologiya";
 import { ПРЕСЕТ as НЕДВИЖИМОСТЬ } from "./nedvizhimost";
+import { ПРЕСЕТ as ОРТОПЕДИЯ } from "./ortopediya";
 
-export const ПРЕСЕТЫ: Preset[] = [СТОМАТОЛОГИЯ, ОФТАЛЬМОЛОГИЯ, НЕДВИЖИМОСТЬ];
+export const ПРЕСЕТЫ: Preset[] = [СТОМАТОЛОГИЯ, ОФТАЛЬМОЛОГИЯ, НЕДВИЖИМОСТЬ, ОРТОПЕДИЯ];
 
 /**
  * Пресетный случай пациента в отрасли — по нему пересборка и генератор
