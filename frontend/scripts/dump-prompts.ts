@@ -8,7 +8,7 @@
 
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { buildRolePrompt, industryRules } from "./patient-prompt";
+import { buildRolePrompt, правилаОрганизации } from "./patient-prompt";
 import { PROFILES } from "./patients";
 import { ПРЕСЕТЫ } from "./presets";
 
@@ -27,7 +27,7 @@ for (const пресет of ПРЕСЕТЫ) {
     if (!профиль) continue;
     const промпт = buildRolePrompt(
       { personality: профиль.personality, case: случай.case },
-      industryRules(пресет.clinic.отрасль),
+      правилаОрганизации(пресет.clinic.отрасль, пресет.clinic.вариантПравил),
     );
     writeFileSync(join(каталог, `${случай.patientName}.txt`), промпт, "utf8");
     записано += 1;

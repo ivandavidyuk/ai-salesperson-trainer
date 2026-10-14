@@ -15,7 +15,7 @@
 // а без проверки пресет уехал бы в прод непроверенным вовсе. Разъедутся —
 // прод останется прав, а здесь надо будет догнать.
 
-import { industryRules, mechanicBlocks, type IndustryKey, type PatientPersonality } from "../patient-prompt";
+import { mechanicBlocks, правилаОрганизации, type PatientPersonality } from "../patient-prompt";
 import { клиническая, type PresetCase, type PresetClinic } from "./types";
 
 /** Ровно два примера манеры: в замере модель однажды выдала сорок шесть */
@@ -78,8 +78,10 @@ const ЧУЖОЕ_ЛИЦО =
   /(?<![А-Яа-яЁёA-Za-z])(моём|моем|моего|моей|моя|мою|мои|мне|меня|ей|ему)(?![А-Яа-яЁёA-Za-z])/i;
 
 /** Блоки механизма отрасли одним текстом — с ними сверяется словарь случая */
-const механизмТекстом = (отрасль: IndustryKey): string =>
-  mechanicBlocks(industryRules(отрасль)).join("\n").toLowerCase();
+const механизмТекстом = (клиника: PresetClinic): string =>
+  mechanicBlocks(правилаОрганизации(клиника.отрасль, клиника.вариантПравил))
+    .join("\n")
+    .toLowerCase();
 
 /** Ищет корень с начала слова — как `containsStem` в check-prompts.ts */
 export function содержитКорень(текст: string, корень: string): boolean {
@@ -253,7 +255,7 @@ export function проверитьСлучай(
   // в любом промпте. Поймано на «холодн» из стоматологического словаря —
   // оно совпало с «холоднее» в правиле про переспрос, и проверка протечек
   // начала ругаться на здоровый офтальмологический случай
-  const механизм = механизмТекстом(клиника.отрасль);
+  const механизм = механизмТекстом(клиника);
   const вМеханизме = случай.vocabulary.filter((слово) =>
     содержитКорень(механизм, слово.trim().toLowerCase()),
   );

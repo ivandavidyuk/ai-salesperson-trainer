@@ -40,13 +40,16 @@ export async function скопироватьПресет(
 ): Promise<КопияПресета | null> {
   const пресет = await prisma.organization.findFirst({
     where: { isPreset: true, industry },
-    select: { id: true, name: true, industryKey: true },
+    select: { id: true, name: true, industryKey: true, rulesVariant: true },
   });
   if (!пресет) return null;
   const отрасль = ключОтрасли(пресет.industryKey);
   await prisma.organization.update({
     where: { id: organizationId },
-    data: { industryKey: отрасль },
+    // Вариант правил едет вместе с ключом: случаи ниже копируются с промптами,
+    // собранными по нему, и пересборка при старте контейнера обязана
+    // собрать их так же. У пресетов без варианта здесь null, как и было
+    data: { industryKey: отрасль, rulesVariant: пресет.rulesVariant },
   });
 
   const услуги = await prisma.service.findMany({
