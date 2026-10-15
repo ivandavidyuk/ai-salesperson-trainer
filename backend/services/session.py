@@ -342,6 +342,38 @@ class SessionStore:
         await self._redis.set(_status_key(session_id), STATUS_COMPLETED)
         return row["durationSec"]
 
+    async def close_failed_start(self, session_id: str, user_id: str) -> bool:
+        """Закрывает разговор, который не начался по нашей вине. True — закрыли.
+
+        Длительность 0 и конец, равный началу: разговора не было. Штатное
+        закрытие (`finish_if_unfinished`) поставило бы время от старта, и
+        счётчик часов клиента (`frontend/lib/hours.ts`) списал бы его — он
+        складывает длительность всех завершённых сессий без оглядки на
+        реплики. По этой же примете — завершена, конец равен началу, реплик
+        нет — сорвавшиеся старты находит рассылка тревог
+        (`frontend/scripts/session-alerts.ts`).
+
+        Владелец — в условии: на старте сбой мог случиться раньше проверки,
+        чья это сессия, и чужую закрывать нельзя. Реплики — тоже: если
+        разговор всё-таки шёл, это не сбой старта, и трогать его не нам.
+        """
+        assert self._redis is not None and self._pool is not None
+        row = await self._pool.fetchrow(
+            'UPDATE "Session" SET '
+            '"status" = \'completed\'::"SessionStatus", '
+            '"endedAt" = "startedAt", '
+            '"durationSec" = 0 '
+            'WHERE "id" = $1 AND "userId" = $2 AND "status" <> \'completed\' '
+            'AND NOT EXISTS (SELECT 1 FROM "Message" m WHERE m."sessionId" = "Session"."id") '
+            'RETURNING "id"',
+            session_id,
+            user_id,
+        )
+        if row is None:
+            return False
+        await self._redis.set(_status_key(session_id), STATUS_COMPLETED)
+        return True
+
     # --- Работа с сообщениями -------------------------------------------
 
     async def get_messages(self, session_id: str) -> list[dict]:

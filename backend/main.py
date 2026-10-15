@@ -1236,152 +1236,201 @@ async def finalize_review(session_id: str) -> None:
         logger.warning("Разбор сессии %s не удался: %s", session_id, exc)
 
 
+_СБОЙ_СТАРТА = "Не удалось начать разговор. Нажмите «Начать» ещё раз."
+
+
+async def _сбой_старта(ws: WebSocket, session_id: str, user_id, tts_stream, stt, exc) -> None:
+    """Разговор не начался по нашей вине: закрыть сессию и сказать человеку правду.
+
+    Сессию — с длительностью 0 (`close_failed_start`): разговора не было,
+    и списывать часы клиента не за что. Человеку — `start_failed` с текстом
+    «нажмите ещё раз»: экран звонка гасит микрофон и возвращает кнопку
+    «Начать», новая сессия создаётся заново. Разбор и тревоги находят такой
+    старт по примете из `close_failed_start`.
+
+    Никогда не бросает: всё здесь — уборка после сбоя, и второй сбой
+    не должен оставить сокет открытым.
+    """
+    logger.error("СБОЙ СТАРТА сессия %s: %s", session_id, _describe(exc))
+    for поток in (stt, tts_stream):
+        if поток is None:
+            continue
+        try:
+            await поток.stop()
+        except Exception as stop_exc:  # noqa: BLE001
+            logger.warning("Сессия %s: не остановлен поток после сбоя старта: %s", session_id, stop_exc)
+    if user_id:
+        try:
+            if await store.close_failed_start(session_id, user_id):
+                logger.info("Сессия %s: закрыта как несостоявшаяся, длительность 0", session_id)
+            await store.clear_session(session_id)
+        except Exception as close_exc:  # noqa: BLE001
+            # Сессия останется active — её поймает рассылка тревог
+            # («нет реплик дольше трёх минут»)
+            logger.warning("Сессия %s: не закрыта после сбоя старта: %s", session_id, close_exc)
+    await safe_send(ws, {"type": "start_failed", "message": _СБОЙ_СТАРТА})
+    try:
+        await ws.close(code=1011)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 @app.websocket("/ws/session/{session_id}")
 async def session_ws(ws: WebSocket, session_id: str):
     """WebSocket-эндпоинт одной тренировочной сессии."""
     await ws.accept()
 
-    # 1. Проверяем одноразовый ws-токен из query-параметра ?token=...
-    # Токен одноразовый: consume_ws_token удаляет его из Redis при проверке.
-    ws_token = ws.query_params.get("token")
-    user_id = await store.consume_ws_token(ws_token)
-    if user_id is None:
+    # Старт разговора — всё до основного цикла — под одной скобкой. 15.10
+    # первый разговор Jamaica упал здесь на мёртвом соединении с базой:
+    # исключение ушло в ASGI, менеджер остался на зависшем экране с текстом
+    # «Связь прервалась. Завершите разговор», сессия повисла active. Теперь
+    # любой сбой старта закрывает сессию с длительностью 0 и говорит человеку
+    # правду (_сбой_старта). Отказы по делу — токен, чужая сессия, нет
+    # промпта — остаются прежними: это не сбой, а ответ
+    user_id: Optional[str] = None
+    tts_stream = None
+    stt = None
+    try:
+        # 1. Проверяем одноразовый ws-токен из query-параметра ?token=...
+        # Токен одноразовый: consume_ws_token удаляет его из Redis при проверке.
+        ws_token = ws.query_params.get("token")
+        user_id = await store.consume_ws_token(ws_token)
+        if user_id is None:
+            logger.info(
+                "Сессия %s: отклонена (ws-токен не найден или истёк)", session_id
+            )
+            # По ТЗ: токен не найден/истёк — закрываем с кодом 4001
+            await ws.close(code=4001)
+            return
+
+        # 2. Загружаем состояние сессии и проверяем, что она принадлежит юзеру
+        status = await store.load_session(session_id)
+        if status is None:
+            logger.info("Сессия %s: не найдена", session_id)
+            await safe_send(ws, {"type": "error", "message": "Сессия не найдена"})
+            await ws.close(code=1008)
+            return
+
+        owner = await store.get_session_owner(session_id)
+        if owner != user_id:
+            logger.info(
+                "Сессия %s: доступ запрещён (владелец=%s, токен=%s)",
+                session_id,
+                owner,
+                user_id,
+            )
+            await safe_send(ws, {"type": "error", "message": "Доступ запрещён"})
+            await ws.close(code=1008)
+            return
+
+        if status != STATUS_ACTIVE:
+            logger.info("Сессия %s: статус=%s, отклонено", session_id, status)
+            await safe_send(ws, {"type": "error", "message": "Сессия не активна"})
+            await ws.close(code=1008)
+            return
+
+        # Роль, которую играет ИИ. Без промпта разговор не начинаем: молча играть
+        # непонятно кого хуже, чем честно сказать, что персонаж не настроен.
+        system_prompt = await store.get_system_prompt(session_id)
+        if not system_prompt:
+            await safe_send(
+                ws,
+                {
+                    "type": "error",
+                    "message": по_отрасли(
+                        "Для этого пациента ещё не настроен промпт",
+                        await store.get_industry(session_id),
+                    ),
+                },
+            )
+            await ws.close(code=1008)
+            return
+
         logger.info(
-            "Сессия %s: отклонена (ws-токен не найден или истёк)", session_id
+            "Сессия %s: подключение установлено (user=%s)", session_id, user_id
         )
-        # По ТЗ: токен не найден/истёк — закрываем с кодом 4001
-        await ws.close(code=4001)
-        return
 
-    # 2. Загружаем состояние сессии и проверяем, что она принадлежит юзеру
-    status = await store.load_session(session_id)
-    if status is None:
-        logger.info("Сессия %s: не найдена", session_id)
-        await safe_send(ws, {"type": "error", "message": "Сессия не найдена"})
-        await ws.close(code=1008)
-        return
-
-    owner = await store.get_session_owner(session_id)
-    if owner != user_id:
+        # Постоянный TTS WebSocket на всю сессию: соединение устанавливается
+        # здесь один раз, чтобы на каждой реплике не тратить время на TLS.
+        #
+        # Голос берём до подключения: он вшит в адрес сокета, и сменить его
+        # у поднятого соединения нельзя. Пусто — общий из настроек
+        voice_id = await store.get_patient_voice(session_id)
+        # Модель голоса: по умолчанию v4 Turbo; ?tts=flash приходит со стенда
+        # сравнения моделей и включает прежнюю
+        tts_stream = tts.stream_for(ws.query_params.get("tts"), voice_id)
         logger.info(
-            "Сессия %s: доступ запрещён (владелец=%s, токен=%s)",
+            "Сессия %s: голос %s, модель %s",
             session_id,
-            owner,
-            user_id,
+            voice_id or "общий из настроек",
+            tts_stream.model,
         )
-        await safe_send(ws, {"type": "error", "message": "Доступ запрещён"})
-        await ws.close(code=1008)
-        return
+        try:
+            await tts_stream.start()
+        except Exception as exc:  # noqa: BLE001
+            # Не критично: stream_sentence переподключится, а при повторном
+            # сбое сработает HTTP-фолбэк в консьюмере
+            logger.warning("TTS: не удалось открыть WebSocket заранее: %s", exc)
 
-    if status != STATUS_ACTIVE:
-        logger.info("Сессия %s: статус=%s, отклонено", session_id, status)
-        await safe_send(ws, {"type": "error", "message": "Сессия не активна"})
-        await ws.close(code=1008)
-        return
-
-    # Роль, которую играет ИИ. Без промпта разговор не начинаем: молча играть
-    # непонятно кого хуже, чем честно сказать, что персонаж не настроен.
-    system_prompt = await store.get_system_prompt(session_id)
-    if not system_prompt:
-        await safe_send(
-            ws,
-            {
-                "type": "error",
-                "message": по_отрасли(
-                    "Для этого пациента ещё не настроен промпт",
-                    await store.get_industry(session_id),
-                ),
-            },
+        # 3. Менеджер ходов: получает STT-коммиты, фильтрует фантомы, запускает
+        # отменяемый пайплайн LLM -> TTS (склейка разрезанных фраз, barge-in).
+        manager = TurnManager(
+            ws=ws,
+            session_id=session_id,
+            tts_stream=tts_stream,
+            system_prompt=system_prompt,
+            scores_deal=await store.get_scores_deal(session_id),
+            industry=await store.get_industry(session_id),
         )
-        await ws.close(code=1008)
-        return
 
-    logger.info(
-        "Сессия %s: подключение установлено (user=%s)", session_id, user_id
-    )
-
-    # Постоянный TTS WebSocket на всю сессию: соединение устанавливается
-    # здесь один раз, чтобы на каждой реплике не тратить время на TLS.
-    #
-    # Голос берём до подключения: он вшит в адрес сокета, и сменить его
-    # у поднятого соединения нельзя. Пусто — общий из настроек
-    voice_id = await store.get_patient_voice(session_id)
-    # Модель голоса: по умолчанию v4 Turbo; ?tts=flash приходит со стенда
-    # сравнения моделей и включает прежнюю
-    tts_stream = tts.stream_for(ws.query_params.get("tts"), voice_id)
-    logger.info(
-        "Сессия %s: голос %s, модель %s",
-        session_id,
-        voice_id or "общий из настроек",
-        tts_stream.model,
-    )
-    try:
-        await tts_stream.start()
-    except Exception as exc:  # noqa: BLE001
-        # Не критично: stream_sentence переподключится, а при повторном
-        # сбое сработает HTTP-фолбэк в консьюмере
-        logger.warning("TTS: не удалось открыть WebSocket заранее: %s", exc)
-
-    # 3. Менеджер ходов: получает STT-коммиты, фильтрует фантомы, запускает
-    # отменяемый пайплайн LLM -> TTS (склейка разрезанных фраз, barge-in).
-    manager = TurnManager(
-        ws=ws,
-        session_id=session_id,
-        tts_stream=tts_stream,
-        system_prompt=system_prompt,
-        scores_deal=await store.get_scores_deal(session_id),
-        industry=await store.get_industry(session_id),
-    )
-
-    # 4. Инициализируем STT (ElevenLabs Realtime)
-    api_key = get_settings().elevenlabs_api_key
-    stt = ElevenLabsSTT(
-        api_key=api_key,
-        on_final=manager.on_final,
-        on_voice_resumed=manager.on_voice_resumed,
-        on_sustained_voice=manager.on_sustained_voice,
-        on_partial=manager.on_partial,
-        on_fatal=manager.on_stt_failed,
-    )
-    manager.stt = stt
-    stt_started = False
-    try:
+        # 4. Инициализируем STT (ElevenLabs Realtime)
+        api_key = get_settings().elevenlabs_api_key
+        stt = ElevenLabsSTT(
+            api_key=api_key,
+            on_final=manager.on_final,
+            on_voice_resumed=manager.on_voice_resumed,
+            on_sustained_voice=manager.on_sustained_voice,
+            on_partial=manager.on_partial,
+            on_fatal=manager.on_stt_failed,
+        )
+        manager.stt = stt
+        # Без распознавания разговор невозможен: сбой запуска — сорвавшийся
+        # старт (скобка вокруг всего старта), а не разговор, в котором менеджера
+        # не слышно. Раньше экран оставался с «Распознавание речи недоступно»
         await stt.start()
         stt_started = True
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Не удалось запустить STT (сессия %s): %s", session_id, exc)
-        await safe_send(
-            ws,
-            {"type": "error", "message": "Распознавание речи недоступно"},
-        )
 
-    # 5. Открывающий ход: в упражнениях, где разговор ведёт пациент, он
-    # заговаривает первым — до единой реплики менеджера.
-    #
-    # Пустая история обязательна в условии: этот же код выполняется при
-    # ПЕРЕПОДКЛЮЧЕНИИ к живой сессии, и без проверки пациент здоровался бы
-    # посреди разговора.
-    #
-    # Клиенту говорим заранее: у него на экране написано «Слушаю вас», и без
-    # предупреждения менеджер начал бы говорить ровно тогда, когда собирается
-    # пациент, — и перебил бы его первым же словом.
-    # Мягкой скобкой, как TTS и STT выше: разговор без открывающего хода —
-    # это прежнее поведение, а разговор, не начавшийся из-за сбоя в Redis
-    # или Postgres, — потерянная тренировка. Причём у всех типов, а не
-    # только у этих двух
-    try:
-        if not await store.get_messages(session_id) and await store.opens_dialog(
-            session_id
-        ):
-            logger.info("Сессия %s: пациент начинает разговор сам", session_id)
-            await safe_send(ws, {"type": "patient_opens"})
-            manager.open_dialog()
+        # 5. Открывающий ход: в упражнениях, где разговор ведёт пациент, он
+        # заговаривает первым — до единой реплики менеджера.
+        #
+        # Пустая история обязательна в условии: этот же код выполняется при
+        # ПЕРЕПОДКЛЮЧЕНИИ к живой сессии, и без проверки пациент здоровался бы
+        # посреди разговора.
+        #
+        # Клиенту говорим заранее: у него на экране написано «Слушаю вас», и без
+        # предупреждения менеджер начал бы говорить ровно тогда, когда собирается
+        # пациент, — и перебил бы его первым же словом.
+        # Мягкой скобкой, как TTS и STT выше: разговор без открывающего хода —
+        # это прежнее поведение, а разговор, не начавшийся из-за сбоя в Redis
+        # или Postgres, — потерянная тренировка. Причём у всех типов, а не
+        # только у этих двух
+        try:
+            if not await store.get_messages(session_id) and await store.opens_dialog(
+                session_id
+            ):
+                logger.info("Сессия %s: пациент начинает разговор сам", session_id)
+                await safe_send(ws, {"type": "patient_opens"})
+                manager.open_dialog()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Сессия %s: открывающий ход не состоялся (%s) — начинает менеджер",
+                session_id,
+                exc,
+            )
+
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Сессия %s: открывающий ход не состоялся (%s) — начинает менеджер",
-            session_id,
-            exc,
-        )
+        await _сбой_старта(ws, session_id, user_id, tts_stream, stt, exc)
+        return
 
     # 6. Основной цикл приёма сообщений от клиента
     try:

@@ -540,6 +540,13 @@ function SessionScreen() {
               },
             }
           );
+          // Пока включался микрофон, сервер мог сообщить, что разговор
+          // не начался (start_failed снимает сокет): тогда не переводим
+          // экран в разговор, а гасим только что включённый микрофон
+          if (wsRef.current !== ws) {
+            await recorder.stop();
+            return;
+          }
           setScreenState("active");
           // Микрофон разрешён — теперь у устройств есть названия
           void playerRef.current?.reportDevices();
@@ -593,6 +600,12 @@ function SessionScreen() {
               // менеджеру достаточно «готовим…» на кнопке
               setTimeout(() => sendWs({ type: "diagnostics" }), 2500);
               break;
+            case "start_failed":
+              // Сервер не смог начать разговор и уже закрыл сессию
+              // с длительностью 0 — назад к кнопке «Начать», а не «связь
+              // прервалась, завершите разговор»
+              void сорвалсяСтарт(String(msg.message || ""));
+              break;
             case "session_ended":
               break;
             // transcript_user / transcript_ai на экране не показываем —
@@ -623,6 +636,26 @@ function SessionScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  // Разговор не начался по нашей вине. 15.10 так встретил первый разговор
+  // Jamaica: сервер упал на старте, а экран написал «Связь прервалась.
+  // Завершите разговор — всё сказанное сохранится», хотя разговора не было
+  // и кнопки начать заново не дал. Теперь — честный текст от сервера и
+  // проверка звука с «Начать»: новая сессия создастся заново
+  async function сорвалсяСтарт(text: string) {
+    const ws = wsRef.current;
+    // Сначала снимаем сокет: его закрытие — наше, onclose не перепишет текст
+    wsRef.current = null;
+    ws?.close();
+    patientOpensRef.current = false;
+    await recorderRef.current?.stop();
+    recorderRef.current = null;
+    playerRef.current?.reset();
+    playerRef.current = null;
+    setSessionId(null);
+    setErrorMsg(text || "Не удалось начать разговор. Нажмите «Начать» ещё раз.");
+    setScreenState("check");
   }
 
   // «Пауза»: перестаём слать аудио и сообщаем серверу
@@ -849,6 +882,15 @@ function SessionScreen() {
               </div>
             )}
 
+            {/* Причина, по которой разговор не начался (сбой старта, часы,
+                недоступный вариант), — рядом с кнопкой, которую нажимают снова.
+                Раньше текст выводился только внутри разговора, и на этих
+                экранах человек оставался без объяснения */}
+            {errorMsg && (
+              <p className="mt-5 max-w-[440px] text-center text-sm text-danger-text max-md:hidden">
+                {errorMsg}
+              </p>
+            )}
             {/* С карточки уходим на проверку звука, а не сразу в разговор.
                 Проверка — отдельный шаг: здесь и так карточка пациента
                 с анамнезом, и вдвоём они не помещались в экран */}
@@ -988,6 +1030,15 @@ function SessionScreen() {
               </div>
             )}
 
+            {/* Причина, по которой разговор не начался (сбой старта, часы,
+                недоступный вариант), — рядом с кнопкой, которую нажимают снова.
+                Раньше текст выводился только внутри разговора, и на этих
+                экранах человек оставался без объяснения */}
+            {errorMsg && (
+              <p className="mt-5 max-w-[440px] text-center text-sm text-danger-text max-md:hidden">
+                {errorMsg}
+              </p>
+            )}
             <div className="mt-6 flex items-center gap-3 max-md:hidden">
               {/* Блокируем только когда микрофон работает, но молчит:
                   это и есть случай линейного входа. При запрете доступа
@@ -1420,6 +1471,9 @@ function SessionScreen() {
         <div className="flex shrink-0 flex-col gap-2.5 border-t border-line bg-surface-card px-4 pb-4 pt-3 md:hidden">
           {screenState === "idle" && (
             <>
+              {errorMsg && (
+                <p className="text-center text-[14px] leading-snug text-danger-text">{errorMsg}</p>
+              )}
               <button
                 type="button"
                 onClick={() => setScreenState("check")}
@@ -1436,6 +1490,9 @@ function SessionScreen() {
 
           {screenState === "check" && (
             <>
+              {errorMsg && (
+                <p className="text-center text-[14px] leading-snug text-danger-text">{errorMsg}</p>
+              )}
               <button
                 type="button"
                 onClick={handleStart}
