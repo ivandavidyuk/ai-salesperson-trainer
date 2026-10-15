@@ -110,12 +110,74 @@ def _scores_key(session_id: str) -> str:
     return f"session:{session_id}:scores"
 
 
+# Соединение умерло, пока лежало в пуле. База на RU, backend на DE, и
+# простоявшее без дела соединение сеть обрывает молча — asyncpg узнаёт
+# об этом только на первом запросе. 15.10 так не начался первый разговор
+# первой клиники (Jamaica, 16:50 МСК): backend перезапустили накануне
+# в 21:51, соединение пролежало 19 часов, первый же запрос сессии получил
+# ConnectionResetError, и обработчик сокета упал
+_МЁРТВОЕ_СОЕДИНЕНИЕ = (
+    asyncpg.exceptions.ConnectionDoesNotExistError,
+    asyncpg.exceptions.InterfaceError,
+    ConnectionResetError,
+    ConnectionAbortedError,
+    BrokenPipeError,
+)
+
+# Keepalive со стороны сервера базы: пока соединение простаивает, он раз
+# в минуту шлёт пробу, и сеть не считает его брошенным. Проверено на проде
+# 15.10: база эти параметры на подключение принимает
+_KEEPALIVE = {
+    "tcp_keepalives_idle": "60",
+    "tcp_keepalives_interval": "15",
+    "tcp_keepalives_count": "4",
+}
+
+
+class ПулСПовтором:
+    """Пул asyncpg, который повторяет запрос, если соединение оказалось мёртвым.
+
+    Сломанное соединение asyncpg из пула выбрасывает сам, так что повтор
+    берёт новое. Повтор один: если упал и он, дело не в простое, а в базе
+    или сети, и честнее отдать ошибку. Писать повтором безопасно: мёртвое
+    после простоя соединение рвётся на отправке, до базы запрос не доходит
+    """
+
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
+
+    async def _с_повтором(self, метод: str, *args):
+        try:
+            return await getattr(self._pool, метод)(*args)
+        except _МЁРТВОЕ_СОЕДИНЕНИЕ as exc:
+            logger.warning(
+                "Postgres: мёртвое соединение (%s) — повторяем на новом",
+                type(exc).__name__,
+            )
+            return await getattr(self._pool, метод)(*args)
+
+    async def fetch(self, *args):
+        return await self._с_повтором("fetch", *args)
+
+    async def fetchrow(self, *args):
+        return await self._с_повтором("fetchrow", *args)
+
+    async def fetchval(self, *args):
+        return await self._с_повтором("fetchval", *args)
+
+    async def execute(self, *args):
+        return await self._с_повтором("execute", *args)
+
+    async def close(self) -> None:
+        await self._pool.close()
+
+
 class SessionStore:
     """Хранилище состояния сессий: Redis (онлайн-состояние) + Postgres (история)."""
 
     def __init__(self) -> None:
         self._redis: Optional[aioredis.Redis] = None
-        self._pool: Optional[asyncpg.Pool] = None
+        self._pool: Optional[ПулСПовтором] = None
 
     # --- Инициализация / завершение -------------------------------------
 
@@ -125,8 +187,13 @@ class SessionStore:
         self._redis = aioredis.from_url(
             settings.redis_url, decode_responses=True
         )
-        self._pool = await asyncpg.create_pool(
-            dsn=settings.asyncpg_dsn, min_size=1, max_size=5
+        self._pool = ПулСПовтором(
+            await asyncpg.create_pool(
+                dsn=settings.asyncpg_dsn,
+                min_size=1,
+                max_size=5,
+                server_settings=_KEEPALIVE,
+            )
         )
         logger.info("SessionStore: подключения к Redis и PostgreSQL установлены")
 
