@@ -26,6 +26,7 @@
     "dump:presets:md": "ts-node scripts/dump-presets-md.ts",
     "rebuild:prompts": "ts-node scripts/rebuild-prompts.ts",
     "sync:locked": "ts-node scripts/sync-locked.ts",
+    "help:shots": "node scripts/help-shots.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
