@@ -185,15 +185,18 @@ async def _разговор(пациент, тип, клиника, док, пр
             if стоп:
                 break
 
-        # Строка доверия — как в TurnManager: по последней фоновой оценке
+        # Состояние хода — как в TurnManager: доверие по последней фоновой
+        # оценке, документ после показа, «до документа» — пока его нет
         reached = scores is not None and scores.average >= порог
-        промпт = f"{роль}\n\n{llm.trust_instruction(reached, отрасль)}"
-        if документ_показан:
-            промпт = f"{промпт}\n\n{llm.diagnostics_instruction(док['doc'])}"
-
         история.append({"role": "user", "text": строка})
+        промпт, запрос = llm.собрать_ход(
+            роль, история, доверие=reached, industry=отрасль,
+            документ=док["doc"] if документ_показан else None,
+            до_документа=bool(док and док.get("doc")) and not args.без_до_документа,
+            место=args.место,
+        )
         try:
-            ответ, первый_мс, _ = await _ответ(история, промпт)
+            ответ, первый_мс, _ = await _ответ(запрос, промпт)
         except Exception as exc:  # noqa: BLE001
             история.pop()
             сбои.append({"ход": номер, "кто": "пациент", "ошибка": f"{type(exc).__name__}: {exc}"[:300]})
@@ -242,12 +245,26 @@ async def main() -> None:
     п.add_argument("--concurrency", type=int, default=5)
     п.add_argument("--diag-at", type=int, default=7, help="на каком ходу показать документ")
     п.add_argument("--out", default=f"qa-runs/full-{time.strftime('%Y-%m-%dT%H-%M')}")
+    п.add_argument(
+        "--место", choices=llm.МЕСТА_СОСТОЯНИЯ, default=None,
+        help="куда ставить строку доверия; по умолчанию — как в бою",
+    )
+    п.add_argument(
+        "--без-до-документа", dest="без_до_документа", action="store_true",
+        help="без блока «до документа» — для сравнения с прогонами до 19.10",
+    )
+    п.add_argument("--замены", help="JSON-список {было, стало} — правка механизма поверх ролей из базы")
     args = п.parse_args()
 
     пациенты, типы, клиника, _ = await store.загрузить(args.org)
     if клиника is None or клиника.ключ != "медицина":
         raise SystemExit("Только клиники: у неклиники нет документа диагностики")
     пациенты = [x for x in пациенты if x.случай_собран]
+    # Правка механизма поверх ролей из базы — прогнать ветку до мержа
+    if args.замены:
+        замены = json.loads(Path(args.замены).read_text(encoding="utf-8"))
+        for x in пациенты:
+            x.промпт = store.применить_замены(x.промпт, замены, x.имя)
     if args.patients:
         нужные = set(args.patients.split(","))
         пациенты = [x for x in пациенты if x.слаг in нужные]
@@ -259,7 +276,7 @@ async def main() -> None:
     print(
         f"клиника «{клиника.название}», вариант правил {вариант or 'нет'}, тип «{тип.название}», "
         f"пациентов {len(пациенты)}, ходов до {args.turns}, документ на {args.diag_at}-м, "
-        f"каталог {каталог}",
+        f"каталог {каталог}, замены {args.замены or 'нет'}, место {args.место or llm.МЕСТО_СОСТОЯНИЯ}",
         flush=True,
     )
 
