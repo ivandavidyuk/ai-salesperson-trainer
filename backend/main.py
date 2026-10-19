@@ -1379,9 +1379,12 @@ async def session_ws(ws: WebSocket, session_id: str):
         )
 
     # 6. Основной цикл приёма сообщений от клиента
+    # Когда от клиента пришло последнее сообщение — для строки об обрыве
+    последнее_от_клиента = time.monotonic()
     try:
         while True:
             message = await ws.receive_json()
+            последнее_от_клиента = time.monotonic()
             msg_type = message.get("type")
 
             if msg_type == "audio_chunk":
@@ -1510,8 +1513,19 @@ async def session_ws(ws: WebSocket, session_id: str):
                     msg_type,
                 )
 
-    except WebSocketDisconnect:
-        logger.info("Сессия %s: клиент отключился", session_id)
+    except WebSocketDisconnect as exc:
+        # Тишина перед обрывом различает причины. Двадцать секунд и больше —
+        # телефон перестал отвечать на ping (uvicorn ждёт ответа 20 с после
+        # каждого ping раз в 20 с): уснул с погасшим экраном или потерял сеть.
+        # Короткая — соединение закрыл сам телефон. Код чаще всего 1006: так
+        # uvicorn называет и тайм-аут ping, и обрыв без закрывающего кадра
+        logger.info(
+            "Сессия %s: клиент отключился (код %s%s, тишина от клиента %.0f с)",
+            session_id,
+            exc.code,
+            f", {exc.reason}" if exc.reason else "",
+            time.monotonic() - последнее_от_клиента,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.error("Сессия %s: непредвиденная ошибка: %s", session_id, exc)
         await safe_send(ws, {"type": "error", "message": "Внутренняя ошибка"})
