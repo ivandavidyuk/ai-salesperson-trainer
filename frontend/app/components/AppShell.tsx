@@ -17,6 +17,7 @@ import BackLink from "@/app/components/BackLink";
 import Sheet from "@/app/components/Sheet";
 import { useSetIndustry, useWords } from "@/app/components/IndustryProvider";
 import { ключИзСлага } from "@/lib/industryWords";
+import { пиктограммы } from "@/app/components/HintTile";
 
 // Ширины меню из макета. Макеты перерисованы под рамку 1440×900 — размер
 // реального ноутбука, поэтому рейка и шапка стали крупнее: по элементам
@@ -71,6 +72,8 @@ interface NavItem {
   badge?: "tasks" | "achievements";
   /** Пункт виден только руководителю */
   headOnly?: boolean;
+  /** Пункт прижат к низу рейки — справка, а не раздел работы */
+  bottom?: boolean;
 }
 
 // Иконки — тонкие контурные, 21px, наследуют цвет пункта
@@ -175,13 +178,19 @@ const NAV_ITEMS: NavItem[] = [
     icon: <Icon>{icons.achievements}</Icon>,
     badge: "achievements",
   },
+  {
+    href: "/help",
+    label: "Как пользоваться",
+    icon: <Icon>{пиктограммы.справка}</Icon>,
+    bottom: true,
+  },
   { href: "/profile", label: "Профиль", icon: <Icon>{icons.profile}</Icon> },
 ];
 
-// Нижняя панель телефона держит пять ячеек. Профиль в неё не входит — он
-// в меню аватара, как в макете. У руководителя разделов на один больше,
-// поэтому последние два уходят в лист «Ещё»
-const PHONE_HIDDEN = new Set(["/profile"]);
+// Нижняя панель телефона держит пять ячеек. Профиль и справка в неё
+// не входят — они в меню аватара, как в макете. У руководителя разделов
+// на один больше, поэтому последние два уходят в лист «Ещё»
+const PHONE_HIDDEN = new Set(["/profile", "/help"]);
 const PHONE_MORE = new Set(["/training", "/achievements"]);
 
 interface AppShellProps {
@@ -425,6 +434,8 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
               // Свёрнутый пункт — фиксированная подложка 50×44 по центру
               // рейки; развёрнутый тянется на всю ширину с полями
               className={`flex items-center gap-3 rounded-input text-sm transition-colors ${
+                item.bottom ? "mt-auto" : ""
+              } ${
                 navOpen
                   ? "w-full justify-start px-3 py-2.5"
                   : "h-11 w-[50px] justify-center"
@@ -561,6 +572,29 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
                           {icons.profileMenu}
                         </svg>
                         Мой профиль
+                      </Link>
+                      {/* Справка: на компьютере она в рейке, на телефоне —
+                          здесь, в двух касаниях с любого экрана с аватаром */}
+                      <Link
+                        href="/help"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex min-h-12 items-center gap-3 rounded-[10px] px-3 text-[16px] font-medium text-ink-body transition-colors hover:bg-surface-bubble md:hidden"
+                      >
+                        <svg
+                          width="17"
+                          height="17"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-ink-muted"
+                          aria-hidden="true"
+                        >
+                          {пиктограммы.справка}
+                        </svg>
+                        Как пользоваться
                       </Link>
                       <button
                         type="button"

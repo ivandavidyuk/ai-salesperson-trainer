@@ -172,10 +172,10 @@ export default function AudioDevicePicker({
             <span className="absolute left-0">тихо</span>
             <span
               style={{ left: `${(VOICE_RMS / FULL_SCALE_RMS) * 100}%` }}
-              // На телефоне шкала узкая, засечка у самого левого края —
-              // по центру засечки подпись наезжала на «тихо»; там она
-              // начинается от засечки
-              className="absolute -translate-x-1/2 whitespace-nowrap max-md:ml-1 max-md:translate-x-0"
+              // Засечка у самого левого края шкалы: по центру засечки подпись
+              // наезжала на «тихо» — сначала замечено на телефоне, потом и на
+              // ноутбуке. Поэтому подпись начинается от засечки
+              className="absolute ml-1 whitespace-nowrap"
             >
               порог голоса
             </span>
