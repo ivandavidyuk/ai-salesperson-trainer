@@ -465,7 +465,7 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
             <Link
               key={item.href}
               href={item.href}
-              title={item.label}
+              title={item.href === "/help" && справкаНовая ? `${item.label} — новое` : item.label}
               // Свёрнутый пункт — фиксированная подложка 50×44 по центру
               // рейки; развёрнутый тянется на всю ширину с полями
               className={`flex items-center gap-3 rounded-input text-sm transition-colors ${
@@ -477,13 +477,20 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
               } ${
                 active
                   ? "bg-brand-soft font-semibold text-brand-hover"
-                  : "font-medium text-ink-muted hover:bg-surface-bubble"
+                  : item.href === "/help"
+                    ? // Справка выделена цветом среди серых разделов: серым
+                      // значком в углу её не замечал никто
+                      "bg-surface-accent font-semibold text-brand hover:bg-brand-soft"
+                    : "font-medium text-ink-muted hover:bg-surface-bubble"
               }`}
             >
               <span className="relative inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center">
                 {item.icon}
                 {/* В свёрнутом меню счётчик висит на иконке, в развёрнутом
                     уходит вправо — места для подписи там уже хватает */}
+                {item.href === "/help" && справкаНовая && !navOpen && (
+                  <span className="absolute -right-[4px] -top-[4px] h-[11px] w-[11px] rounded-full border-2 border-surface-card bg-brand" />
+                )}
                 {badge !== null && !navOpen && (
                   <span className="absolute -right-[5px] -top-1 inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-full border-[length:1.5px] border-surface-card bg-brand px-[3px] text-[10.5px] font-bold text-white">
                     {badge}
@@ -491,6 +498,11 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
                 )}
               </span>
               {navOpen && <span className="whitespace-nowrap">{item.label}</span>}
+              {item.href === "/help" && справкаНовая && navOpen && (
+                <span className="ml-auto rounded-full bg-brand px-2 py-0.5 text-[11.5px] font-bold leading-none text-white">
+                  Новое
+                </span>
+              )}
               {badge !== null && navOpen && (
                 <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1.5 text-[12.5px] font-bold text-white">
                   {badge}
@@ -538,37 +550,11 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
           </div>
 
           <div className="flex items-center gap-3 max-md:gap-1.5">
-            {/* Справка — подписанной кнопкой на каждом экране. Значок
-                в рейке не замечал никто, а справка нужна как раз тем, кто
-                ещё не разобрался. На самой справке кнопки нет */}
+            {/* Справка на телефоне — значок «?» в шапке: рейки там нет,
+                а нижняя панель занята разделами. На компьютере справка —
+                выделенный пункт рейки. На самой справке значка нет */}
             {pathname !== "/help" && (
               <>
-                <Link
-                  href="/help"
-                  title="Как пользоваться тренажёром"
-                  className="inline-flex h-9 items-center gap-2 rounded-full border border-line-strong bg-surface-card pl-3 pr-3.5 text-[14px] font-semibold text-ink transition-colors hover:bg-surface-bubble max-md:hidden"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-brand"
-                    aria-hidden="true"
-                  >
-                    {пиктограммы.справка}
-                  </svg>
-                  Как пользоваться
-                  {справкаНовая && (
-                    <span className="rounded-full bg-brand px-2 py-0.5 text-[11.5px] font-bold leading-none text-white">
-                      Новое
-                    </span>
-                  )}
-                </Link>
                 {/* Телефон: в узкой шапке — значок с точкой «новое» */}
                 <Link
                   href="/help"
