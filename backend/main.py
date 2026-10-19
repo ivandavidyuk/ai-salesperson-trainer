@@ -779,18 +779,8 @@ class TurnManager:
         """
         self._start("")
 
-    def _with_diagnostics(self, prompt: str) -> str:
-        """Доклеивает документ диагностики, если менеджер его уже показал.
-
-        Блок идёт после строки доверия: оба — динамическое знание пациента,
-        и порядок их появления в разговоре обычно такой же.
-        """
-        if not self.diagnostics_text:
-            return prompt
-        return f"{prompt}\n\n{llm.diagnostics_instruction(self.diagnostics_text)}"
-
-    async def _prompt_with_trust(self, turns: int) -> str:
-        """Промпт хода: постоянная часть плюс строка про доверие.
+    async def _trust_reached(self, turns: int) -> Optional[bool]:
+        """Взят ли порог доверия; None — строки доверия в этом ходе нет.
 
         Строку выбирает код, сравнив последнюю фоновую оценку с порогом.
         Модель числа не видит — только готовую инструкцию.
@@ -802,17 +792,8 @@ class TurnManager:
             не применяем. Иначе его молчаливый отказ сделал бы сделку
             незакрываемой, а это ровно тот баг, который мы чиним;
           • оценка была раньше — берём последнюю известную.
-
-        В этапной тренировке строки нет вовсе: сделки там не будет, решать
-        роли нечего, а лишний абзац про «нельзя соглашаться оплатить» только
-        сбивал бы её с упражнения.
         """
-        if not self.scores_deal:
-            return self.system_prompt
-
-        settings = get_settings()
         scores = await store.get_stage_scores(self.session_id)
-
         if scores is None:
             if turns >= _SCORER_BROKEN_AFTER_TURNS:
                 logger.warning(
@@ -820,15 +801,29 @@ class TurnManager:
                     self.session_id,
                     turns,
                 )
-                return self._with_diagnostics(self.system_prompt)
-            return self._with_diagnostics(
-                f"{self.system_prompt}\n\n{llm.trust_instruction(False, self.industry)}"
-            )
+                return None
+            return False
+        return scores.get("average", 0.0) >= get_settings().deal_score_threshold
 
-        average = scores.get("average", 0.0)
-        reached = average >= settings.deal_score_threshold
-        return self._with_diagnostics(
-            f"{self.system_prompt}\n\n{llm.trust_instruction(reached, self.industry)}"
+    async def _turn_request(self, history: list[dict]) -> tuple[str, list[dict]]:
+        """Промпт и история хода: роль плюс состояние (llm.собрать_ход).
+
+        Состояние — строка доверия, документ диагностики после показа
+        и «до документа», пока его не показали.
+
+        В этапной тренировке нет ничего из этого: сделки там не будет, решать
+        роли нечего, а лишний абзац про «нельзя соглашаться оплатить» только
+        сбивал бы её с упражнения.
+        """
+        if not self.scores_deal:
+            return self.system_prompt, history
+        return llm.собрать_ход(
+            self.system_prompt,
+            history,
+            доверие=await self._trust_reached(len(history)),
+            industry=self.industry,
+            документ=self.diagnostics_text,
+            до_документа=есть_диагностика(self.industry),
         )
 
     def schedule_scoring(self) -> None:
@@ -913,10 +908,10 @@ class TurnManager:
             else:
                 history.append({"role": "user", "text": text})
 
-            # Промпт на этот ход: постоянная часть плюс строка про доверие.
-            # Она зависит от последней фоновой оценки и решает, может ли
+            # Промпт на этот ход: постоянная часть плюс состояние. Строка
+            # доверия зависит от последней фоновой оценки и решает, может ли
             # пациент вообще согласиться на оплату (см. docs/DEAL-OUTCOME.md)
-            turn_prompt = await self._prompt_with_trust(len(history))
+            turn_prompt, history = await self._turn_request(history)
 
             # Очередь предложений между LLM (producer) и TTS (consumer);
             # None — маркер конца стрима

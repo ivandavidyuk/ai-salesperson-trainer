@@ -260,11 +260,9 @@ async def main() -> None:
         # Состояние доверия — ровно как в TurnManager: по последней оценке.
         # В этапной тренировке строки нет вовсе: сделки не будет, решать роли
         # нечего, а лишний абзац сбивал бы её с упражнения
-        if считаем_сделку:
-            reached = scores is not None and scores.average >= threshold
-            prompt = f"{role}\n\n{llm.trust_instruction(reached, industry)}"
-        else:
-            prompt = role
+        reached = (
+            scores is not None and scores.average >= threshold if считаем_сделку else None
+        )
 
         if менеджер_модель:
             try:
@@ -285,8 +283,10 @@ async def main() -> None:
         # пустых ходов из десяти», которые я месяц приписывал нестабильности
         # модели: в бою их не было, они были только здесь
         history.append({"role": "user", "text": line})
+        # Документа диагностики у сценария нет — блока «до документа» тоже
+        prompt, запрос = llm.собрать_ход(role, history, доверие=reached, industry=industry)
         try:
-            reply = await collect_reply(history, prompt)
+            reply = await collect_reply(запрос, prompt)
         except Exception as exc:  # noqa: BLE001
             print(f"     СБОЙ РОЛИ: {type(exc).__name__}: {exc}\n")
             history.pop()  # ход не состоялся — не оставляем его в истории

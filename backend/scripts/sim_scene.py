@@ -167,8 +167,10 @@ async def main() -> None:
         role = fh.read()
     fixture = load_fixture(scene_path)
 
-    # Порог взят: обязательные условия в фикстуре отработаны
-    prompt = f"{role}\n\n{llm.trust_instruction(True, industry)}"
+    # Порог взят: обязательные условия в фикстуре отработаны. Строка доверия
+    # ставится тем же кодом, что в бою (llm.собрать_ход); этот промпт —
+    # только для сверки маркёров
+    prompt, _ = llm.собрать_ход(role, [], доверие=True, industry=industry)
 
     print(f"промпт:  {len(role)} символов — {prompt_path}")
     print(f"фикстура: {fixture.title} — {os.path.basename(fixture.path)}")
@@ -212,7 +214,10 @@ async def main() -> None:
 
         for label, line in fixture.scene:
             history.append({"role": "user", "text": line})
-            reply = await collect_reply(history, prompt)
+            ход_промпт, запрос = llm.собрать_ход(
+                role, history, доверие=True, industry=industry
+            )
+            reply = await collect_reply(запрос, ход_промпт)
             history.append({"role": "assistant", "text": reply})
 
             hints = []
