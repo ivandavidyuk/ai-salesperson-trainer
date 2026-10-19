@@ -7,7 +7,8 @@
 //   npm run help:shots               — снять всё, записать картинки и shots.ts
 //   node scripts/help-shots.mjs probe <путь> <почта> [шаги-json]
 //                                    — разведка: заголовки и кнопки с координатами
-//   ONLY=sheet,dossier npm run help:shots — переснять выборочно (shots.ts не пишется)
+//   ONLY=sheet,dossier DEVICE=компьютер npm run help:shots
+//                                    — переснять выборочно (shots.ts не пишется)
 //
 // Учётки недвижимости — HELP_REALTY_MANAGER и HELP_REALTY_HEAD (почты
 // менеджера и руководителя любой организации недвижимости в локальной базе).
@@ -226,8 +227,10 @@ async function probe(path, email, stepsJson) {
   await c.send("Network.setCookie", { name: "token", value: token, url: BASE, httpOnly: true });
   await c.send("Page.enable");
   await c.send("Page.addScriptToEvaluateOnNewDocument", { source: FAKE });
-  await c.send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: true });
-  await c.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+  // DESK=1 — разведка компьютерного экрана 1440×900
+  const desk = Boolean(process.env.DESK);
+  await c.send("Emulation.setDeviceMetricsOverride", desk ? { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false } : { width: W, height: H, deviceScaleFactor: 1, mobile: true });
+  await c.send("Emulation.setTouchEmulationEnabled", { enabled: !desk, maxTouchPoints: desk ? 0 : 5 });
   await open(c, path, stepsJson ? JSON.parse(stepsJson) : []);
   const list = await c.evaluate(`(() => { ${HELPERS_INLINE}
     const out = [];
@@ -266,10 +269,13 @@ const ВОКНЕ = (t, after, until) => ({ click: t, opts: { sel: "button", nth:
 const К_ПРОВЕРКЕ = [МАСТЕР, ПОЛНЫЙ, К_ПАЦИЕНТУ, ПЕРВЫЙ, К_ОБЗОРУ,
   ВОКНЕ("Начать тренировку", 4000, `location.pathname === '/session'`),
   ВОКНЕ("Начать тренировку", 3000, `__h.find('Проверим, что вас слышно')`)];
-// Поддельный микрофон Chrome называется «Fake Default Audio Input» — в справке
-// показываем имя, какое увидит человек
-const ИМЯ_МИКРОФОНА = { js: `(() => { const s = document.querySelector('select'); if (!s) return false; s.options[s.selectedIndex].text = 'Микрофон гарнитуры'; return true; })()`, after: 200 };
+// Поддельные устройства Chrome называются «Fake Default Audio Input/Output» —
+// в справке показываем имена, какие увидит человек
+const ИМЯ_МИКРОФОНА = { js: `(() => { const [m, d] = document.querySelectorAll('select'); if (!m) return false; m.options[m.selectedIndex].text = 'Микрофон гарнитуры'; if (d) d.options[d.selectedIndex].text = 'Наушники гарнитуры'; return true; })()`, after: 200 };
 const К_РАЗГОВОРУ = [...К_ПРОВЕРКЕ, { click: "Начать", opts: { sel: "button" }, after: 3500, until: `__h.find('Завершить разговор', { sel: 'button' })` }];
+
+// Плашка «Слушаю вас» целиком: подпись внутри неё, слева эквалайзер
+const ПЛАШКА = `(() => { const t = __h.find('Слушаю вас'); let p = t; while (p && p.getBoundingClientRect().width < t.getBoundingClientRect().width + 30) p = p.parentElement; return p; })()`;
 
 // Прокрутить ближайший прокручиваемый контейнер так, чтобы элемент встал на y
 const ПРОКРУТИТЬ = (text, y) => ({ js: `(() => {
@@ -315,9 +321,9 @@ function shotsFor(accounts, realty) {
     })()` },
     // Шаг 4: разговор. «Слушаю вас» и «Завершить разговор»
     listen: { email: accounts.manager, path: "/", steps: К_РАЗГОВОРУ, measure: `(() => {
-      const rp = __h.rect(__h.find('Слушаю вас'));
+      const rp = __h.rect(__h.find('Слушаю вас')), rpl = __h.rect(${ПЛАШКА});
       const re = __h.rect(__h.find('Завершить разговор', { sel: 'button' }));
-      return { y0: rp.y - 150, y1: innerHeight, marks: [[rp.x - 12, rp.y + rp.h / 2], [re.x - 2, re.y + re.h / 2]] };
+      return { y0: rp.y - 150, y1: innerHeight, marks: [[rpl.x - 2, rp.y + rp.h / 2], [re.x - 2, re.y + re.h / 2]] };
     })()` },
   };
   if (!realty) {
@@ -377,9 +383,115 @@ function shotsFor(accounts, realty) {
   return list;
 }
 
-async function shoot(industry, accounts) {
+// Компьютерный набор: тот же путь по экранам, но 1440×900, и кадр режется
+// ещё и по ширине — по окну или карточке, а не во всю ширину экрана.
+// Окно мастера и досье — ближайший предок шириной от 640 px (карточки
+// внутри окна — 612); выше по
+// дереву идём, пока ширина та же (иначе кадр начинался бы под шапкой окна)
+const ОКНО_ПК = `(el) => { let p = el; while (p && p.getBoundingClientRect().width < 640) p = p.parentElement; while (p && p.parentElement && Math.abs(p.parentElement.getBoundingClientRect().width - p.getBoundingClientRect().width) < 4) p = p.parentElement; return p; }`;
+// Карточка на компьютере — ближайший предок с рамкой: строка заголовка
+// бывает той же ширины, и кадр получался полосой в 42 px
+const КАРТОЧКА_ПК = `(t) => { let p = t; while (p && !(p.getBoundingClientRect().width >= 400 && p.getBoundingClientRect().height >= 100 && parseFloat(getComputedStyle(p).borderTopWidth) >= 1)) p = p.parentElement; return p; }`;
+
+function shotsForDesk(accounts, realty) {
+  const list = {
+    type: { email: accounts.manager, path: "/", steps: [МАСТЕР], measure: `(() => {
+      const full = [...document.querySelectorAll('[role=dialog] button')].find(e => __h.vis(e) && __h.norm(e.innerText).startsWith('Полный разговор'));
+      const d = (${ОКНО_ПК})(full);
+      const cards = [...d.querySelectorAll('button')].filter(e => __h.vis(e) && e.getBoundingClientRect().height > 60 && e.getBoundingClientRect().width > 500);
+      const [r1, r2, , r4] = cards.map(__h.rect);
+      const rd = __h.rect(d);
+      return { x0: rd.x, x1: rd.x + rd.w, y0: rd.y, y1: r4.y + r4.h + 12, marks: [[r1.x + 26, r1.y + r1.h / 2], [r2.x + 26, r2.y + r2.h / 2]] };
+    })()` },
+    pat: { email: accounts.manager, path: "/", steps: [МАСТЕР, ПОЛНЫЙ, К_ПАЦИЕНТУ, ПЕРВЫЙ], measure: `(() => {
+      const rows = [...document.querySelectorAll('[role=dialog] .flex.flex-col.gap-2 > div')].filter(__h.vis);
+      const d = (${ОКНО_ПК})(rows[0]);
+      const rd = __h.rect(d), re = __h.rect(__h.find('Лёгкий', { sel: 'button' })), rn = __h.rect(rows[0].querySelector('button')), r2 = __h.rect(rows[1]);
+      return { x0: rd.x, x1: rd.x + rd.w, y0: rd.y, y1: r2.y + r2.h + 10, marks: [[re.x + 4, re.y + 4], [rn.x + 22, rn.y + rn.h / 2]] };
+    })()` },
+    check: { email: accounts.manager, path: "/", steps: [...К_ПРОВЕРКЕ, ИМЯ_МИКРОФОНА], measure: `(() => {
+      const sel = document.querySelector('select');
+      const rc = __h.rect((${КАРТОЧКА_ПК})(sel)), rs = __h.rect(sel), rt = __h.rect(__h.find('Проверим, что вас слышно'));
+      const rm = __h.rect([...document.querySelectorAll('span.absolute.inset-y-0.w-px')].find(__h.vis));
+      const rb = __h.rect(__h.find('Начать', { sel: 'button' }));
+      const rn = __h.rect(__h.find('Выбор устройств запомним для следующих разговоров'));
+      return { x0: rc.x - 32, x1: rc.x + rc.w + 32, y0: rt.y - 24, y1: rn.y + rn.h + 16, marks: [[rs.x - 2, rs.y + rs.h / 2], [rm.x, rm.y - 10], [rb.x - 4, rb.y + rb.h / 2]] };
+    })()` },
+    listen: { email: accounts.manager, path: "/", steps: К_РАЗГОВОРУ, measure: `(() => {
+      const rp = __h.rect(__h.find('Слушаю вас')), rpl = __h.rect(${ПЛАШКА});
+      const end = __h.find('Завершить разговор', { sel: 'button' });
+      const re = __h.rect(end), rr = __h.rect(end.parentElement);
+      return { x0: rr.x - 40, x1: rr.x + rr.w + 40, y0: rp.y - 330, y1: rr.y + rr.h + 28, marks: [[rpl.x - 2, rp.y + rp.h / 2], [re.x - 2, re.y + re.h / 2]] };
+    })()` },
+  };
+  if (!realty) {
+    list.sheet = { email: accounts.manager, path: "/", fakeDoc: true, steps: [...К_РАЗГОВОРУ, { click: "Результат диагностики", opts: { sel: "button" }, after: 2500, until: `__h.find('Документ врача')` }], measure: `(() => {
+      const svc = __h.find('Услуга по диагнозу');
+      const rc = __h.rect((${КАРТОЧКА_ПК})(svc)), rs = __h.rect(svc), rd = __h.rect(__h.find('Документ врача'));
+      const rt = __h.rect(__h.find('Результат диагностики', { prefix: true }));
+      const rp = __h.rect(__h.find('Слушаю вас')), rz = __h.rect(__h.find('Пауза', { sel: 'button' }));
+      return { x0: rc.x - 40, x1: rc.x + rc.w + 40, y0: rp.y - 12, y1: rz.y + rz.h + 20, marks: [[rt.x - 16, rt.y + rt.h / 2], [rs.x - 18, rs.y + rs.h / 2], [rd.x - 18, rd.y + rd.h / 2]] };
+    })()` };
+    // Разбор: правая панель и правый край шапки с «Ещё разговор»;
+    // имя пациента в шапке слева в кадр не попадает
+    list.review = { email: accounts.manager, path: accounts.review, keepAnim: true, steps: [{ wait: 3500 }], measure: `(() => {
+      const rpn = __h.rect(__h.find('Разбор разговора'));
+      const ro = __h.rect(__h.find('Сделка закрыта', { prefix: true }) || __h.find('Сделка не закрыта', { prefix: true }));
+      const rs = __h.rect(__h.find('Общая оценка'));
+      const grow = __h.find('Точка роста');
+      // У карточки «Точка роста» рамка только слева — ищем её по высоте
+      let gc = grow; while (gc && gc.getBoundingClientRect().height < 50) gc = gc.parentElement;
+      const rg = __h.rect(grow), rgc = __h.rect(gc);
+      const rm = __h.rect(__h.find('Ещё разговор', { sel: 'button, a' }));
+      return { x0: rpn.x - 28, x1: innerWidth, y0: 0, y1: rgc.y + rgc.h + 16, marks: [[ro.x - 26, ro.y + ro.h / 2], [rs.x - 64, rs.y - 4], [rg.x - 14, rg.y + rg.h / 2], [rm.x - 4, rm.y + rm.h / 2]] };
+    })()` };
+    // Статистика за всё время — первая строка: там разговоры и оценки
+    // Пьедестал выше экрана 900 px — прокручиваем его к верху
+    const К_ПЬЕДЕСТАЛУ = { js: `(() => { let b = __h.find('Смотреть статистику', { prefix: true, sel: 'button' }); while (b && b.getBoundingClientRect().width < 900) b = b.parentElement; if (!b) return false; document.querySelector('main').scrollTop += b.getBoundingClientRect().top - 90; return true; })()`, after: 600 };
+    list.stat = { email: accounts.head, path: "/stats", steps: [{ wait: 2000 }, { click: "Всё время", opts: { sel: "button" }, after: 1500 }, К_ПЬЕДЕСТАЛУ], measure: `(() => {
+      // За всё время сверху — пьедестал из трёх карточек; метка — на кнопке
+      // первого места (она выше остальных)
+      const btns = [...document.querySelectorAll('main button')].filter(e => __h.vis(e) && __h.norm(e.innerText).startsWith('Смотреть статистику')).map(__h.rect).slice(0, 3);
+      let box = __h.find('Смотреть статистику', { prefix: true, sel: 'button' });
+      while (box && box.getBoundingClientRect().width < 900) box = box.parentElement;
+      const r = __h.rect(box);
+      const first = btns.reduce((a, b) => (b.y < a.y ? b : a));
+      const bottom = Math.max(...btns.map(b => b.y + b.h));
+      return { x0: r.x - 16, x1: r.x + r.w + 16, y0: r.y - 16, y1: bottom + 24, marks: [[first.x + 24, first.y + first.h / 2]] };
+    })()` };
+  }
+  list.tasks = { email: accounts.head, path: "/tasks", steps: [{ wait: 1500 }], measure: `(() => {
+    const rt = __h.rect(__h.find('Выставленные задания'));
+    const rb = __h.rect(__h.find('Создать', { prefix: true, sel: 'button, a' }));
+    const empty = __h.find('Заданий пока нет');
+    const re = empty ? __h.rect((${КАРТОЧКА_ПК})(empty)) : null;
+    return { x0: rt.x - 24, x1: rb.x + rb.w + 24, y0: rt.y - 24, y1: re ? re.y + re.h + 16 : rb.y + rb.h + 220, marks: [[rb.x + 28, rb.y + rb.h / 2]] };
+  })()` };
+  list.dossier = { email: accounts.head, path: "/patients", steps: [{ wait: 1500 }, { click: "Подробнее", opts: { sel: "button" }, after: 1500, until: ОКНО }, ПРОКРУТИТЬ("Характер", 170)], measure: `(() => {
+    const t = __h.find('Характер');
+    const rd = __h.rect((${ОКНО_ПК})(t)), rt = __h.rect(t), rz = __h.rect(__h.find('Закрыть', { sel: 'button' }));
+    return { x0: rd.x, x1: rd.x + rd.w, y0: rt.y - 18, y1: Math.min(rt.y + 380, rz.y - 16), marks: [[rt.x - 20, rt.y + rt.h / 2]] };
+  })()` };
+  list.hours = { email: accounts.head, path: "/profile", steps: [{ wait: 1500 }, ПРОКРУТИТЬ("Часы разговоров", 160)], measure: `(() => {
+    const t = __h.find('Часы разговоров');
+    const rc = __h.rect((${КАРТОЧКА_ПК})(t)), rt = __h.rect(t);
+    return { x0: rc.x - 8, x1: rc.x + rc.w + 8, y0: rc.y - 8, y1: Math.min(rc.y + rc.h + 8, rc.y + 320), marks: [[rt.x - 22, rt.y + rt.h / 2]] };
+  })()` };
+  list.company = { email: accounts.head, path: "/profile", steps: [{ wait: 1500 }, ПРОКРУТИТЬ(accounts.карточка, 160), ПУСТОЕ_НАЗВАНИЕ(accounts.карточка)], measure: `(() => {
+    const t = __h.find(${JSON.stringify(accounts.карточка)});
+    const rc = __h.rect((${КАРТОЧКА_ПК})(t)), rt = __h.rect(t);
+    return { x0: rc.x - 8, x1: rc.x + rc.w + 8, y0: rc.y - 8, y1: Math.min(rc.y + rc.h + 8, rc.y + 300), marks: [[rt.x - 22, rt.y + rt.h / 2]] };
+  })()` };
+  return list;
+}
+
+async function shoot(industry, accounts, device) {
   const realty = industry === "недвижимость";
-  const list = shotsFor(accounts, realty);
+  const pc = device === "компьютер";
+  const list = pc ? shotsForDesk(accounts, realty) : shotsFor(accounts, realty);
+  // Размер экрана: телефон 390×844, компьютер 1440×900
+  const [VW, VH] = pc ? [1440, 900] : [W, H];
+  const prefix = pc ? "desk-" : "";
   const folder = realty ? "realty" : "clinic";
   mkdirSync(join(OUT_IMG, folder), { recursive: true });
   const result = {};
@@ -397,45 +509,48 @@ async function shoot(industry, accounts) {
       const doc = await fakeDoc(user, accounts.patient);
       await c.send("Page.addScriptToEvaluateOnNewDocument", { source: `window.__fakeDoc = ${JSON.stringify(doc)};` });
     }
-    await c.send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 2, mobile: true });
-    await c.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+    await c.send("Emulation.setDeviceMetricsOverride", { width: VW, height: VH, deviceScaleFactor: 2, mobile: !pc });
+    await c.send("Emulation.setTouchEmulationEnabled", { enabled: !pc, maxTouchPoints: pc ? 0 : 5 });
     try {
       await open(c, spec.path, spec.steps, spec.keepAnim);
       const m = await c.evaluate(`(() => { ${HELPERS_INLINE} return ${spec.measure}; })()`);
+      const x0 = Math.max(0, Math.round(m.x0 ?? 0));
+      const x1 = Math.min(VW, Math.round(m.x1 ?? VW));
       const y0 = Math.max(0, Math.round(m.y0));
-      const y1 = Math.min(H, Math.round(m.y1));
+      const y1 = Math.min(VH, Math.round(m.y1));
       // Кадр вне экрана или пустой — ошибка: на снимок с такой рамкой Chrome
       // не отвечает вовсе, и прогон висел (19.10, «Статистика»)
-      if (y1 - y0 < 40) throw new Error(`кадр ${y0}..${y1} вне экрана — элемент не прокручен в видимую часть`);
+      if (y1 - y0 < 40 || x1 - x0 < 40) throw new Error(`кадр ${x0}..${x1} × ${y0}..${y1} вне экрана — элемент не прокручен в видимую часть`);
       const shot = await Promise.race([
-        c.send("Page.captureScreenshot", { format: "webp", quality: 82, clip: { x: 0, y: y0, width: W, height: y1 - y0, scale: 1 } }),
+        c.send("Page.captureScreenshot", { format: "webp", quality: 82, clip: { x: x0, y: y0, width: x1 - x0, height: y1 - y0, scale: 1 } }),
         sleep(30000).then(() => { throw new Error("снимок не получен за 30 с"); }),
       ]);
       const buf = Buffer.from(shot.result.data, "base64");
-      writeFileSync(join(OUT_IMG, folder, `${name}.webp`), buf);
-      const marks = m.marks.map(([x, y]) => [+(x / W * 100).toFixed(1), +((y - y0) / (y1 - y0) * 100).toFixed(1)]);
+      writeFileSync(join(OUT_IMG, folder, `${prefix}${name}.webp`), buf);
+      const marks = m.marks.map(([x, y]) => [+((x - x0) / (x1 - x0) * 100).toFixed(1), +((y - y0) / (y1 - y0) * 100).toFixed(1)]);
       const v = createHash("sha1").update(buf).digest("hex").slice(0, 8);
-      result[name] = { src: `/howto/${folder}/${name}.webp?v=${v}`, w: W, h: y1 - y0, marks };
-      console.log(`✓ ${industry}/${name}: ${W}×${y1 - y0}, меток ${marks.length}, ${Math.round(buf.length / 1024)} КБ`);
+      result[name] = { src: `/howto/${folder}/${prefix}${name}.webp?v=${v}`, w: x1 - x0, h: y1 - y0, marks };
+      console.log(`✓ ${industry}/${device}/${name}: ${x1 - x0}×${y1 - y0}, меток ${marks.length}, ${Math.round(buf.length / 1024)} КБ`);
     } catch (err) {
       failed.push(name);
-      console.log(`✗ ${industry}/${name}: ${err.message}`);
+      console.log(`✗ ${industry}/${device}/${name}: ${err.message}`);
       // Снимок провала — тоже с пределом: зависшая страница может не ответить
       const shot = await Promise.race([c.send("Page.captureScreenshot", { format: "png" }), sleep(10000).then(() => null)]);
       mkdirSync(TMP, { recursive: true });
-      if (shot?.result) writeFileSync(join(TMP, `fail-${folder}-${name}.png`), Buffer.from(shot.result.data, "base64"));
-      console.log(`  снимок провала: ${join(TMP, `fail-${folder}-${name}.png`)}`);
+      if (shot?.result) writeFileSync(join(TMP, `fail-${folder}-${prefix}${name}.png`), Buffer.from(shot.result.data, "base64"));
+      console.log(`  снимок провала: ${join(TMP, `fail-${folder}-${prefix}${name}.png`)}`);
     }
     await c.close();
   }
   return { result, failed };
 }
 
-function writeTs(clinic, realty) {
+function writeTs(снимки) {
   const json = (o) => JSON.stringify(o, null, 2).replace(/\[\n\s+([\d.]+),\n\s+([\d.]+)\n\s+\]/g, "[$1, $2]");
   const ts = `// Сгенерировано scripts/help-shots.mjs (npm run help:shots) — руками не правим.
 // Поменялся экран — перезапусти скрипт: снимки и места меток обновятся вместе.
-// Метки — проценты от ширины и высоты кадра; ширина кадра — экран 390 px.
+// Два набора: телефон (экран 390 px) и компьютер (1440×900, кадр вырезан
+// по окну или карточке). Метки — проценты от ширины и высоты кадра.
 
 export interface Снимок {
   src: string;
@@ -457,11 +572,15 @@ export type ИмяСнимка =
   | "hours"
   | "company";
 
+export type Устройство = "телефон" | "компьютер";
+
+type Набор<Имя extends string> = Record<Устройство, Record<Имя, Снимок>>;
+
 export const СНИМКИ: {
-  медицина: Record<ИмяСнимка, Снимок>;
-  // У недвижимости нет диагностики, а разбор — общий с клиникой
-  недвижимость: Record<Exclude<ИмяСнимка, "sheet">, Снимок>;
-} = ${json({ медицина: clinic, недвижимость: realty })};
+  медицина: Набор<ИмяСнимка>;
+  // У недвижимости нет диагностики, а разбор и статистика — общие с клиникой
+  недвижимость: Набор<Exclude<ИмяСнимка, "sheet">>;
+} = ${json(снимки)};
 `;
   mkdirSync(dirname(OUT_TS), { recursive: true });
   writeFileSync(OUT_TS, ts);
@@ -480,27 +599,37 @@ if (mode === "probe") {
     select: { id: true },
   });
   if (!сРазбором) throw new Error("у демо-менеджера нет разговора с закрытой сделкой — запусти seed:demo");
-  const clinic = await shoot("медицина", {
+  const клиника = {
     manager: demo,
     head: "head@podhod.tech",
     patient: "Тамара Михайловна",
     review: `/transcript/${сРазбором.id}`,
     карточка: "Клиника и услуги",
-  });
-  const realty = await shoot("недвижимость", {
+  };
+  const недвижимость = {
     manager: process.env.HELP_REALTY_MANAGER || "m1-test-0918@example.com",
     head: process.env.HELP_REALTY_HEAD || "rop-test-0918@example.com",
     карточка: "Компания и прайс",
-  });
-  const failed = [...clinic.failed.map((n) => `медицина/${n}`), ...realty.failed.map((n) => `недвижимость/${n}`)];
-  if (process.env.ONLY) {
-    console.log("\nONLY: shots.ts не тронут");
+  };
+  // DEVICE=телефон|компьютер — снять один набор (shots.ts тогда не пишется)
+  const устройства = process.env.DEVICE ? [process.env.DEVICE] : ["телефон", "компьютер"];
+  const снимки = { медицина: {}, недвижимость: {} };
+  const failed = [];
+  for (const device of устройства) {
+    const c = await shoot("медицина", клиника, device);
+    const r = await shoot("недвижимость", недвижимость, device);
+    failed.push(...c.failed.map((n) => `медицина/${device}/${n}`), ...r.failed.map((n) => `недвижимость/${device}/${n}`));
+    снимки.медицина[device] = c.result;
+    // Разбор и статистика без отраслевых слов — у недвижимости те же снимки
+    снимки.недвижимость[device] = { ...r.result, review: c.result.review, stat: c.result.stat };
+  }
+  if (process.env.ONLY || process.env.DEVICE) {
+    console.log("\nONLY/DEVICE: shots.ts не тронут");
   } else if (failed.length) {
     console.log(`\nshots.ts не тронут: не снялись ${failed.join(", ")}`);
     process.exitCode = 1;
   } else {
-    // Разбор и статистика без отраслевых слов — у недвижимости те же снимки
-    writeTs(clinic.result, { ...realty.result, review: clinic.result.review, stat: clinic.result.stat });
+    writeTs(снимки);
     console.log(`\nзаписан ${OUT_TS}`);
   }
   await prisma.$disconnect();

@@ -1,44 +1,14 @@
-// Плитка «пиктограмма + пара слов» — из неё собрано обучение в приложении:
-// правила разговора на проверке звука, ряд под шагом «Говорите» в справке
-// и «Если что-то пошло не так».
+// Плитка «пиктограмма + пара слов» и пиктограммы справки «Как пользоваться»:
+// ряд под шагом «Говорите» и «Если что-то пошло не так».
 //
 // Картинкой, а не абзацем: первый заход 19.10 был текстом, и Иван отверг
-// его целиком — менеджеры занимаются с телефона между делом, абзац на
-// экране проверки звука не читает никто. Подпись — не длиннее пяти слов.
+// его целиком — менеджеры занимаются с телефона между делом, абзац
+// не читает никто. Подпись — не длиннее пяти слов.
 
 import type { ReactNode } from "react";
 
 /** Пиктограммы обучения: контурные 24×24, линия 1.8, как в рейке */
 export const пиктограммы = {
-  тишина: (
-    <>
-      <path d="M11 5L6 9H3v6h3l5 4z" />
-      <path d="M16 9.5l5 5" />
-      <path d="M21 9.5l-5 5" />
-    </>
-  ),
-  экран: (
-    <>
-      <rect x="6.5" y="2.5" width="11" height="19" rx="2.2" />
-      <circle cx="12" cy="10.5" r="2.4" />
-      <path d="M12 5.6v.6M12 14.8v.6M7.9 10.5h.6M15.5 10.5h.6" />
-      <path d="M10.5 18.5h3" />
-    </>
-  ),
-  гарнитура: (
-    <>
-      <path d="M4.5 14v-2a7.5 7.5 0 0115 0v2" />
-      <path d="M4.5 14h3v5h-2a1 1 0 01-1-1z" />
-      <path d="M19.5 14h-3v5h2a1 1 0 001-1z" />
-      <path d="M17.5 19c0 1.6-1.8 2.5-4.5 2.5" />
-    </>
-  ),
-  поОчереди: (
-    <>
-      <path d="M3 3h10v6H7l-4 3z" />
-      <path d="M21 13H11v6h6l4 3z" />
-    </>
-  ),
   // Второе облачко залито фоном плитки: оно ложится поверх первого
   перебить: (
     <>
@@ -134,35 +104,22 @@ export function Пиктограмма({
   );
 }
 
-/**
- * Плитка: пиктограмма над подписью. В справке плитки просторнее, чем
- * на проверке звука, — там им не нужно делить экран с кнопкой «Начать»
- */
+/** Плитка: пиктограмма над подписью */
 export default function HintTile({
   icon,
   label,
-  roomy = false,
   className = "",
 }: {
   icon: ReactNode;
   label: string;
-  roomy?: boolean;
   className?: string;
 }) {
   return (
     <div
-      className={`flex min-w-0 flex-col items-center rounded-xl border border-line bg-surface text-center text-brand ${
-        roomy ? "gap-[7px] px-1.5 pb-[11px] pt-3" : "gap-1.5 px-1 pb-[9px] pt-2.5"
-      } ${className}`}
+      className={`flex min-w-0 flex-col items-center gap-[7px] rounded-xl border border-line bg-surface px-1.5 pb-[11px] pt-3 text-center text-brand ${className}`}
     >
       <Пиктограмма>{icon}</Пиктограмма>
-      <span
-        className={`text-[13px] font-medium text-ink-body ${
-          roomy ? "leading-[1.25]" : "leading-[1.2]"
-        }`}
-      >
-        {label}
-      </span>
+      <span className="text-[13px] font-medium leading-[1.25] text-ink-body">{label}</span>
     </div>
   );
 }

@@ -12,7 +12,6 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import AudioDevicePicker from "@/app/components/AudioDevicePicker";
-import HintTile, { Пиктограмма, пиктограммы } from "@/app/components/HintTile";
 import BackLink from "@/app/components/BackLink";
 import CallAvatar from "@/app/components/CallAvatar";
 import CaseServiceBlock from "@/app/components/CaseServiceBlock";
@@ -143,10 +142,6 @@ function SessionScreen() {
   // в кнопку и развернуть снова. На компьютере карточка стоит в колонке
   // и не сворачивается
   const [листДиагностики, setЛистДиагностики] = useState(true);
-  // Метка «Отправили к врачу? Нажмите» у кнопки: менеджеры не знали, когда
-  // её нажимать. Видна, пока человек ни разу не открывал документ, —
-  // решает сервер по всем его разговорам (sessions/start)
-  const [меткаДокумента, setМеткаДокумента] = useState(false);
   // Название упражнения и услуга к нему; у полного разговора null
   const [drill, setDrill] = useState<Drill | null>(null);
   // Звучит ли сейчас ответ ИИ — от этого зависит индикатор и вид аватара
@@ -461,17 +456,14 @@ function SessionScreen() {
         sessionId: id,
         wsUrl,
         opensDialog,
-        diagnosticsHint,
         drill: drillInfo,
       } = (await res.json()) as {
         sessionId: string;
         wsUrl: string;
         opensDialog?: boolean;
-        diagnosticsHint?: boolean;
         drill?: Drill | null;
       };
       setDrill(drillInfo ?? null);
-      setМеткаДокумента(Boolean(diagnosticsHint));
 
       // Пациент заговорит первым — экран обязан сказать это сразу по нажатию
       // кнопки. Сокет открывается, поднимает распознавание и синтез, и только
@@ -652,7 +644,6 @@ function SessionScreen() {
     // Сценку менеджер уже отыграл голосом — кнопка только выдаёт документ.
     // Ответ придёт событием diagnostics_result (или pending с авто-повтором)
     setDiagnosticsWaiting(true);
-    setМеткаДокумента(false);
     sendWs({ type: "diagnostics" });
   }
 
@@ -821,10 +812,7 @@ function SessionScreen() {
       {/* Обёртка — опора для листа диагностики на телефоне. На компьютере
           её геометрия та же, что была у колонки */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-      {/* Низкий экран (ноутбук 1366×768: окно браузера ~657 px) — поля
-          и отступы проверки звука ужимаются: плитки добавили ~100 px, и без
-          этого «Начать» уходила под край */}
-      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-10 py-10 [justify-content:safe_center] max-md:px-4 max-md:py-6 [@media(max-height:760px)]:py-6">
+      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-10 py-10 [justify-content:safe_center] max-md:px-4 max-md:py-6">
         {/* --- До старта --- */}
         {screenState === "idle" && (
           <>
@@ -889,19 +877,7 @@ function SessionScreen() {
               тогда разговор пойдёт как надо.
             </p>
 
-            {/* Правила разговора — плитками, видны всем и всегда: первая
-                клиника уже занималась, и как раз ей они нужнее всего.
-                Телефону — про экран, который гаснет и рвёт связь;
-                компьютеру — про гарнитуру. Переключает CSS */}
-            <div className="mt-5 grid w-full max-w-[440px] grid-cols-4 gap-2 max-md:mt-[18px] [@media(max-height:760px)]:mt-3">
-              <HintTile icon={пиктограммы.тишина} label="Тихое место" />
-              <HintTile icon={пиктограммы.экран} label="Экран не гаснет" className="md:hidden" />
-              <HintTile icon={пиктограммы.гарнитура} label="Лучше гарнитура" className="max-md:hidden" />
-              <HintTile icon={пиктограммы.поОчереди} label="По очереди" />
-              <HintTile icon={пиктограммы.перебить} label="Можно перебить" />
-            </div>
-
-            <div className="mt-6 w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-[18px] max-md:mt-5 [@media(max-height:760px)]:mt-4">
+            <div className="mt-6 w-full max-w-[440px] rounded-xl border border-line bg-surface px-[18px] py-[18px]">
               <AudioDevicePicker
                 androidNote={android}
                 inputs={inputs}
@@ -1012,7 +988,7 @@ function SessionScreen() {
               </div>
             )}
 
-            <div className="mt-6 flex items-center gap-3 max-md:hidden [@media(max-height:760px)]:mt-4">
+            <div className="mt-6 flex items-center gap-3 max-md:hidden">
               {/* Блокируем только когда микрофон работает, но молчит:
                   это и есть случай линейного входа. При запрете доступа
                   или отсутствии устройства уровень измерить нечем, порог
@@ -1187,9 +1163,6 @@ function SessionScreen() {
                 над кнопками в этом состоянии меньше, как в макете */}
             {/* Телефон: результат диагностики и услуга — кнопками во всю
                 ширину в колонке, «Пауза» и «Завершить» — в панели внизу */}
-            {fullConversation && естьДиагностика && меткаДокумента && !diagnostics && (
-              <МеткаДокумента стрелка="вниз" className="mt-[22px] md:hidden" />
-            )}
             {fullConversation && естьДиагностика && !(diagnostics && листДиагностики) && (
               <button
                 type="button"
@@ -1198,7 +1171,7 @@ function SessionScreen() {
                   if (!diagnostics) handleDiagnostics();
                 }}
                 disabled={diagnosticsWaiting}
-                className={`${меткаДокумента && !diagnostics ? "mt-2" : "mt-6"} inline-flex min-h-[52px] w-full items-center justify-center gap-[9px] rounded-xl border border-line-strong bg-white px-5 text-[16px] font-semibold text-ink disabled:text-ink-muted md:hidden`}
+                className="mt-6 inline-flex min-h-[52px] w-full items-center justify-center gap-[9px] rounded-xl border border-line-strong bg-white px-5 text-[16px] font-semibold text-ink disabled:text-ink-muted md:hidden"
               >
                 <svg
                   width="17"
@@ -1230,10 +1203,6 @@ function SessionScreen() {
                   сам решает, когда пациент «сходил», — сценку он всё равно
                   отыгрывает голосом, кнопка лишь выдаёт документ */}
               {fullConversation && естьДиагностика && !diagnostics && (
-                // Метка — под кнопкой: справа стоят «Пауза» и «Завершить»,
-                // а сверху плашка «Слушаю вас». Висит вне потока и ряд
-                // кнопок не сдвигает
-                <div className="relative">
                 <button
                   type="button"
                   onClick={handleDiagnostics}
@@ -1242,13 +1211,6 @@ function SessionScreen() {
                 >
                   {diagnosticsWaiting ? "Готовим…" : "Результат диагностики"}
                 </button>
-                {меткаДокумента && (
-                  <МеткаДокумента
-                    стрелка="вверх"
-                    className="absolute left-1/2 top-full mt-3 -translate-x-1/2"
-                  />
-                )}
-                </div>
               )}
 
               {/* Услуга по кнопке — в упражнениях с середины разговора:
@@ -1561,26 +1523,5 @@ function SessionScreen() {
         </div>
       )}
     </main>
-  );
-}
-
-/** Метка у «Результата диагностики»: стрелка показывает на кнопку */
-function МеткаДокумента({
-  стрелка,
-  className = "",
-}: {
-  стрелка: "вниз" | "вверх";
-  className?: string;
-}) {
-  return (
-    <span
-      className={`inline-flex items-center gap-[7px] whitespace-nowrap rounded-full bg-brand-soft py-[7px] pl-2.5 pr-3.5 text-[14px] font-semibold text-brand-hover ${className}`}
-    >
-      <Пиктограмма size={20} className={стрелка === "вверх" ? "rotate-180" : ""}>
-        <path d="M12 5v13" />
-        <path d="M6.5 12.5L12 18l5.5-5.5" />
-      </Пиктограмма>
-      Отправили к врачу? Нажмите
-    </span>
   );
 }

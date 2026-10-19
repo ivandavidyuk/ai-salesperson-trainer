@@ -17,7 +17,6 @@ import { backendUrl } from "@/lib/cases";
 import type { CaseService } from "@/lib/caseService";
 import { caseService } from "@/lib/caseServiceQuery";
 import { медицинскаяОтрасль } from "@/lib/industry";
-import { освоение, подсказкаКДокументу } from "@/lib/onboarding";
 import { словаДляКлюча } from "@/lib/industryWords";
 import { ключОтрасли } from "@/scripts/industry-key";
 
@@ -277,21 +276,6 @@ export async function POST(request: NextRequest) {
       service = await caseService(patientId, organizationId);
     }
 
-    // Метка у «Результата диагностики»: кнопка есть только в полном
-    // разговоре клиники, и метка видна, пока человек ни разу не открывал
-    // документ. Признак по пользователю, а не по устройству — см. onboarding.
-    // Сессия к этому моменту уже создана: сбой запроса ради подсказки не
-    // должен ронять старт и оставлять висеть активный разговор
-    const diagnosticsHint =
-      scoresDeal && медицинскаяОтрасль(отрасль)
-        ? await освоение(user.sub)
-            .then(подсказкаКДокументу)
-            .catch((error) => {
-              console.error("Метка диагностики: не прочитали освоение", error);
-              return false;
-            })
-        : false;
-
     // Формируем URL WebSocket-сервера (FastAPI).
     // Базовый адрес берём из env, по умолчанию — локальный.
     const wsBase = process.env.FASTAPI_WS_URL || "ws://localhost:8000";
@@ -301,7 +285,6 @@ export async function POST(request: NextRequest) {
       sessionId: session.id,
       wsUrl,
       opensDialog,
-      diagnosticsHint,
       drill: drillTitle ? { title: drillTitle, showsService, service } : null,
     });
   } catch (error) {
