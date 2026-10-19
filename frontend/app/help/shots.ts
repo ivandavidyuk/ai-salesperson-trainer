@@ -15,6 +15,7 @@ export type ИмяСнимка =
   | "pat"
   | "check"
   | "listen"
+  | "button"
   | "sheet"
   | "review"
   | "tasks"
@@ -30,7 +31,7 @@ type Набор<Имя extends string> = Record<Устройство, Record<И�
 export const СНИМКИ: {
   медицина: Набор<ИмяСнимка>;
   // У недвижимости нет диагностики, а разбор и статистика — общие с клиникой
-  недвижимость: Набор<Exclude<ИмяСнимка, "sheet">>;
+  недвижимость: Набор<Exclude<ИмяСнимка, "button" | "sheet">>;
 } = {
   "медицина": {
     "телефон": {
@@ -44,7 +45,7 @@ export const СНИМКИ: {
         ]
       },
       "pat": {
-        "src": "/howto/clinic/pat.webp?v=05e30dd2",
+        "src": "/howto/clinic/pat.webp?v=38e484cc",
         "w": 390,
         "h": 461,
         "marks": [
@@ -63,12 +64,21 @@ export const СНИМКИ: {
         ]
       },
       "listen": {
-        "src": "/howto/clinic/listen.webp?v=673ef487",
+        "src": "/howto/clinic/listen.webp?v=77929572",
         "w": 390,
         "h": 506,
         "marks": [
           [27.5, 32.1],
+          [5.6, 46.2],
           [42.2, 91.7]
+        ]
+      },
+      "button": {
+        "src": "/howto/clinic/button.webp?v=9516a8a3",
+        "w": 390,
+        "h": 204,
+        "marks": [
+          [5.6, 75.4]
         ]
       },
       "sheet": {
@@ -76,7 +86,6 @@ export const СНИМКИ: {
         "w": 390,
         "h": 461,
         "marks": [
-          [8.7, 29.1],
           [4.6, 40.1],
           [0.5, 69.6]
         ]
@@ -117,7 +126,7 @@ export const СНИМКИ: {
         ]
       },
       "hours": {
-        "src": "/howto/clinic/hours.webp?v=139a74eb",
+        "src": "/howto/clinic/hours.webp?v=31e34750",
         "w": 390,
         "h": 301,
         "marks": [
@@ -144,7 +153,7 @@ export const СНИМКИ: {
         ]
       },
       "pat": {
-        "src": "/howto/clinic/desk-pat.webp?v=6218e48e",
+        "src": "/howto/clinic/desk-pat.webp?v=2a1eccaf",
         "w": 660,
         "h": 449,
         "marks": [
@@ -163,12 +172,21 @@ export const СНИМКИ: {
         ]
       },
       "listen": {
-        "src": "/howto/clinic/desk-listen.webp?v=82fa3318",
+        "src": "/howto/clinic/desk-listen.webp?v=26f40dae",
         "w": 726,
         "h": 490,
         "marks": [
           [37.9, 69.8],
+          [6.3, 88.3],
           [61.3, 88.3]
+        ]
+      },
+      "button": {
+        "src": "/howto/clinic/desk-button.webp?v=e7dc129a",
+        "w": 726,
+        "h": 226,
+        "marks": [
+          [6.3, 76.4]
         ]
       },
       "sheet": {
@@ -176,7 +194,6 @@ export const СНИМКИ: {
         "w": 482,
         "h": 577,
         "marks": [
-          [5, 16.7],
           [7.9, 24.1],
           [4.6, 47.6]
         ]
@@ -217,7 +234,7 @@ export const СНИМКИ: {
         ]
       },
       "hours": {
-        "src": "/howto/clinic/desk-hours.webp?v=a919c045",
+        "src": "/howto/clinic/desk-hours.webp?v=297042b6",
         "w": 812,
         "h": 244,
         "marks": [
@@ -246,7 +263,7 @@ export const СНИМКИ: {
         ]
       },
       "pat": {
-        "src": "/howto/realty/pat.webp?v=3f127fc7",
+        "src": "/howto/realty/pat.webp?v=7d4bf34f",
         "w": 390,
         "h": 461,
         "marks": [
@@ -290,7 +307,7 @@ export const СНИМКИ: {
         ]
       },
       "hours": {
-        "src": "/howto/realty/hours.webp?v=e7931b74",
+        "src": "/howto/realty/hours.webp?v=41435f6f",
         "w": 390,
         "h": 302,
         "marks": [
@@ -327,7 +344,7 @@ export const СНИМКИ: {
     },
     "компьютер": {
       "type": {
-        "src": "/howto/realty/desk-type.webp?v=f7d599df",
+        "src": "/howto/realty/desk-type.webp?v=de0cf9e5",
         "w": 660,
         "h": 648,
         "marks": [
@@ -336,7 +353,7 @@ export const СНИМКИ: {
         ]
       },
       "pat": {
-        "src": "/howto/realty/desk-pat.webp?v=8b1760a1",
+        "src": "/howto/realty/desk-pat.webp?v=20c47dae",
         "w": 660,
         "h": 449,
         "marks": [
@@ -355,7 +372,7 @@ export const СНИМКИ: {
         ]
       },
       "listen": {
-        "src": "/howto/realty/desk-listen.webp?v=5b0f412f",
+        "src": "/howto/realty/desk-listen.webp?v=2359a30f",
         "w": 450,
         "h": 490,
         "marks": [
@@ -380,7 +397,7 @@ export const СНИМКИ: {
         ]
       },
       "hours": {
-        "src": "/howto/realty/desk-hours.webp?v=a15f77d0",
+        "src": "/howto/realty/desk-hours.webp?v=0a906384",
         "w": 812,
         "h": 244,
         "marks": [

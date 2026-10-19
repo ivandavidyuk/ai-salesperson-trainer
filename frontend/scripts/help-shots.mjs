@@ -274,6 +274,10 @@ const К_ПРОВЕРКЕ = [МАСТЕР, ПОЛНЫЙ, К_ПАЦИЕНТУ, П
 const ИМЯ_МИКРОФОНА = { js: `(() => { const [m, d] = document.querySelectorAll('select'); if (!m) return false; m.options[m.selectedIndex].text = 'Микрофон гарнитуры'; if (d) d.options[d.selectedIndex].text = 'Наушники гарнитуры'; return true; })()`, after: 200 };
 const К_РАЗГОВОРУ = [...К_ПРОВЕРКЕ, { click: "Начать", opts: { sel: "button" }, after: 3500, until: `__h.find('Завершить разговор', { sel: 'button' })` }];
 
+// Метка на кнопке «Результат диагностики», если она есть: у клиник это
+// вторая метка шага «Говорите», у недвижимости кнопки нет
+const МЕТКА_ДИАГНОСТИКИ = `const кнопкаДиаг = __h.find('Результат диагностики', { sel: 'button' }); const диаг = кнопкаДиаг ? [[__h.rect(кнопкаДиаг).x + 6, __h.rect(кнопкаДиаг).y + __h.rect(кнопкаДиаг).h / 2]] : [];`;
+
 // Плашка «Слушаю вас» целиком: подпись внутри неё, слева эквалайзер
 const ПЛАШКА = `(() => { const t = __h.find('Слушаю вас'); let p = t; while (p && p.getBoundingClientRect().width < t.getBoundingClientRect().width + 30) p = p.parentElement; return p; })()`;
 
@@ -323,16 +327,24 @@ function shotsFor(accounts, realty) {
     listen: { email: accounts.manager, path: "/", steps: К_РАЗГОВОРУ, measure: `(() => {
       const rp = __h.rect(__h.find('Слушаю вас')), rpl = __h.rect(${ПЛАШКА});
       const re = __h.rect(__h.find('Завершить разговор', { sel: 'button' }));
-      return { y0: rp.y - 150, y1: innerHeight, marks: [[rpl.x - 2, rp.y + rp.h / 2], [re.x - 2, re.y + re.h / 2]] };
+      ${МЕТКА_ДИАГНОСТИКИ}
+      return { y0: rp.y - 150, y1: innerHeight, marks: [[rpl.x - 2, rp.y + rp.h / 2], ...диаг, [re.x - 2, re.y + re.h / 2]] };
     })()` },
   };
   if (!realty) {
     // Шаг 5: лист «Результат диагностики» — только у клиник
+    // Шаг 5, до нажатия: кнопка «Результат диагностики» в разговоре
+    list.button = { email: accounts.manager, path: "/", steps: К_РАЗГОВОРУ, measure: `(() => {
+      const rp = __h.rect(__h.find('Слушаю вас'));
+      const rb = __h.rect(__h.find('Результат диагностики', { sel: 'button' }));
+      return { y0: rp.y - 70, y1: rb.y + rb.h + 24, marks: [[rb.x + 6, rb.y + rb.h / 2]] };
+    })()` };
+    // Шаг 5, после нажатия: лист с услугой и заключением врача. Кнопки
+    // здесь уже нет — метки только на том, что открылось
     list.sheet = { email: accounts.manager, path: "/", fakeDoc: true, steps: [...К_РАЗГОВОРУ, { click: "Результат диагностики", opts: { sel: "button" }, after: 2500 }], measure: `(() => {
-      const rt = __h.rect(__h.find('Результат диагностики', { prefix: true }));
       const rs = __h.rect(__h.find('Услуга по диагнозу'));
       const rd = __h.rect(__h.find('Документ врача'));
-      return { y0: 56, y1: Math.min(rd.y + 150, innerHeight - 90), marks: [[rt.x - 14, rt.y + rt.h / 2], [rs.x - 18, rs.y + rs.h / 2], [rd.x - 18, rd.y + rd.h / 2]] };
+      return { y0: 56, y1: Math.min(rd.y + 150, innerHeight - 90), marks: [[rs.x - 18, rs.y + rs.h / 2], [rd.x - 18, rd.y + rd.h / 2]] };
     })()` };
     // Шаг 6: разбор. Общий для отраслей: шапку с именем срезаем, а этапы
     // и подписи разбора одни и те же. Анимацию не глушим — ею проявляется
@@ -421,16 +433,23 @@ function shotsForDesk(accounts, realty) {
       const rp = __h.rect(__h.find('Слушаю вас')), rpl = __h.rect(${ПЛАШКА});
       const end = __h.find('Завершить разговор', { sel: 'button' });
       const re = __h.rect(end), rr = __h.rect(end.parentElement);
-      return { x0: rr.x - 40, x1: rr.x + rr.w + 40, y0: rp.y - 330, y1: rr.y + rr.h + 28, marks: [[rpl.x - 2, rp.y + rp.h / 2], [re.x - 2, re.y + re.h / 2]] };
+      ${МЕТКА_ДИАГНОСТИКИ}
+      return { x0: rr.x - 40, x1: rr.x + rr.w + 40, y0: rp.y - 330, y1: rr.y + rr.h + 28, marks: [[rpl.x - 2, rp.y + rp.h / 2], ...диаг, [re.x - 2, re.y + re.h / 2]] };
     })()` },
   };
   if (!realty) {
+    list.button = { email: accounts.manager, path: "/", steps: К_РАЗГОВОРУ, measure: `(() => {
+      const rp = __h.rect(__h.find('Слушаю вас'));
+      const btn = __h.find('Результат диагностики', { sel: 'button' });
+      const rb = __h.rect(btn), rr = __h.rect(__h.find('Завершить разговор', { sel: 'button' }).parentElement);
+      return { x0: rr.x - 40, x1: rr.x + rr.w + 40, y0: rp.y - 70, y1: rr.y + rr.h + 24, marks: [[rb.x + 6, rb.y + rb.h / 2]] };
+    })()` };
     list.sheet = { email: accounts.manager, path: "/", fakeDoc: true, steps: [...К_РАЗГОВОРУ, { click: "Результат диагностики", opts: { sel: "button" }, after: 2500, until: `__h.find('Документ врача')` }], measure: `(() => {
       const svc = __h.find('Услуга по диагнозу');
       const rc = __h.rect((${КАРТОЧКА_ПК})(svc)), rs = __h.rect(svc), rd = __h.rect(__h.find('Документ врача'));
       const rt = __h.rect(__h.find('Результат диагностики', { prefix: true }));
       const rp = __h.rect(__h.find('Слушаю вас')), rz = __h.rect(__h.find('Пауза', { sel: 'button' }));
-      return { x0: rc.x - 40, x1: rc.x + rc.w + 40, y0: rp.y - 12, y1: rz.y + rz.h + 20, marks: [[rt.x - 16, rt.y + rt.h / 2], [rs.x - 18, rs.y + rs.h / 2], [rd.x - 18, rd.y + rd.h / 2]] };
+      return { x0: rc.x - 40, x1: rc.x + rc.w + 40, y0: rp.y - 12, y1: rz.y + rz.h + 20, marks: [[rs.x - 18, rs.y + rs.h / 2], [rd.x - 18, rd.y + rd.h / 2]] };
     })()` };
     // Разбор: правая панель и правый край шапки с «Ещё разговор»;
     // имя пациента в шапке слева в кадр не попадает
@@ -564,6 +583,7 @@ export type ИмяСнимка =
   | "pat"
   | "check"
   | "listen"
+  | "button"
   | "sheet"
   | "review"
   | "tasks"
@@ -579,7 +599,7 @@ type Набор<Имя extends string> = Record<Устройство, Record<И�
 export const СНИМКИ: {
   медицина: Набор<ИмяСнимка>;
   // У недвижимости нет диагностики, а разбор и статистика — общие с клиникой
-  недвижимость: Набор<Exclude<ИмяСнимка, "sheet">>;
+  недвижимость: Набор<Exclude<ИмяСнимка, "button" | "sheet">>;
 } = ${json(снимки)};
 `;
   mkdirSync(dirname(OUT_TS), { recursive: true });

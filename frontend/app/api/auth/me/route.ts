@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
         jobTitle: true,
         clinic: true,
         avatarUpdatedAt: true,
+        helpSeenAt: true,
         organization: { select: { industryKey: true } },
       },
     });
@@ -75,6 +76,8 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.json({
       ...поля,
       avatarUpdatedAt: user.avatarUpdatedAt?.toISOString() ?? null,
+      // Открывал ли шпаргалку: пока нет — на кнопке в шапке метка «Новое»
+      helpSeenAt: user.helpSeenAt?.toISOString() ?? null,
       // Слаг отрасли: экраны берут по нему слова
       industry,
     });

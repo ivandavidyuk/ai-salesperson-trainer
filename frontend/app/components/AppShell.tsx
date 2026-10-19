@@ -41,6 +41,9 @@ export const PROFILE_UPDATED_EVENT = "podhod:profile-updated";
  */
 export const ACHIEVEMENTS_CHANGED_EVENT = "podhod:achievements-changed";
 
+/** Человек открыл шпаргалку или закрыл объявление о ней — метка «Новое» гаснет */
+export const HELP_SEEN_EVENT = "podhod:help-seen";
+
 interface ShellUser {
   id: string;
   firstName: string;
@@ -49,6 +52,8 @@ interface ShellUser {
   avatarUpdatedAt: string | null;
   /** Слаг отрасли организации: по нему экраны берут слова */
   industry?: string;
+  /** Когда открыл шпаргалку или закрыл объявление; null — метка «Новое» */
+  helpSeenAt?: string | null;
 }
 
 /**
@@ -63,6 +68,20 @@ interface ShellUser {
 let cachedUser: ShellUser | null = null;
 let cachedTaskCount = 0;
 let cachedAchievementCount = 0;
+
+/**
+ * Отметить, что шпаргалку увидели: зовут справка при открытии и крестик
+ * карточки на главной. Кэш правим сразу — иначе следующая страница до
+ * ответа /api/auth/me мигнула бы прежней меткой «Новое»
+ */
+export function отметитьШпаргалку(): void {
+  const теперь = new Date().toISOString();
+  if (cachedUser && !cachedUser.helpSeenAt) cachedUser = { ...cachedUser, helpSeenAt: теперь };
+  window.dispatchEvent(new Event(HELP_SEEN_EVENT));
+  void fetch("/api/help/seen", { method: "POST" }).catch(() => {
+    // Молча: метка просто вернётся при следующем заходе
+  });
+}
 
 interface NavItem {
   href: string;
@@ -258,6 +277,18 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
     // Сеттер отрасли стабилен (это setState провайдера) и перезапусков не даёт
   }, [pathname, задатьОтрасль]);
 
+  useEffect(() => {
+    function погасить() {
+      setUser((current) =>
+        current && !current.helpSeenAt
+          ? { ...current, helpSeenAt: new Date().toISOString() }
+          : current
+      );
+    }
+    window.addEventListener(HELP_SEEN_EVENT, погасить);
+    return () => window.removeEventListener(HELP_SEEN_EVENT, погасить);
+  }, []);
+
   // Бейдж заданий: pathname в зависимостях — после запуска задания со
   // страницы «Задания» счётчик должен обновиться
   useEffect(() => {
@@ -314,6 +345,10 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
     cachedAchievementCount = 0;
     router.push("/login");
   }
+
+  // Метка «Новое» на шпаргалке — пока человек её не открыл. До ответа
+  // /api/auth/me метки нет: появиться позже лучше, чем мигнуть и пропасть
+  const шпаргалкаНовая = user !== null && !user.helpSeenAt;
 
   // «Ирина П.» — имя и первая буква фамилии
   const shortName = user
@@ -503,6 +538,63 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
           </div>
 
           <div className="flex items-center gap-3 max-md:gap-1.5">
+            {/* Шпаргалка — подписанной кнопкой на каждом экране. Значок
+                в рейке не замечал никто, а справка нужна как раз тем, кто
+                ещё не разобрался. На самой справке кнопки нет */}
+            {pathname !== "/help" && (
+              <>
+                <Link
+                  href="/help"
+                  title="Шпаргалка: как пользоваться тренажёром"
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-line-strong bg-surface-card pl-3 pr-3.5 text-[14px] font-semibold text-ink transition-colors hover:bg-surface-bubble max-md:hidden"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="text-brand"
+                    aria-hidden="true"
+                  >
+                    {пиктограммы.справка}
+                  </svg>
+                  Шпаргалка
+                  {шпаргалкаНовая && (
+                    <span className="rounded-full bg-brand px-2 py-0.5 text-[11.5px] font-bold leading-none text-white">
+                      Новое
+                    </span>
+                  )}
+                </Link>
+                {/* Телефон: в узкой шапке — значок с точкой «новое» */}
+                <Link
+                  href="/help"
+                  aria-label={шпаргалкаНовая ? "Шпаргалка, новое" : "Шпаргалка"}
+                  className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-brand md:hidden"
+                >
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    {пиктограммы.справка}
+                  </svg>
+                  {шпаргалкаНовая && (
+                    <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-surface-card bg-brand" />
+                  )}
+                </Link>
+              </>
+            )}
+
             {/* У руководителя те же разделы, но наполнение другое —
                 плашка объясняет, почему страница выглядит иначе.
                 Стоит рядом с именем: это признак смотрящего, а не страницы */}
