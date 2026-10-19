@@ -41,7 +41,7 @@ export const PROFILE_UPDATED_EVENT = "podhod:profile-updated";
  */
 export const ACHIEVEMENTS_CHANGED_EVENT = "podhod:achievements-changed";
 
-/** Человек открыл шпаргалку или закрыл объявление о ней — метка «Новое» гаснет */
+/** Человек открыл справку или закрыл объявление о ней — метка «Новое» гаснет */
 export const HELP_SEEN_EVENT = "podhod:help-seen";
 
 interface ShellUser {
@@ -52,7 +52,7 @@ interface ShellUser {
   avatarUpdatedAt: string | null;
   /** Слаг отрасли организации: по нему экраны берут слова */
   industry?: string;
-  /** Когда открыл шпаргалку или закрыл объявление; null — метка «Новое» */
+  /** Когда открыл справку или закрыл объявление; null — метка «Новое» */
   helpSeenAt?: string | null;
 }
 
@@ -70,11 +70,11 @@ let cachedTaskCount = 0;
 let cachedAchievementCount = 0;
 
 /**
- * Отметить, что шпаргалку увидели: зовут справка при открытии и крестик
+ * Отметить, что справку увидели: зовёт сама справка при открытии и крестик
  * карточки на главной. Кэш правим сразу — иначе следующая страница до
  * ответа /api/auth/me мигнула бы прежней меткой «Новое»
  */
-export function отметитьШпаргалку(): void {
+export function отметитьСправку(): void {
   const теперь = new Date().toISOString();
   if (cachedUser && !cachedUser.helpSeenAt) cachedUser = { ...cachedUser, helpSeenAt: теперь };
   window.dispatchEvent(new Event(HELP_SEEN_EVENT));
@@ -346,9 +346,9 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
     router.push("/login");
   }
 
-  // Метка «Новое» на шпаргалке — пока человек её не открыл. До ответа
+  // Метка «Новое» на справке — пока человек её не открыл. До ответа
   // /api/auth/me метки нет: появиться позже лучше, чем мигнуть и пропасть
-  const шпаргалкаНовая = user !== null && !user.helpSeenAt;
+  const справкаНовая = user !== null && !user.helpSeenAt;
 
   // «Ирина П.» — имя и первая буква фамилии
   const shortName = user
@@ -538,14 +538,14 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
           </div>
 
           <div className="flex items-center gap-3 max-md:gap-1.5">
-            {/* Шпаргалка — подписанной кнопкой на каждом экране. Значок
+            {/* Справка — подписанной кнопкой на каждом экране. Значок
                 в рейке не замечал никто, а справка нужна как раз тем, кто
                 ещё не разобрался. На самой справке кнопки нет */}
             {pathname !== "/help" && (
               <>
                 <Link
                   href="/help"
-                  title="Шпаргалка: как пользоваться тренажёром"
+                  title="Как пользоваться тренажёром"
                   className="inline-flex h-9 items-center gap-2 rounded-full border border-line-strong bg-surface-card pl-3 pr-3.5 text-[14px] font-semibold text-ink transition-colors hover:bg-surface-bubble max-md:hidden"
                 >
                   <svg
@@ -562,8 +562,8 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
                   >
                     {пиктограммы.справка}
                   </svg>
-                  Шпаргалка
-                  {шпаргалкаНовая && (
+                  Как пользоваться
+                  {справкаНовая && (
                     <span className="rounded-full bg-brand px-2 py-0.5 text-[11.5px] font-bold leading-none text-white">
                       Новое
                     </span>
@@ -572,7 +572,7 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
                 {/* Телефон: в узкой шапке — значок с точкой «новое» */}
                 <Link
                   href="/help"
-                  aria-label={шпаргалкаНовая ? "Шпаргалка, новое" : "Шпаргалка"}
+                  aria-label={справкаНовая ? "Как пользоваться, новое" : "Как пользоваться"}
                   className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-brand md:hidden"
                 >
                   <svg
@@ -588,7 +588,7 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
                   >
                     {пиктограммы.справка}
                   </svg>
-                  {шпаргалкаНовая && (
+                  {справкаНовая && (
                     <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-surface-card bg-brand" />
                   )}
                 </Link>

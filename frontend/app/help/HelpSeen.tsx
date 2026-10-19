@@ -5,11 +5,11 @@
 // страницы на сервере: предзагрузка ссылки не должна считаться открытием
 
 import { useEffect } from "react";
-import { отметитьШпаргалку } from "@/app/components/AppShell";
+import { отметитьСправку } from "@/app/components/AppShell";
 
 export default function HelpSeen({ видел }: { видел: boolean }) {
   useEffect(() => {
-    if (!видел) отметитьШпаргалку();
+    if (!видел) отметитьСправку();
   }, [видел]);
   return null;
 }

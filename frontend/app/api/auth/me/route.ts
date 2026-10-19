@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.json({
       ...поля,
       avatarUpdatedAt: user.avatarUpdatedAt?.toISOString() ?? null,
-      // Открывал ли шпаргалку: пока нет — на кнопке в шапке метка «Новое»
+      // Открывал ли справку «Как пользоваться»: пока нет — на кнопке в шапке метка «Новое»
       helpSeenAt: user.helpSeenAt?.toISOString() ?? null,
       // Слаг отрасли: экраны берут по нему слова
       industry,

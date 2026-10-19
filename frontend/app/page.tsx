@@ -280,8 +280,8 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* Новичку — о шпаргалке прямо на первом экране */}
-            {data.шпаргалка.показатьНовичку && <HelpNotice className="mb-[18px]" />}
+            {/* Новичку — о справке «Как пользоваться» прямо на первом экране */}
+            {data.справка.показатьНовичку && <HelpNotice className="mb-[18px]" />}
 
             {/* Пропорции по содержимому: старт шире, метрики фиксированы */}
             <div className="grid items-stretch gap-[18px] [grid-template-columns:minmax(320px,1.15fr)_minmax(300px,1fr)_380px]">
@@ -414,7 +414,7 @@ export default function HomePage() {
               )}
             </div>
 
-            {data.шпаргалка.показатьНовичку && <HelpNotice />}
+            {data.справка.показатьНовичку && <HelpNotice />}
 
             {hasConversations ? (
               <>

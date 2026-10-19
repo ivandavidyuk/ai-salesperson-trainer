@@ -1,14 +1,14 @@
 "use client";
 
 // Карточка «Первый раз здесь?» на главной: новичку сообщает, что есть
-// шпаргалка по тренажёру. Видна, пока у человека нет ни одного разговора
-// и он шпаргалку не открыл и карточку не закрыл. Значок в рейке Иван
+// справка «Как пользоваться». Видна, пока у человека нет ни одного
+// разговора и он справку не открыл и карточку не закрыл. Значок в рейке Иван
 // справедливо назвал местом, куда не посмотрит ни один человек, — новичку
-// о шпаргалке говорим прямо на первом экране.
+// о справке говорим прямо на первом экране.
 
 import Link from "next/link";
 import { useState } from "react";
-import { отметитьШпаргалку } from "@/app/components/AppShell";
+import { отметитьСправку } from "@/app/components/AppShell";
 import { Пиктограмма, пиктограммы } from "@/app/components/HintTile";
 import { useIndustry } from "@/app/components/IndustryProvider";
 
@@ -29,7 +29,7 @@ export default function HelpNotice({ className = "" }: { className?: string }) {
         <div className="min-w-0">
           <div className="text-[17px] font-semibold text-ink">Первый раз здесь?</div>
           <div className="mt-0.5 text-[15px] text-ink-muted">
-            Шпаргалка: {шагов} шагов на картинках
+            Как пользоваться тренажёром: {шагов} шагов
           </div>
         </div>
       </div>
@@ -37,13 +37,13 @@ export default function HelpNotice({ className = "" }: { className?: string }) {
         href="/help"
         className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-input bg-brand px-5 text-[15.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
       >
-        Открыть шпаргалку
+        Открыть
       </Link>
       <button
         type="button"
         onClick={() => {
           setСкрыта(true);
-          отметитьШпаргалку();
+          отметитьСправку();
         }}
         aria-label="Скрыть"
         title="Скрыть"
