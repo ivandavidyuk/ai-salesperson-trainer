@@ -159,6 +159,12 @@ function SessionScreen() {
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MicRecorder | null>(null);
   const playerRef = useRef<AudioPlayer | null>(null);
+  // Блокировка экрана на время разговора (см. держатьЭкран)
+  const экранRef = useRef<WakeLockSentinel | null>(null);
+  const экранЗапрошенRef = useRef(false);
+  const экранНуженRef = useRef(false);
+  // Исходы запросов, пришедшие раньше плеера: его ещё нет в момент нажатия
+  const отчётыЭкранаRef = useRef<string[]>([]);
 
   // --- Аудио-устройства -----------------------------------------------------
   const [inputs, setInputs] = useState<AudioDevice[]>([]);
@@ -413,11 +419,65 @@ function SessionScreen() {
     }
   }
 
+  // Исход блокировки экрана — в серверный лог строкой ПЛЕЕР «wake-lock»
+  function отчётЭкрана(detail: string) {
+    const player = playerRef.current;
+    if (player) player.note("wake-lock", detail);
+    else if (отчётыЭкранаRef.current.length < 10) отчётыЭкранаRef.current.push(detail);
+  }
+
+  // Пока идёт разговор, экран не гаснет: погасший экран усыпляет вкладку,
+  // и сервер через 20–40 с закрывает соединение. Safari даёт блокировку
+  // только в течение 5 с после касания и потом держит разрешение до
+  // перезагрузки страницы. Поэтому первый запрос — в обработчике «Начать»,
+  // а не в эффекте после сокета и микрофона: оттуда Safari отказывал,
+  // и телефоны Jamaica засыпали ровно через минуту после нажатия (18.10).
+  // Повод уходит в лог: start, visible (вкладка снова на виду), tap
+  function держатьЭкран(повод: string) {
+    if (экранRef.current || экранЗапрошенRef.current) return;
+    if (typeof navigator === "undefined" || !("wakeLock" in navigator)) {
+      if (повод === "start") отчётЭкрана("unsupported");
+      return;
+    }
+    if (document.visibilityState !== "visible") return;
+    экранЗапрошенRef.current = true;
+    // request() — синхронно в обработчике: касание Safari проверяет
+    // в момент вызова, а не когда промис разрешится
+    navigator.wakeLock.request("screen").then(
+      (lock) => {
+        экранЗапрошенRef.current = false;
+        if (!экранНуженRef.current) {
+          void lock.release();
+          return;
+        }
+        экранRef.current = lock;
+        // Снятие системой — вкладку свернули или экран всё-таки погас.
+        // Своё снятие в конце разговора сюда не попадает: ссылку
+        // обнуляем раньше, чем отпускаем
+        lock.addEventListener("release", () => {
+          if (экранRef.current !== lock) return;
+          экранRef.current = null;
+          отчётЭкрана("released");
+        });
+        отчётЭкрана(`granted: ${повод}`);
+      },
+      (error: unknown) => {
+        экранЗапрошенRef.current = false;
+        const { name, message } = (error ?? {}) as { name?: string; message?: string };
+        отчётЭкрана(`denied: ${повод}: ${name ?? "?"}${message ? `: ${message}` : ""}`);
+      }
+    );
+  }
+
   // «Начать тренировку»: создаём сессию, подключаем WebSocket, микрофон и плеер
   async function handleStart() {
     // Строго до первого await: на iPhone звук разрешается только элементу,
     // проигранному в обработчике нажатия. На компьютере — null
     const primed = primeAudioElement();
+    // Тоже до первого await — блокировка экрана, см. держатьЭкран
+    отчётыЭкранаRef.current = [];
+    экранНуженRef.current = true;
+    держатьЭкран("start");
     setBusy(true);
     setErrorMsg("");
     setScreenState("connecting");
@@ -507,6 +567,9 @@ function SessionScreen() {
         }
       }, primed);
       playerRef.current.setOutputDevice(outputId);
+      for (const detail of отчётыЭкранаRef.current.splice(0)) {
+        playerRef.current.note("wake-lock", detail);
+      }
 
       // Проверочный захват больше не нужен — освобождаем устройство,
       // иначе на разговор пойдёт второй параллельный захват
@@ -727,34 +790,35 @@ function SessionScreen() {
   }, []);
 
   const inCall = screenState === "active" || screenState === "paused";
+  // Экран держим с нажатия «Начать»: подключение тоже идёт секунды
+  const экранНужен = screenState === "connecting" || inCall;
 
-  // Пока идёт разговор, экран не гаснет: телефон, погасивший экран, усыпляет
-  // вкладку, и разговор обрывается. Блокировка снимается системой, когда
-  // вкладку сворачивают, — берём её заново, когда вкладка снова на виду.
-  // На компьютере то же самое: не уходить в сон посреди звонка
+  // Блокировка снимается системой, когда вкладку сворачивают, — берём её
+  // заново, когда вкладка снова на виду. Не дали с первого раза — пробуем
+  // на каждом касании: в Safari оно и есть разрешение. pointerup и touchend,
+  // а не pointerdown: касание пальцем считается жестом только на отпускании
   useEffect(() => {
-    if (!inCall || typeof navigator === "undefined" || !("wakeLock" in navigator)) return;
-    let lock: WakeLockSentinel | null = null;
-    let cancelled = false;
-    const take = async () => {
-      if (document.visibilityState !== "visible") return;
-      try {
-        const next = await navigator.wakeLock.request("screen");
-        if (cancelled) void next.release();
-        else lock = next;
-      } catch {
-        // Отказали (режим энергосбережения) — разговор идёт и так
-      }
-    };
-    void take();
-    const onVisible = () => void take();
+    экранНуженRef.current = экранНужен;
+    if (!экранНужен) return;
+    const onVisible = () => держатьЭкран("visible");
+    const onTap = () => держатьЭкран("tap");
     document.addEventListener("visibilitychange", onVisible);
+    document.addEventListener("pointerup", onTap, { passive: true });
+    document.addEventListener("touchend", onTap, { passive: true });
     return () => {
-      cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("pointerup", onTap);
+      document.removeEventListener("touchend", onTap);
+      // Разговор кончился или со страницы ушли посреди него — отпускаем сами.
+      // Ссылку обнуляем раньше, чем отпускаем: это наше снятие, не системы
+      экранНуженRef.current = false;
+      const lock = экранRef.current;
+      экранRef.current = null;
       void lock?.release();
     };
-  }, [inCall]);
+    // держатьЭкран читает только ссылки — пересоздавать подписки незачем
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [экранНужен]);
   // Уйти со страницы можно, пока разговор не начался. Проверка звука сюда
   // тоже входит: с неё есть своя «Назад», но и общий выход должен работать
   const canLeave =

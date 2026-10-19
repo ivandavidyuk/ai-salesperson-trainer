@@ -252,6 +252,21 @@ function audioSession(): AudioSessionLike | undefined {
   return (navigator as unknown as { audioSession?: AudioSessionLike }).audioSession;
 }
 
+/**
+ * Браузер и способ запуска — в лог в начале каждого разговора. Обрывы
+ * Jamaica 15–18.10 нельзя было разобрать без них: блокировка экрана
+ * в Safari, во встроенном браузере мессенджера и у значка на домашнем
+ * экране работает по-разному, а мы не знали, что было у клиники
+ */
+function описаниеУстройства(): string {
+  if (typeof navigator === "undefined") return "?";
+  const сДомашнегоЭкрана =
+    (typeof window !== "undefined" &&
+      window.matchMedia?.("(display-mode: standalone)").matches) ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true;
+  return `${navigator.userAgent}${сДомашнегоЭкрана ? " | с домашнего экрана" : ""}`;
+}
+
 // Как часто сторож проверяет, идёт ли воспроизведение на самом деле
 const WATCHDOG_TICK_MS = 1000;
 // Позиция не двигается, а играть есть что — считаем это застреванием
@@ -346,7 +361,16 @@ export class AudioPlayer {
       "init",
       this.managed ? "managed-mse" : this.useMse ? "mse" : "blob-fallback"
     );
+    this._report("device", описаниеУстройства());
     this._watchEnvironment();
+  }
+
+  /**
+   * Строка от страницы в тот же лог: то, чего плеер сам не видит, но что
+   * нужно рядом с его событиями, — например, держит ли телефон экран
+   */
+  note(event: string, detail?: string): void {
+    this._report(event, detail);
   }
 
   /** Снимок состояния — уходит в серверный лог рядом с таймингами хода. */
