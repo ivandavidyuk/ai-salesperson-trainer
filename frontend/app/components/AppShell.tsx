@@ -41,6 +41,9 @@ export const PROFILE_UPDATED_EVENT = "podhod:profile-updated";
  */
 export const ACHIEVEMENTS_CHANGED_EVENT = "podhod:achievements-changed";
 
+/** Человек открыл справку или закрыл объявление о ней — метка «Новое» гаснет */
+export const HELP_SEEN_EVENT = "podhod:help-seen";
+
 interface ShellUser {
   id: string;
   firstName: string;
@@ -49,6 +52,8 @@ interface ShellUser {
   avatarUpdatedAt: string | null;
   /** Слаг отрасли организации: по нему экраны берут слова */
   industry?: string;
+  /** Когда открыл справку или закрыл объявление; null — метка «Новое» */
+  helpSeenAt?: string | null;
 }
 
 /**
@@ -63,6 +68,20 @@ interface ShellUser {
 let cachedUser: ShellUser | null = null;
 let cachedTaskCount = 0;
 let cachedAchievementCount = 0;
+
+/**
+ * Отметить, что справку увидели: зовёт сама справка при открытии и крестик
+ * карточки на главной. Кэш правим сразу — иначе следующая страница до
+ * ответа /api/auth/me мигнула бы прежней меткой «Новое»
+ */
+export function отметитьСправку(): void {
+  const теперь = new Date().toISOString();
+  if (cachedUser && !cachedUser.helpSeenAt) cachedUser = { ...cachedUser, helpSeenAt: теперь };
+  window.dispatchEvent(new Event(HELP_SEEN_EVENT));
+  void fetch("/api/help/seen", { method: "POST" }).catch(() => {
+    // Молча: метка просто вернётся при следующем заходе
+  });
+}
 
 interface NavItem {
   href: string;
@@ -258,6 +277,18 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
     // Сеттер отрасли стабилен (это setState провайдера) и перезапусков не даёт
   }, [pathname, задатьОтрасль]);
 
+  useEffect(() => {
+    function погасить() {
+      setUser((current) =>
+        current && !current.helpSeenAt
+          ? { ...current, helpSeenAt: new Date().toISOString() }
+          : current
+      );
+    }
+    window.addEventListener(HELP_SEEN_EVENT, погасить);
+    return () => window.removeEventListener(HELP_SEEN_EVENT, погасить);
+  }, []);
+
   // Бейдж заданий: pathname в зависимостях — после запуска задания со
   // страницы «Задания» счётчик должен обновиться
   useEffect(() => {
@@ -314,6 +345,10 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
     cachedAchievementCount = 0;
     router.push("/login");
   }
+
+  // Метка «Новое» на справке — пока человек её не открыл. До ответа
+  // /api/auth/me метки нет: появиться позже лучше, чем мигнуть и пропасть
+  const справкаНовая = user !== null && !user.helpSeenAt;
 
   // «Ирина П.» — имя и первая буква фамилии
   const shortName = user
@@ -430,7 +465,7 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
             <Link
               key={item.href}
               href={item.href}
-              title={item.label}
+              title={item.href === "/help" && справкаНовая ? `${item.label} — новое` : item.label}
               // Свёрнутый пункт — фиксированная подложка 50×44 по центру
               // рейки; развёрнутый тянется на всю ширину с полями
               className={`flex items-center gap-3 rounded-input text-sm transition-colors ${
@@ -442,13 +477,20 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
               } ${
                 active
                   ? "bg-brand-soft font-semibold text-brand-hover"
-                  : "font-medium text-ink-muted hover:bg-surface-bubble"
+                  : item.href === "/help"
+                    ? // Справка выделена цветом среди серых разделов: серым
+                      // значком в углу её не замечал никто
+                      "bg-surface-accent font-semibold text-brand hover:bg-brand-soft"
+                    : "font-medium text-ink-muted hover:bg-surface-bubble"
               }`}
             >
               <span className="relative inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center">
                 {item.icon}
                 {/* В свёрнутом меню счётчик висит на иконке, в развёрнутом
                     уходит вправо — места для подписи там уже хватает */}
+                {item.href === "/help" && справкаНовая && !navOpen && (
+                  <span className="absolute -right-[4px] -top-[4px] h-[11px] w-[11px] rounded-full border-2 border-surface-card bg-brand" />
+                )}
                 {badge !== null && !navOpen && (
                   <span className="absolute -right-[5px] -top-1 inline-flex h-[15px] min-w-[15px] items-center justify-center rounded-full border-[length:1.5px] border-surface-card bg-brand px-[3px] text-[10.5px] font-bold text-white">
                     {badge}
@@ -456,6 +498,11 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
                 )}
               </span>
               {navOpen && <span className="whitespace-nowrap">{item.label}</span>}
+              {item.href === "/help" && справкаНовая && navOpen && (
+                <span className="ml-auto rounded-full bg-brand px-2 py-0.5 text-[11.5px] font-bold leading-none text-white">
+                  Новое
+                </span>
+              )}
               {badge !== null && navOpen && (
                 <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-brand px-1.5 text-[12.5px] font-bold text-white">
                   {badge}
@@ -503,6 +550,37 @@ export default function AppShell({ title, children, phoneBack = false }: AppShel
           </div>
 
           <div className="flex items-center gap-3 max-md:gap-1.5">
+            {/* Справка на телефоне — значок «?» в шапке: рейки там нет,
+                а нижняя панель занята разделами. На компьютере справка —
+                выделенный пункт рейки. На самой справке значка нет */}
+            {pathname !== "/help" && (
+              <>
+                {/* Телефон: в узкой шапке — значок с точкой «новое» */}
+                <Link
+                  href="/help"
+                  aria-label={справкаНовая ? "Как пользоваться, новое" : "Как пользоваться"}
+                  className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-brand md:hidden"
+                >
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    {пиктограммы.справка}
+                  </svg>
+                  {справкаНовая && (
+                    <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-surface-card bg-brand" />
+                  )}
+                </Link>
+              </>
+            )}
+
             {/* У руководителя те же разделы, но наполнение другое —
                 плашка объясняет, почему страница выглядит иначе.
                 Стоит рядом с именем: это признак смотрящего, а не страницы */}

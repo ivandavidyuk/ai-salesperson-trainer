@@ -91,6 +91,12 @@ export interface HomeData {
     strength: string | null;
     growthPoint: string | null;
   };
+  /**
+   * Карточка «Первый раз здесь?» про справку «Как пользоваться»: только новичку — ни одного
+   * завершённого разговора за всё время (обнуление статистики не в счёт) —
+   * и пока он справку не открыл и объявление не закрыл
+   */
+  справка: { показатьНовичку: boolean };
 }
 
 // Этапы сделки берём из lib/score: те же метки и порядок нужны в разборе
@@ -220,6 +226,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
       lastName: true,
       jobTitle: true,
       statsResetAt: true,
+      helpSeenAt: true,
       organizationId: true,
       organization: { select: { industryKey: true } },
     },
@@ -260,6 +267,7 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
     lastReview,
     paidCount,
     dealTotal,
+    первыйРазговор,
   ] = await Promise.all([
     Promise.resolve(dayNumber(now)),
     prisma.session.count({ where: completed }),
@@ -284,6 +292,9 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
       where: { session: withDeal, outcome: DealOutcome.paid },
     }),
     prisma.session.count({ where: withDeal }),
+    // Новичок ли — по всем разговорам, без обнуления статистики: обнулённый
+    // менеджер тренажёр уже знает
+    prisma.session.findFirst({ where: завершённые(userId, null), select: { id: true } }),
   ]);
 
   const медицина = медицинскаяОтрасль(ключОтрасли(user.organization?.industryKey));
@@ -304,8 +315,9 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
     };
   });
 
+  const { helpSeenAt, ...пользователь } = user;
   return {
-    user,
+    user: пользователь,
     daily: { tip, motivation },
     stats: {
       total,
@@ -324,5 +336,6 @@ export async function getHomeData(userId: string): Promise<HomeData | null> {
       strength: lastReview?.strength ?? null,
       growthPoint: lastReview?.growthPoint ?? null,
     },
+    справка: { показатьНовичку: первыйРазговор === null && helpSeenAt === null },
   };
 }

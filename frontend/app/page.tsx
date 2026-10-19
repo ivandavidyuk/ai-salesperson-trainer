@@ -12,6 +12,7 @@ import ConversationCard from "@/app/components/ConversationCard";
 import ConversationRow from "@/app/components/ConversationRow";
 import DailyCard from "@/app/components/DailyCard";
 import DemoExpiredModal from "@/app/components/DemoExpiredModal";
+import HelpNotice from "@/app/components/HelpNotice";
 import Loader from "@/app/components/Loader";
 import ProgressPanel from "@/app/components/ProgressPanel";
 import TrainingSetupModal from "@/app/components/TrainingSetupModal";
@@ -279,6 +280,9 @@ export default function HomePage() {
               )}
             </div>
 
+            {/* Новичку — о справке «Как пользоваться» прямо на первом экране */}
+            {data.справка.показатьНовичку && <HelpNotice className="mb-[18px]" />}
+
             {/* Пропорции по содержимому: старт шире, метрики фиксированы */}
             <div className="grid items-stretch gap-[18px] [grid-template-columns:minmax(320px,1.15fr)_minmax(300px,1fr)_380px]">
               {/* Запуск тренировки */}
@@ -409,6 +413,8 @@ export default function HomePage() {
                 </div>
               )}
             </div>
+
+            {data.справка.показатьНовичку && <HelpNotice />}
 
             {hasConversations ? (
               <>
