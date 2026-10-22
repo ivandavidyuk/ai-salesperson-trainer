@@ -82,7 +82,7 @@ async function fakeDoc(user, patientName) {
   });
   if (!c?.diagnosticsPreset) return null;
   const s = await prisma.service.findFirst({ where: { organizationId: user.organizationId, name: c.serviceName ?? "" } });
-  return { service: s ? { name: s.name, price: s.price } : null, text: c.diagnosticsPreset };
+  return { service: s ? { name: s.name, price: s.price, description: s.description ?? "" } : null, text: c.diagnosticsPreset };
 }
 
 async function chrome() {

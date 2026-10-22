@@ -519,7 +519,8 @@ class SessionStore:
         """
         assert self._pool is not None
         row = await self._pool.fetchrow(
-            'SELECT sv."name" AS name, sv."price" AS price '
+            'SELECT sv."name" AS name, sv."price" AS price, '
+            'sv."description" AS description '
             'FROM "Session" s '
             'JOIN "User" u ON u."id" = s."userId" '
             'JOIN "PatientCase" pc ON pc."patientId" = s."patientId" '

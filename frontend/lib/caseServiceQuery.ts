@@ -26,7 +26,9 @@ export async function caseService(
   if (!patientCase?.serviceName) return null;
   const service = await prisma.service.findFirst({
     where: { organizationId, name: patientCase.serviceName },
-    select: { name: true, price: true },
+    select: { name: true, price: true, description: true },
   });
-  return service ? { name: service.name, price: service.price } : null;
+  return service
+    ? { name: service.name, price: service.price, description: service.description?.trim() ?? "" }
+    : null;
 }

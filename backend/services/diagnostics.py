@@ -414,10 +414,19 @@ def service_payload(row: Optional[Mapping[str, object]]) -> Optional[dict]:
     Продать то, чего нет в прайсе, нельзя, а имя без цены читалось бы как
     подсказка. Пустое имя — тоже «не подобрана»: такой строке в прайсе
     взяться неоткуда, кроме опечатки.
+
+    Описание из прайса — что входит в услугу. Без него менеджер видел
+    «Курс при грыже» и не знал, что продаёт: из каких процедур курс
+    и сколько их (Jamaica, 22.10). Пустое — пустая строка, блок его
+    не показывает.
     """
     if row is None:
         return None
     name = str(row.get("name") or "").strip()
     if not name:
         return None
-    return {"name": name, "price": str(row.get("price") or "").strip()}
+    return {
+        "name": name,
+        "price": str(row.get("price") or "").strip(),
+        "description": str(row.get("description") or "").strip(),
+    }
