@@ -646,7 +646,11 @@ function SessionScreen() {
               setDiagnostics(String(msg.text || ""));
               setDiagnosticsService(
                 msg.service && typeof msg.service.name === "string"
-                  ? { name: msg.service.name, price: String(msg.service.price ?? "") }
+                  ? {
+                      name: msg.service.name,
+                      price: String(msg.service.price ?? ""),
+                      description: String(msg.service.description ?? ""),
+                    }
                   : null
               );
               setDiagnosticsWaiting(false);

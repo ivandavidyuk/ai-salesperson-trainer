@@ -16,7 +16,7 @@
 // как указание. Строка «из прайса клиники» снимает последнее: это выписка
 // из прайса, а не решение за менеджера.
 
-import type { CaseService } from "@/lib/caseService";
+import { составСписком, type CaseService } from "@/lib/caseService";
 import { useWords } from "@/app/components/IndustryProvider";
 
 interface CaseServiceBlockProps {
@@ -78,7 +78,34 @@ export default function CaseServiceBlock({ service, variant }: CaseServiceBlockP
         {service.name}
       </div>
       <div className="mt-1.5 font-mono text-base font-medium text-brand-score">{service.price}</div>
+      {service.description && <ServiceContents description={service.description} />}
       <div className="mt-1.5 text-xs text-ink-subtle">{слова.изПрайса}</div>
+    </div>
+  );
+}
+
+/**
+ * Что входит в услугу — под ценой. Курс без состава менеджер продавал
+ * вслепую: «Курс при грыже», а что в нём, неизвестно (Jamaica, 22.10).
+ * Перечень «что — сколько» — списком, прочее описание — как в прайсе
+ */
+function ServiceContents({ description }: { description: string }) {
+  const слова = useWords();
+  const пункты = составСписком(description);
+  return (
+    <div className="mt-2.5 border-t border-line-accent pt-2">
+      <div className="mb-1 text-xs font-medium uppercase tracking-[.1em] text-ink-subtle">
+        {слова.составУслуги}
+      </div>
+      {пункты ? (
+        <ul className="flex flex-col gap-0.5 text-sm leading-snug text-ink">
+          {пункты.map((пункт) => (
+            <li key={пункт}>{пункт}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm leading-snug text-ink-label">{description}</p>
+      )}
     </div>
   );
 }
